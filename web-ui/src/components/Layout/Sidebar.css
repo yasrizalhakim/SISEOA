@@ -1,0 +1,57 @@
+/* src/components/Layout/Sidebar.css */
+.sidebar {
+    width: 250px;
+    height: 100vh;
+    background-color: #111827;
+    color: white;
+    padding: 20px 0;
+    position: fixed;
+    left: 0;
+    top: 0;
+  }
+  
+  .logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .logo h2 {
+    margin: 0;
+    color: #10b981;
+    font-size: 24px;
+  }
+  
+  .logo p {
+    margin: 5px 0 0;
+    font-size: 12px;
+    opacity: 0.7;
+  }
+  
+  .menu-items {
+    margin-top: 20px;
+  }
+  
+  .menu-item {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    color: #94a3b8;
+    text-decoration: none;
+    transition: all 0.3s;
+  }
+  
+  .menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #10b981;
+  }
+  
+  .menu-item.active {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border-left: 3px solid #10b981;
+  }
+  
+  .menu-icon {
+    margin-right: 15px;
+    font-size: 20px;
+  }
