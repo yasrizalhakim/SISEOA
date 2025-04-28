@@ -1,20 +1,64 @@
 .app-container {
-    display: flex;
-    min-height: 100vh;
-  }
-  
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 60px; /* For fixed header */
+  padding-bottom: 60px; /* For mobile bottom nav */
+}
+
+.content-area {
+  padding: 15px;
+  background-color: #f1f5f9;
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Common panel styling */
+.panel {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  height: 100%;
+}
+
+/* Desktop styles */
+@media (min-width: 768px) {
   .main-content {
-    flex: 1;
     margin-left: 250px;
-    display: flex;
-    flex-direction: column;
+    padding-bottom: 0; /* No bottom nav on desktop */
   }
   
   .content-area {
     padding: 20px;
-    background-color: #f1f5f9;
-    flex: 1;
-    overflow-y: auto;
   }
+}
 
+/* For Android status bar color compatibility */
+@media screen and (display-mode: standalone) {
+  .header {
+    padding-top: max(10px, env(safe-area-inset-top));
+    height: calc(60px + env(safe-area-inset-top, 0px));
+  }
   
+  .content-area {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Dark mode support */
+/* @media (prefers-color-scheme: dark) {
+  .app-container {
+    color-scheme: dark;
+  }
+} */

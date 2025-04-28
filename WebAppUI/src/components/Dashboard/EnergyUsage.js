@@ -1,8 +1,11 @@
-import React from 'react';
+// EnergyUsage.js
+import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import './EnergyUsage.css';
 
 const EnergyUsage = () => {
+  const [activeView, setActiveView] = useState('day');
+  
   // Sample energy usage data
   const energyData = [
     { name: '00:00', usage: 40 },
@@ -17,18 +20,33 @@ const EnergyUsage = () => {
   ];
 
   return (
-    <div className="energy-usage-container">
+    <div className="energy-usage-container panel">
       <div className="panel-header">
         <h3>Energy Consumption</h3>
         <div className="chart-controls">
-          <button className="chart-btn active">Day</button>
-          <button className="chart-btn">Week</button>
-          <button className="chart-btn">Month</button>
+          <button 
+            className={`chart-btn ${activeView === 'day' ? 'active' : ''}`}
+            onClick={() => setActiveView('day')}
+          >
+            Day
+          </button>
+          <button 
+            className={`chart-btn ${activeView === 'week' ? 'active' : ''}`}
+            onClick={() => setActiveView('week')}
+          >
+            Week
+          </button>
+          <button 
+            className={`chart-btn ${activeView === 'month' ? 'active' : ''}`}
+            onClick={() => setActiveView('month')}
+          >
+            Month
+          </button>
         </div>
       </div>
       
       <div className="chart-area">
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={energyData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="name" stroke="#64748b" />
@@ -67,3 +85,4 @@ const EnergyUsage = () => {
 };
 
 export default EnergyUsage;
+
