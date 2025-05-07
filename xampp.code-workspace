@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "C:/xampp"
+		},
+		{
+			"path": "C:/Users/yasri/OneDrive - Universiti Teknikal Malaysia Melaka/Degree/sem4/workshop2"
+		},
+		{
+			"path": "C:/vsgit"
+		},
+		{
+			"path": "C:/Users/yasri/OneDrive - Universiti Teknikal Malaysia Melaka/Degree/sem4/web"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "workshop2",
+		"CodeGPT.apiKey": "CodeGPT Plus Beta"
+	}
+}

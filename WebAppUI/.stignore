@@ -1,0 +1,20 @@
+# Ignore node_modules (no need to sync dependencies)
+node_modules/
+
+# Ignore build output folder (e.g., dist, build)
+dist/
+build/
+
+# Ignore cache files (e.g., .cache, .idea)
+.cache/
+.idea/
+
+# Ignore OS files (e.g., macOS .DS_Store or Windows Thumbs.db)
+.DS_Store
+Thumbs.db
+
+# Ignore log files
+*.log
+
+# Optionally, you can also exclude your .env files or any local config
+.env

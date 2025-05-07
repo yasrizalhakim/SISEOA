@@ -23,3 +23,7 @@ a {
   text-decoration: none;
   color: inherit;
 }
+
+.app-container {
+  min-height: 100vh;
+}

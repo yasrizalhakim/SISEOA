@@ -1,0 +1,141 @@
+/* src/components/Login/Login.css */
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f1f5f9;
+    padding: 20px;
+  }
+  
+  .login-card {
+    width: 100%;
+    max-width: 400px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 25px;
+  }
+  
+  .login-header {
+    text-align: center;
+    margin-bottom: 25px;
+  }
+  
+  .login-header h2 {
+    color: #1e293b;
+    margin-bottom: 8px;
+    font-size: 22px;
+  }
+  
+  .login-header p {
+    color: #64748b;
+    font-size: 14px;
+    margin: 0;
+  }
+  
+  .form-group {
+    margin-bottom: 20px;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: #1e293b;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  
+  .form-group input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+  }
+  
+  .form-group input:focus {
+    border-color: #10b981;
+    outline: none;
+  }
+  
+  .login-divider {
+    display: flex;
+    align-items: center;
+    margin: 15px 0;
+    color: #94a3b8;
+  }
+  
+  .login-divider::before,
+  .login-divider::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .login-divider span {
+    padding: 0 10px;
+    font-size: 14px;
+  }
+  
+  .login-button {
+    width: 100%;
+    padding: 12px;
+    background-color: #10b981;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  
+  .login-button:hover {
+    background-color: #059669;
+  }
+  
+  .error-message {
+    background-color: #fee2e2;
+    color: #dc2626;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+  
+  .signup-section {
+    margin-top: 25px;
+    text-align: center;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 20px;
+  }
+  
+  .signup-section p {
+    margin: 0 0 8px;
+    color: #64748b;
+    font-size: 14px;
+  }
+  
+  .signup-link {
+    color: #10b981;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 15px;
+  }
+  
+  .signup-link:hover {
+    text-decoration: underline;
+  }
+  
+  /* Responsive design for mobile */
+  @media (max-width: 480px) {
+    .login-card {
+      padding: 20px 15px;
+    }
+    
+    .login-button {
+      padding: 10px;
+    }
+  }

@@ -1,0 +1,249 @@
+/* src/components/Devices/Devices.css */
+.devices-page {
+    padding: 20px;
+  }
+  
+  .devices-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .devices-header h2 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 24px;
+    font-weight: 600;
+  }
+  
+  .add-device-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background-color: #10b981;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 15px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  .controls-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .search-container {
+    flex: 1;
+    max-width: 300px;
+  }
+  
+  .search-input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #e2e8f0;
+    font-size: 14px;
+  }
+  
+  .device-filters {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .filter-btn {
+    padding: 8px 12px;
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  
+  .filter-btn.active {
+    background-color: #e2e8f0;
+    font-weight: 500;
+  }
+  
+  .devices-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  
+  .device-card {
+    position: relative;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .device-status-indicator {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  
+  .device-status-indicator[data-status="active"] {
+    background-color: #10b981;
+  }
+  
+  .device-status-indicator[data-status="inactive"] {
+    background-color: #ef4444;
+  }
+  
+  .device-info {
+    margin-bottom: 15px;
+  }
+  
+  .device-info h3 {
+    margin: 0 0 10px 0;
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  
+  .device-details {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .device-type, .device-location, .device-energy {
+    font-size: 14px;
+    color: #64748b;
+  }
+  
+  .device-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: auto;
+  }
+  
+  .edit-button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background-color: #e2e8f0;
+    color: #64748b;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  
+  .toggle-button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    flex: 1;
+    justify-content: center;
+  }
+  
+  .toggle-button.active {
+    background-color: #10b981;
+    color: white;
+  }
+  
+  .toggle-button.inactive {
+    background-color: #ef4444;
+    color: white;
+  }
+  
+  .device-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .form-group label {
+    font-size: 14px;
+    color: #64748b;
+  }
+  
+  .form-group input {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    font-size: 14px;
+  }
+  
+  .edit-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  
+  .save-btn {
+    padding: 8px 12px;
+    background-color: #10b981;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    flex: 1;
+  }
+  
+  .cancel-btn {
+    padding: 8px 12px;
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    flex: 1;
+  }
+  
+  .no-devices {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #64748b;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Media queries for responsive design */
+  @media (max-width: 768px) {
+    .controls-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 15px;
+    }
+    
+    .search-container {
+      max-width: 100%;
+    }
+    
+    .device-filters {
+      justify-content: space-between;
+    }
+    
+    .devices-grid {
+      grid-template-columns: 1fr;
+    }
+  }
