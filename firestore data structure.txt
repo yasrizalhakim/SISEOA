@@ -1,0 +1,42 @@
+firestore data structure
+- AUTOMATIONRULE (collection)
+  - User: string
+  - Device: string
+  - ConditionType: string
+  - ConditionValue: string
+  - Action: string
+
+- DEVICE (collection)
+  - DeviceName: string
+  - DeviceDescription: string
+  - DeviceType: string
+  - Location: string
+  - AssignedTo: object
+
+- ENERGYUSAGE (collection)
+  - device1: string
+  - device2: string
+
+- NOTIFICATION (collection)
+  - User: string
+  - Title: string
+  - Message: string
+  - IsRead: boolean
+  - Device: string
+
+- REPORT (collection)
+  - User: string
+  - ReportType: string
+  - ReportData: string
+  - GeneratedAt: string
+
+- USER (collection)
+  - Email: string
+  - ContactNo: string
+  - Password: string
+  - Name: string
+
+- USERBUILDING (collection)
+  - User: string
+  - Building: string
+  - Role: string

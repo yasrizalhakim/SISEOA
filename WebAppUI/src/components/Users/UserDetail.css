@@ -1,0 +1,703 @@
+/* src/components/Users/UserDetail.css - Redesigned to match BuildingDetail consistency */
+
+.user-detail {
+  width: 100%;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-right: 15px;
+}
+
+.back-button:hover {
+  background-color: #e2e8f0;
+}
+
+.detail-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #1e293b;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.error-message {
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.success-message {
+  background-color: #dcfce7;
+  color: #16a34a;
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+/* User Info Tab */
+.user-info-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* User Actions Section (Edit Controls) - Consistent with Building Detail */
+.user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.edit-button,
+.save-button,
+.cancel-button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.edit-button {
+  background-color: #22c55e;
+  color: white;
+}
+
+.edit-button:hover {
+  background-color: #16a34a;
+}
+
+.save-button {
+  background-color: #22c55e;
+  color: white;
+}
+
+.save-button:hover {
+  background-color: #16a34a;
+}
+
+.save-button:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cancel-button {
+  background-color: #6b7280;
+  color: white;
+}
+
+.cancel-button:hover {
+  background-color: #4b5563;
+}
+
+.cancel-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* User Info Form */
+.user-info-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.info-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.info-group p {
+  margin: 0;
+  padding: 0.75rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+
+.user-id {
+  font-family: 'Courier New', monospace;
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 500;
+}
+
+.user-email,
+.parent-email {
+  font-family: 'Courier New', monospace;
+  background-color: #f0f9ff !important;
+  color: #0369a1 !important;
+}
+
+.info-group input,
+.info-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  background-color: white;
+  color: #1e293b;
+}
+
+.info-group input::placeholder,
+.info-group textarea::placeholder {
+  color: #9ca3af;
+}
+
+.info-group input:focus,
+.info-group textarea:focus {
+  border-color: #22c55e;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.info-group input:disabled,
+.info-group textarea:disabled {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.input-valid {
+  border-color: #22c55e !important;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.role-badge.parent {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.role-badge.children {
+  background-color: #8b5cf6;
+  color: white;
+}
+
+.role-badge.user {
+  background-color: #6b7280;
+  color: white;
+}
+
+/* Building Access Section - Similar to locations in BuildingDetail */
+.building-access-section {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.building-access-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  color: #1e293b;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.buildings-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.building-item {
+  position: relative;
+  padding: 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding-right: 40px; /* Space for manage button if present */
+}
+
+.building-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.building-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.building-address, .building-role-info {
+  font-size: 12px;
+}
+
+/* Device Access Tab Styles */
+.device-access-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.device-access-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.device-access-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  color: #1e293b;
+  padding-top: 0;
+  border-top: none;
+}
+
+.manage-devices-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background-color: #dbeafe;
+  color: #2563eb;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.manage-devices-btn:hover {
+  background-color: #bfdbfe;
+}
+
+/* Devices List - Similar to locations/devices in BuildingDetail */
+.devices-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.device-item {
+  padding: 10px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.device-item:hover {
+  background-color: #e2e8f0;
+}
+
+.device-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.device-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.detail-label {
+  color: #6b7280;
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.detail-value {
+  color: #374151;
+  text-align: right;
+  word-break: break-word;
+  flex: 1;
+}
+
+.no-devices,
+.no-buildings {
+  padding: 15px;
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  background-color: #f8fafc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.no-data-content h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.no-data-content p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 12rem;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+/* Modal Styles - Consistent with BuildingDetail modals */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.close-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background-color: #f1f5f9;
+  color: #64748b;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: #e2e8f0;
+}
+
+.modal-body {
+  padding: 1rem;
+  flex: 1;
+}
+
+.user-info-section {
+  margin-bottom: 1rem;
+}
+
+.user-info-section h4 {
+  margin: 0 0 0.75rem 0;
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+}
+
+.user-details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.user-details-grid .detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.375rem 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.875rem;
+}
+
+.user-details-grid .detail-item:last-child {
+  border-bottom: none;
+}
+
+.user-details-grid .detail-item label {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.user-details-grid .detail-item span {
+  color: #1e293b;
+  text-align: right;
+}
+
+/* Mobile optimization - Consistent with BuildingDetail */
+@media (max-width: 393px) {
+  .back-button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .detail-header h2 {
+    font-size: 16px;
+  }
+  
+  .user-actions {
+    padding: 0.75rem;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+  
+  .edit-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .edit-button,
+  .save-button,
+  .cancel-button {
+    justify-content: center;
+    width: 100%;
+  }
+  
+  .user-info-form {
+    gap: 1rem;
+  }
+  
+  .info-group label {
+    font-size: 0.8125rem;
+  }
+  
+  .info-group p,
+  .info-group input,
+  .info-group textarea {
+    padding: 0.625rem;
+    font-size: 0.8125rem;
+  }
+  
+  .building-access-section h3, 
+  .device-access-header h3 {
+    font-size: 15px;
+  }
+  
+  .building-name, .device-name {
+    font-size: 13px;
+  }
+  
+  .building-details, .device-details {
+    font-size: 11px;
+  }
+  
+  .building-address, .building-role-info {
+    font-size: 11px;
+  }
+  
+  .manage-devices-btn {
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+  
+  .no-devices, .no-buildings {
+    font-size: 13px;
+    padding: 12px;
+  }
+  
+  .modal-content {
+    margin: 0.75rem;
+    max-width: calc(100vw - 1.5rem);
+  }
+  
+  .modal-header,
+  .modal-body {
+    padding: 0.75rem;
+  }
+  
+  .user-details-grid .detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    text-align: left;
+  }
+  
+  .user-details-grid .detail-item span {
+    text-align: left;
+  }
+}
+
+/* Tablet and desktop */
+@media (min-width: 768px) {
+  .buildings-list, .devices-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .detail-header h2 {
+    font-size: 20px;
+  }
+  
+  .user-actions {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+  
+  .edit-actions {
+    flex-direction: row;
+  }
+  
+  .user-info-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    column-gap: 2rem;
+  }
+  
+  /* Full width for certain sections */
+  .info-group:has(.parent-email),
+  .building-access-section {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .buildings-list, .devices-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Focus states for accessibility */
+.back-button:focus,
+.edit-button:focus,
+.save-button:focus,
+.cancel-button:focus,
+.manage-devices-btn:focus {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .user-actions,
+  .back-button,
+  .manage-devices-btn {
+    display: none;
+  }
+  
+  .user-detail {
+    padding: 0;
+  }
+  
+  .building-access-section {
+    background-color: transparent;
+    border: 1px solid #d1d5db;
+  }
+}

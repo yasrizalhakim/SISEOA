@@ -1,0 +1,749 @@
+/* src/components/Buildings/BuildingDetail.css - Enhanced with Edit Functionality and Delete Button */
+.building-detail {
+  width: 100%;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-right: 15px;
+}
+
+.back-button:hover {
+  background-color: #e2e8f0;
+}
+
+.detail-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #1e293b;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.error-message {
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.success-message {
+  background-color: #dcfce7;
+  color: #16a34a;
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+/* Building Info Tab */
+.building-info-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Building Actions Section (Edit/Delete Controls) - Consistent with Device Detail */
+.building-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.edit-button,
+.save-button,
+.cancel-button,
+.delete-button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.edit-button {
+  background-color: #22c55e;
+  color: white;
+}
+
+.edit-button:hover {
+  background-color: #16a34a;
+}
+
+.save-button {
+  background-color: #22c55e;
+  color: white;
+}
+
+.save-button:hover {
+  background-color: #16a34a;
+}
+
+.save-button:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cancel-button {
+  background-color: #6b7280;
+  color: white;
+}
+
+.cancel-button:hover {
+  background-color: #4b5563;
+}
+
+.cancel-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.delete-button {
+  background-color: #dc2626;
+  color: white;
+}
+
+.delete-button:hover {
+  background-color: #b91c1c;
+}
+
+.delete-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Building Info Form */
+.building-info-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.info-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.info-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.info-group p {
+  margin: 0;
+  padding: 0.75rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+
+.building-id {
+  font-family: 'Courier New', monospace;
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  font-weight: 500;
+}
+
+.info-group input,
+.info-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  background-color: white;
+  color: #1e293b;
+}
+
+.info-group input::placeholder,
+.info-group textarea::placeholder {
+  color: #9ca3af;
+}
+
+.info-group input:focus,
+.info-group textarea:focus {
+  border-color: #22c55e;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.info-group input:disabled,
+.info-group textarea:disabled {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.input-valid {
+  border-color: #22c55e !important;
+}
+
+.info-group textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.locations-section h3, 
+.devices-tab h3,
+.children-tab h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  color: #1e293b;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Added for location management */
+.locations-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  margin-bottom: 10px;
+}
+
+.locations-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-top: 0;
+  border-top: none;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.location-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-location-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background-color: #dbeafe;
+  color: #2563eb;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.add-location-btn:hover {
+  background-color: #bfdbfe;
+}
+
+.add-location-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.add-location-form input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.add-location-form input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.confirm-add-btn {
+  padding: 6px 12px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirm-add-btn:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.locations-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.location-item {
+  position: relative;
+  padding: 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding-right: 40px; /* Space for remove button */
+}
+
+.location-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.location-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.location-id, .location-date {
+  font-size: 12px;
+}
+
+.remove-location-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: none;
+  background-color: #fee2e2;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.remove-location-btn:hover {
+  background-color: #fecaca;
+}
+
+.remove-location-btn:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Devices Tab */
+.devices-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.device-item {
+  padding: 10px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.device-item:hover {
+  background-color: #e2e8f0;
+}
+
+.device-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.device-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Children Tab */
+.children-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.children-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.children-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-child-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background-color: #dbeafe;
+  color: #2563eb;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.add-child-btn:hover {
+  background-color: #bfdbfe;
+}
+
+.add-child-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 12px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+}
+
+.add-child-form input[type="email"] {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.add-child-form input[type="email"]:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.cancel-add-btn {
+  padding: 6px 12px;
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.cancel-add-btn:hover {
+  background-color: #e2e8f0;
+}
+
+.children-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.child-item {
+  padding: 10px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  position: relative;
+  padding-bottom: 35px; /* Space for manage button if present */
+  padding-right: 40px; /* Space for remove button */
+}
+
+.child-item.clickable {
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.2s;
+}
+
+.child-item.clickable:hover {
+  background-color: #f1f5f9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.child-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.child-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.click-hint {
+  color: #10b981 !important;
+  font-style: italic;
+  font-size: 11px !important;
+  margin-top: 4px;
+}
+
+.remove-child-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: none;
+  background-color: #fee2e2;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.remove-child-btn:hover {
+  background-color: #fecaca;
+}
+
+.no-data-message {
+  padding: 15px;
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  background-color: #f8fafc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Mobile optimization */
+@media (max-width: 393px) {
+  .back-button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .detail-header h2 {
+    font-size: 16px;
+  }
+  
+  .building-actions {
+    padding: 0.75rem;
+    /* flex-direction: column; */
+    align-items: stretch;
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+  
+  .edit-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .edit-button,
+  .save-button,
+  .cancel-button,
+  .delete-button {
+    justify-content: center;
+    width: 100%;
+  }
+  
+  .building-info-form {
+    gap: 1rem;
+  }
+  
+  .info-group label {
+    font-size: 0.8125rem;
+  }
+  
+  .info-group p,
+  .info-group input,
+  .info-group textarea {
+    padding: 0.625rem;
+    font-size: 0.8125rem;
+  }
+  
+  .locations-section h3, 
+  .devices-tab h3,
+  .children-tab h3,
+  .children-header h3 {
+    font-size: 15px;
+  }
+  
+  .location-name, .device-name, .child-name {
+    font-size: 13px;
+  }
+  
+  .location-details, .device-details, .child-details {
+    font-size: 11px;
+  }
+  
+  .location-id, .location-date {
+    font-size: 11px;
+  }
+  
+  .add-location-btn, .confirm-add-btn, .add-child-btn, .cancel-add-btn {
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+  
+  .add-location-form input, .add-child-form input {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  
+  .add-child-form {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .no-data-message {
+    font-size: 13px;
+    padding: 12px;
+  }
+  
+  .remove-location-btn, .remove-child-btn {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .click-hint {
+    font-size: 10px !important;
+  }
+  
+  .children-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  
+  .children-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Tablet and desktop */
+@media (min-width: 768px) {
+  .locations-list, .devices-list, .children-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .detail-header h2 {
+    font-size: 20px;
+  }
+  
+  .add-child-form {
+    flex-direction: row;
+  }
+  
+  .building-actions {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+  
+  .edit-actions {
+    flex-direction: row;
+  }
+  
+  .building-info-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    column-gap: 2rem;
+  }
+  
+  /* Full width for certain sections */
+  .info-group:has(textarea) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .locations-list, .devices-list, .children-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Focus states for accessibility */
+.back-button:focus,
+.edit-button:focus,
+.save-button:focus,
+.cancel-button:focus,
+.delete-button:focus {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .building-actions,
+  .back-button {
+    display: none;
+  }
+  
+  .building-detail {
+    padding: 0;
+  }
+}

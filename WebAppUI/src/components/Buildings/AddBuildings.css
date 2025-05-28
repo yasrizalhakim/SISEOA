@@ -1,0 +1,379 @@
+/* src/components/Buildings/AddBuilding.css */
+.add-building {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.building-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.back-button:hover {
+  background-color: #e2e8f0;
+}
+
+.building-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #1e293b;
+}
+
+.error-message {
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+}
+
+.success-message {
+  background-color: #dcfce7;
+  color: #16a34a;
+  padding: 10px 15px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+}
+
+.building-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* Device Requirement Banner */
+.device-requirement-banner {
+  background-color: #fffbeb;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.device-requirement-banner h4 {
+  margin: 0 0 8px 0;
+  color: #d97706;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.device-requirement-banner p {
+  margin: 0;
+  color: #d97706;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-group label {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: #10b981;
+  outline: none;
+}
+
+.input-valid {
+  border-color: #10b981 !important;
+}
+
+/* Device Input Container with Status Indicators */
+.device-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.device-input-container input {
+  flex: 1;
+}
+
+.checking-message {
+  position: absolute;
+  right: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.device-valid {
+  position: absolute;
+  right: 10px;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.device-invalid {
+  position: absolute;
+  right: 10px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.save-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background-color: #10b981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 10px;
+}
+
+.save-button:hover {
+  background-color: #059669;
+}
+
+.save-button:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.admin-banner {
+  background-color: #f0fdf4;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #dcfce7;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.admin-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background-color: #10b981;
+  color: white;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.form-group small {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 5px;
+  display: block;
+}
+
+.help-text {
+  color: #10b981;
+  font-style: italic;
+}
+
+.user-access-section {
+  margin-top: 15px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 15px;
+}
+
+.user-access-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.user-access-info {
+  background-color: #f8fafc;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+.user-access-info p {
+  margin: 0 0 8px 0;
+}
+
+.user-access-info p:last-child {
+  margin: 0;
+}
+
+/* New Locations Section Styles */
+.locations-section {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.section-header {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.section-header h3 {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.section-header small {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.location-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.location-input-row input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.location-input-row input:focus {
+  border-color: #10b981;
+  outline: none;
+}
+
+.location-input-row input.input-valid {
+  border-color: #10b981;
+}
+
+.remove-location-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background-color: #fee2e2;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.remove-location-btn:hover {
+  background-color: #fecaca;
+}
+
+.remove-location-btn:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.add-location-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background-color: #dbeafe;
+  color: #2563eb;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  width: fit-content;
+  margin-top: 5px;
+}
+
+.add-location-btn:hover {
+  background-color: #bfdbfe;
+}
+
+.add-location-btn:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Responsive styles */
+@media (min-width: 640px) {
+  .add-building {
+    padding: 25px;
+  }
+}
+
+@media (max-width: 393px) {
+  .building-header h2 {
+    font-size: 16px;
+  }
+  
+  .save-button, .add-location-btn {
+    font-size: 13px;
+  }
+  
+  .section-header h3 {
+    font-size: 15px;
+  }
+  
+  .form-group label {
+    font-size: 13px;
+  }
+  
+  .location-input-row input {
+    padding: 8px;
+    font-size: 13px;
+  }
+  
+  .device-requirement-banner {
+    padding: 12px;
+  }
+  
+  .device-requirement-banner h4 {
+    font-size: 15px;
+  }
+  
+  .device-requirement-banner p {
+    font-size: 13px;
+  }
+}

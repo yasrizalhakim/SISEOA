@@ -1,0 +1,586 @@
+/* src/components/Devices/AddDevice.css - Enhanced Styles */
+
+.add-device {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.25rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
+.device-header h2 {
+  margin: 0;
+  font-size: 1.375rem;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  color: #64748b;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.back-button:hover {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+
+/* Admin Mode Selector */
+.admin-mode-selector {
+  margin-bottom: 1.5rem;
+}
+
+.mode-tabs {
+  display: flex;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #64748b;
+  border-right: 1px solid #e2e8f0;
+}
+
+.mode-tab:last-child {
+  border-right: none;
+}
+
+.mode-tab:hover {
+  color: #334155;
+  background-color: #f1f5f9;
+}
+
+.mode-tab.active {
+  color: #22c55e;
+  background-color: white;
+  font-weight: 600;
+}
+
+/* Registered Devices Section */
+.registered-devices-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+}
+
+.registered-devices-section h3 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.devices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+
+.device-card {
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.device-card.available {
+  border-color: #22c55e;
+  background-color: #f0fdf4;
+}
+
+.device-card.owned {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.device-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  gap: 0.75rem;
+}
+
+.device-header h4 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.25;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.status-badge.available {
+  background-color: #22c55e;
+  color: white;
+}
+
+.status-badge.owned {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.device-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.detail-item .label {
+  color: #6b7280;
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.detail-item .value {
+  color: #374151;
+  text-align: right;
+  word-break: break-word;
+  flex: 1;
+}
+
+.device-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  background-color: #b91c1c;
+  transform: translateY(-1px);
+}
+
+.no-devices {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Error and Success Messages */
+.error-message {
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  border: 1px solid #fecaca;
+}
+
+.success-message {
+  background-color: #dcfce7;
+  color: #16a34a;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  border: 1px solid #bbf7d0;
+}
+
+/* Owner Information Banner */
+.owner-info-banner {
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.owner-info-banner h4 {
+  margin: 0 0 0.75rem 0;
+  color: #0369a1;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.owner-info-banner p {
+  margin: 0;
+  color: #0369a1;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Device Form */
+.device-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  color: #374151;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  background-color: white;
+  color: #1e293b;
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: #9ca3af;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: #22c55e;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.form-group input:disabled,
+.form-group select:disabled,
+.form-group textarea:disabled {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+.input-valid {
+  border-color: #22c55e !important;
+}
+
+.form-group small {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
+.location-info {
+  color: #059669 !important;
+  font-weight: 500;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+/* Device Input Container with Status Indicators */
+.device-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.device-input-container input {
+  flex: 1;
+  padding-right: 6rem;
+}
+
+.checking-message {
+  position: absolute;
+  right: 0.75rem;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.device-valid {
+  position: absolute;
+  right: 0.75rem;
+  color: #16a34a;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.device-invalid {
+  position: absolute;
+  right: 0.75rem;
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Save Button */
+.save-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: #22c55e;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.875rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 0.5rem;
+}
+
+.save-button:hover {
+  background-color: #16a34a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(34, 197, 94, 0.3);
+}
+
+.save-button:active {
+  transform: translateY(0);
+}
+
+.save-button:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 12rem;
+  font-size: 1rem;
+  color: #6b7280;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .add-device {
+    padding: 1rem;
+    margin: 0 0.75rem;
+  }
+  
+  .device-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .device-header h2 {
+    font-size: 1.125rem;
+    text-align: center;
+  }
+  
+  .mode-tabs {
+    flex-direction: column;
+  }
+  
+  .mode-tab {
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  
+  .mode-tab:last-child {
+    border-bottom: none;
+  }
+  
+  .devices-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .registered-devices-section {
+    padding: 1rem;
+  }
+  
+  .device-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .detail-item .value {
+    text-align: left;
+  }
+  
+  .device-input-container input {
+    padding-right: 5rem;
+  }
+  
+  .checking-message,
+  .device-valid,
+  .device-invalid {
+    font-size: 0.6875rem;
+    right: 0.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .add-device {
+    padding: 1.5rem;
+  }
+  
+  .device-header h2 {
+    font-size: 1.5rem;
+  }
+  
+  .device-form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    column-gap: 2rem;
+  }
+  
+  /* Full width for certain sections */
+  .owner-info-banner,
+  .form-group:has(textarea) {
+    grid-column: 1 / -1;
+  }
+  
+  .save-button {
+    grid-column: 1 / -1;
+    width: fit-content;
+    justify-self: center;
+  }
+  
+  .devices-grid {
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .add-device {
+    padding: 2rem;
+  }
+  
+  .device-header h2 {
+    font-size: 1.625rem;
+  }
+  
+  .devices-grid {
+    grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+  }
+}
+
+/* Focus states for accessibility */
+.back-button:focus,
+.save-button:focus,
+.mode-tab:focus,
+.delete-btn:focus {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .add-device {
+    padding: 0;
+    box-shadow: none;
+  }
+  
+  .device-header,
+  .save-button,
+  .device-actions {
+    display: none;
+  }
+  
+  .owner-info-banner,
+  .registered-devices-section {
+    background-color: transparent;
+    border: 1px solid #d1d5db;
+  }
+}

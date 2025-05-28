@@ -1,83 +1,118 @@
 // src/components/Login/Login.js
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { firestore } from '../../services/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import './Login.css';
 
 const Login = ({ setIsAuthenticated }) => {
-  const [email, setEmail] = useState('');
-  const [deviceId, setDeviceId] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  });
+  
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  // Dummy data for demonstration
-  const validUsers = [
-    { email: 'parent@example.com', deviceId: '' },
-    { email: '', deviceId: 'DEVICE123' }
-  ];
-
-  const handleSubmit = (e) => {
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+  };
+  
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate that at least one field is filled
-    if (!email && !deviceId) {
-      setError('Please enter either your email or device ID');
+    if (!formData.email || !formData.password) {
+      setError('Please enter both email and password');
       return;
     }
     
-    // Check if the entered credentials match any dummy data
-    const isValid = validUsers.some(user => 
-      (email && user.email === email) || (deviceId && user.deviceId === deviceId)
-    );
+    setLoading(true);
+    setError('');
     
-    if (isValid) {
-      // Set authentication state using the prop function
+    try {
+      // Get user document from Firestore
+      const userDoc = await getDoc(doc(firestore, 'USER', formData.email));
+      
+      if (!userDoc.exists()) {
+        setError('Invalid email or password');
+        setLoading(false);
+        return;
+      }
+      
+      const userData = userDoc.data();
+      
+      // Simple password check (in production, use proper authentication)
+      if (userData.Password !== formData.password) {
+        setError('Invalid email or password');
+        setLoading(false);
+        return;
+      }
+      
+      // Store user information in localStorage
+      localStorage.setItem('userEmail', formData.email);
+      localStorage.setItem('userName', userData.Name || '');
+      
       setIsAuthenticated(true);
-      // Successful login - redirect to dashboard
       navigate('/dashboard');
-    } else {
-      setError('Invalid email or device ID');
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Failed to login. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
-
+  
   return (
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h2>Energy Management System</h2>
-          <p>Login to monitor and control your devices</p>
+          <h2>Welcome Back</h2>
+          <p>Sign in to your energy monitoring account</p>
         </div>
         
         {error && <div className="error-message">{error}</div>}
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="email">Parent Email</label>
+            <label htmlFor="email">Email</label>
             <input
               type="email"
               id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              disabled={loading}
               placeholder="Enter your email"
             />
           </div>
           
-          <div className="login-divider">
-            <span>OR</span>
-          </div>
-          
           <div className="form-group">
-            <label htmlFor="deviceId">Device ID</label>
+            <label htmlFor="password">Password</label>
             <input
-              type="text"
-              id="deviceId"
-              value={deviceId}
-              onChange={(e) => setDeviceId(e.target.value)}
-              placeholder="Enter device ID"
+              type="password"
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              disabled={loading}
+              placeholder="Enter your password"
             />
           </div>
           
-          <button type="submit" className="login-button">
-            Enter
+          <button 
+            type="submit" 
+            className="login-button"
+            disabled={loading}
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
         
