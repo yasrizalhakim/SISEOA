@@ -1,4 +1,5 @@
 /* src/components/Devices/Devices.css - Updated with Consistent Card Layout */
+
 .devices-page {
   width: 100%;
   padding: 1rem;
@@ -146,6 +147,7 @@
   font-size: clamp(0.75rem, 2vw, 0.875rem);
   background-color: white;
   transition: all 0.2s;
+  box-sizing: border-box;
 }
 
 .search-input:focus {
@@ -214,7 +216,7 @@
   min-width: 0;
 }
 
-/* Devices Grid - FIXED TO MATCH BUILDINGS LAYOUT */
+/* Devices Grid */
 .devices-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
@@ -232,6 +234,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
 }
 
 .device-card:hover {
@@ -243,6 +246,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .device-header {
@@ -251,6 +255,7 @@
   align-items: flex-start;
   margin-bottom: 1rem;
   gap: 0.75rem;
+  width: 100%;
 }
 
 .device-name {
@@ -291,7 +296,7 @@
   background-color: #94a3b8;
 }
 
-.owner-badge,
+.status-badge,
 .assigned-badge,
 .admin-badge {
   display: inline-block;
@@ -304,7 +309,7 @@
   letter-spacing: 0.025em;
 }
 
-.owner-badge {
+.status-badge.available {
   background-color: #22c55e;
   color: white;
 }
@@ -319,13 +324,14 @@
   color: white;
 }
 
-/* FIXED: Device Details Layout to Match Buildings */
+/* Device Details Layout */
 .device-details {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   flex: 1;
   margin-bottom: 1rem;
+  width: 100%;
 }
 
 .detail-item {
@@ -334,6 +340,7 @@
   align-items: flex-start;
   gap: 0.5rem;
   font-size: clamp(0.75rem, 2vw, 0.8125rem);
+  width: 100%;
 }
 
 .detail-label {
@@ -355,13 +362,9 @@
   text-align: right;
 }
 
-.owner-info {
+.detail-value.owner-info {
   font-weight: 500;
   color: #22c55e;
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
-  text-align: right;
 }
 
 /* Device Actions Section */
@@ -369,6 +372,7 @@
   margin-top: auto;
   padding-top: 1rem;
   border-top: 1px solid #f3f4f6;
+  width: 100%;
 }
 
 .device-status-section {
@@ -376,6 +380,7 @@
   justify-content: center;
   align-items: center;
   gap: 0.75rem;
+  width: 100%;
 }
 
 .device-status {
@@ -401,7 +406,7 @@
   border: 1px solid #fecaca;
 }
 
-/* Updated Device Toggle - Simple Toggle Switch */
+/* Device Toggle Switch */
 .device-toggle {
   position: relative;
   width: 44px;
@@ -428,7 +433,6 @@
   opacity: 0.6;
 }
 
-/* Toggle Switch States */
 .device-toggle.toggle-on {
   background-color: #22c55e;
 }
@@ -441,7 +445,6 @@
   background-color: #94a3b8;
 }
 
-/* Toggle Knob */
 .device-toggle::after {
   content: '';
   position: absolute;
@@ -504,7 +507,7 @@
 }
 
 /* Media Queries */
-@media (max-width: 37.5rem) { /* 600px */
+@media (max-width: 37.5rem) {
   .devices-page {
     padding: 0.75rem;
     gap: 1rem;
@@ -550,7 +553,6 @@
     gap: 0.5rem;
   }
   
-  /* Mobile: Keep horizontal layout for consistency */
   .detail-item {
     flex-direction: row;
     justify-content: space-between;
@@ -561,7 +563,6 @@
     text-align: right;
   }
   
-  /* Mobile toggle adjustments */
   .device-toggle {
     width: 40px;
     height: 20px;
@@ -577,7 +578,7 @@
   }
 }
 
-@media (min-width: 37.5rem) and (max-width: 64rem) { /* 600px - 1024px */
+@media (min-width: 37.5rem) and (max-width: 64rem) {
   .filters-section {
     flex-direction: row;
     justify-content: space-between;
@@ -604,7 +605,7 @@
   }
 }
 
-@media (min-width: 64rem) { /* 1024px+ */
+@media (min-width: 64rem) {
   .devices-page {
     padding: 2rem;
   }
@@ -623,8 +624,7 @@
   }
 }
 
-/* High resolution displays */
-@media (min-width: 80rem) { /* 1280px+ */
+@media (min-width: 80rem) {
   .devices-grid {
     grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
   }
@@ -685,154 +685,5 @@
   .device-card {
     box-shadow: none;
     border: 1px solid #e5e7eb;
-  }
-}
-
-/* FULL WIDTH FIX - Add this CSS at the very END of your Devices.css file */
-
-/* Force device details to take full width like building cards */
-.device-card .device-details {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 0.375rem !important;
-  flex: 1 !important;
-  margin-bottom: 1rem !important;
-  width: 100% !important; /* Force full width */
-}
-
-.device-card .device-details .detail-item {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: flex-start !important;
-  gap: 0.5rem !important;
-  font-size: 0.8125rem !important;
-  width: 100% !important; /* Force full width */
-  min-width: 100% !important; /* Ensure it takes full width */
-}
-
-.device-card .device-details .detail-label {
-  color: #6b7280 !important;
-  font-weight: 500 !important;
-  min-width: fit-content !important;
-  flex-shrink: 0 !important;
-  max-width: none !important; /* Remove any width restrictions */
-}
-
-.device-card .device-details .detail-value .detail-value.owner-info {
-  color: #374151 !important;
-  flex: 1 !important;
-  min-width: 0 !important;
-  word-break: break-word !important;
-  text-align: right !important;
-  max-width: none !important; /* Remove any width restrictions */
-  width: auto !important; /* Let it expand naturally */
-}
-
-.device-card .device-details{
-  font-weight: 500 !important;
-  color: #22c55e !important;
-}
-
-.detail-value.owner-info {
-  font-weight: 500 !important;
-  color: #22c55e !important;
-  flex: 1 !important;
-  min-width: 0 !important;
-  word-break: break-word !important;
-  text-align: right !important;
-}
-
-/* Ensure the entire card structure takes full width */
-.device-card {
-  background-color: white;
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  padding: 1.25rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  width: 100% !important; /* Force full width */
-}
-
-.device-card .device-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  width: 100% !important; /* Force full width */
-}
-
-.device-card .device-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1rem;
-  gap: 0.75rem;
-  width: 100% !important; /* Force full width */
-}
-
-.device-card .device-name {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #1e293b;
-  line-height: 1.25;
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
-}
-
-.device-card .device-indicators {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-.device-card .device-actions {
-  margin-top: auto;
-  padding-top: 1rem;
-  border-top: 1px solid #f3f4f6;
-  width: 100% !important; /* Force full width */
-}
-
-.device-card .device-status-section {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100% !important; /* Force full width */
-}
-
-/* Remove any conflicting styles that might be limiting width */
-.devices-grid .device-card,
-.devices-grid .device-card *,
-.device-card *,
-.device-card .device-details *,
-.device-card .device-content * {
-  box-sizing: border-box !important;
-}
-
-/* Ensure no text centering is interfering */
-.device-card .device-details .detail-item * {
-  text-align: initial !important;
-}
-
-.device-card .device-details .detail-value {
-  text-align: right !important;
-}
-
-/* Mobile responsive - maintain full width */
-@media (max-width: 37.5rem) {
-  .device-card .device-details .detail-item {
-    width: 100% !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-  }
-  
-  .device-card .device-details .detail-value {
-    text-align: right !important;
   }
 }

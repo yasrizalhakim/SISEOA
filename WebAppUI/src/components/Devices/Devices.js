@@ -1,10 +1,9 @@
 // src/components/Devices/Devices.js - Simplified without Owner concept
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { MdAdd, MdRefresh, MdSearch, MdDevices, MdBusiness, MdLocationOn } from 'react-icons/md';
-import { database, firestore } from '../../services/firebase';
-import { ref, get, update } from 'firebase/database';
-import { doc, getDoc } from 'firebase/firestore';
+import { MdAdd, MdRefresh, MdSearch, MdDevices } from 'react-icons/md';
+import { database } from '../../services/firebase';
+import { ref, update } from 'firebase/database';
 import dataService from '../../services/dataService';
 import { 
   getUserRole, 
@@ -15,36 +14,93 @@ import {
 } from '../../utils/helpers';
 import './Devices.css';
 
+// Filter options
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' }
+];
+
 const Devices = () => {
-  const [devices, setDevices] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [locationFilter, setLocationFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const [userRole, setUserRole] = useState('none');
-  const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
-  const [canManage, setCanManage] = useState(false);
-  
   const navigate = useNavigate();
   const location = useLocation();
   const userEmail = localStorage.getItem('userEmail') || '';
 
-  // Show message from navigation state (e.g., after device creation/deletion)
-  useEffect(() => {
-    if (location.state?.message) {
-      setError(null);
-      console.log('Navigation message:', location.state.message);
-      
-      // Clear the state to prevent showing the message again
-      window.history.replaceState({}, document.title);
-    }
-  }, [location.state]);
+  // Core state
+  const [devices, setDevices] = useState([]);
+  const [locations, setLocations] = useState([]);
+  
+  // Filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [locationFilter, setLocationFilter] = useState('all');
+  
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // User permissions
+  const [userRole, setUserRole] = useState('none');
+  const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
-  // ENHANCED: Fetch location details for each device
-  const fetchDeviceLocationDetails = async (device) => {
+  // Memoized filtered devices
+  const filteredDevices = useMemo(() => {
+    return devices.filter(device => {
+      // Search filter
+      if (searchTerm) {
+        const deviceName = device.DeviceName || device.id;
+        const deviceType = device.DeviceType || '';
+        const locationName = getLocationName(device);
+        
+        const searchText = `${deviceName} ${deviceType} ${locationName}`.toLowerCase();
+        if (!searchText.includes(searchTerm.toLowerCase())) {
+          return false;
+        }
+      }
+      
+      // Status filter
+      if (statusFilter !== 'all') {
+        const deviceStatus = device.status || 'OFF';
+        if (statusFilter === 'on' && deviceStatus !== 'ON') return false;
+        if (statusFilter === 'off' && deviceStatus !== 'OFF') return false;
+      }
+      
+      // Location filter
+      if (locationFilter !== 'all' && device.Location !== locationFilter) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [devices, searchTerm, statusFilter, locationFilter]);
+
+  // Helper functions
+  const getLocationName = useCallback((device) => {
+    if (!device.Location) return 'Unclaimed';
+    
+    if (device.locationDetails) {
+      return device.locationDetails.locationName;
+    }
+    
+    const location = locations.find(loc => loc.id === device.Location);
+    return location ? (location.locationName || device.Location) : device.Location;
+  }, [locations]);
+
+  const getBuildingName = useCallback((device) => {
+    if (!device.Location) return 'No Building';
+    
+    if (device.locationDetails) {
+      return device.locationDetails.building;
+    }
+    
+    const location = locations.find(loc => loc.id === device.Location);
+    return location ? (location.buildingName || location.Building || 'Unknown Building') : 'Unknown Building';
+  }, [locations]);
+
+  // Fetch device location details
+  const fetchDeviceLocationDetails = useCallback(async (device) => {
     if (!device.Location) {
       return {
         ...device,
@@ -53,6 +109,9 @@ const Devices = () => {
     }
 
     try {
+      const { getDoc, doc } = await import('firebase/firestore');
+      const { firestore } = await import('../../services/firebase');
+      
       const locationDoc = await getDoc(doc(firestore, 'LOCATION', device.Location));
       if (locationDoc.exists()) {
         const locationData = locationDoc.data();
@@ -73,25 +132,22 @@ const Devices = () => {
       ...device,
       locationDetails: null
     };
-  };
+  }, []);
 
   // Fetch devices and user permissions
-  const fetchDevices = async () => {
+  const fetchDevices = useCallback(async () => {
     try {
       setRefreshing(true);
       setError(null);
 
       console.log('🚀 Fetching devices for user:', userEmail);
 
-      // Check if user is SystemAdmin
       const isAdmin = await isSystemAdmin(userEmail);
       setIsUserSystemAdmin(isAdmin);
 
-      // Get user role
       const role = await getUserRole(userEmail);
       setUserRole(role);
 
-      // Check if user can manage devices
       const canManageDevs = await canManageDevices(userEmail);
       setCanManage(canManageDevs);
 
@@ -101,10 +157,8 @@ const Devices = () => {
         canManageDevices: canManageDevs 
       });
 
-      // Get all devices and locations with building details
-      const { devices: allDevices, locations: allLocations, buildings } = await dataService.getUserDevicesAndLocations(userEmail);
+      const { devices: allDevices, locations: allLocations } = await dataService.getUserDevicesAndLocations(userEmail);
       
-      // Set locations with proper building names
       const locationsWithBuildingNames = allLocations.map(location => ({
         ...location,
         locationName: location.LocationName || location.locationName || location.id,
@@ -113,10 +167,8 @@ const Devices = () => {
       
       setLocations(locationsWithBuildingNames);
 
-      // Filter devices based on user permissions
       const accessibleDevices = await filterUserDevices(allDevices, userEmail, locationsWithBuildingNames);
       
-      // ENHANCED: Fetch location details for each device
       console.log('📍 Fetching location details for devices...');
       const devicesWithLocationDetails = await Promise.all(
         accessibleDevices.map(device => fetchDeviceLocationDetails(device))
@@ -133,34 +185,18 @@ const Devices = () => {
       setRefreshing(false);
       setLoading(false);
     }
-  };
-
-  // Initial load
-  useEffect(() => {
-    if (userEmail) {
-      fetchDevices();
-    } else {
-      setLoading(false);
-      setError('User not authenticated');
-    }
-  }, [userEmail]);
-
-  // Manual refresh
-  const handleRefresh = () => {
-    fetchDevices();
-  };
+  }, [userEmail, fetchDeviceLocationDetails]);
 
   // Handle device click - navigate to device detail
-  const handleDeviceClick = (deviceId) => {
+  const handleDeviceClick = useCallback((deviceId) => {
     navigate(`/devices/detail/${deviceId}`);
-  };
+  }, [navigate]);
 
   // Device toggle handler
-  const handleDeviceToggle = async (device, e) => {
-    e.stopPropagation(); // Prevent card click
+  const handleDeviceToggle = useCallback(async (device, e) => {
+    e.stopPropagation();
     
     try {
-      // Check if user can control this device
       let canControl = isUserSystemAdmin;
       
       if (!canControl) {
@@ -174,7 +210,6 @@ const Devices = () => {
 
       const newStatus = await dataService.toggleDeviceStatus(device.id);
       
-      // Update local state
       setDevices(prevDevices => 
         prevDevices.map(d => 
           d.id === device.id ? { ...d, status: newStatus } : d
@@ -185,64 +220,32 @@ const Devices = () => {
       console.error('Error toggling device:', error);
       alert('Failed to toggle device status');
     }
-  };
+  }, [isUserSystemAdmin, userEmail, locations]);
 
-  // Get location display name - ENHANCED
-  const getLocationName = (device) => {
-    if (!device.Location) return 'Unclaimed';
-    
-    // Use enhanced device location details first
-    if (device.locationDetails) {
-      return device.locationDetails.locationName;
-    }
-    
-    // Fallback to locations array
-    const location = locations.find(loc => loc.id === device.Location);
-    return location ? (location.locationName || device.Location) : device.Location;
-  };
+  // Handle refresh
+  const handleRefresh = useCallback(() => {
+    fetchDevices();
+  }, [fetchDevices]);
 
-  // Get building name for location - ENHANCED
-  const getBuildingName = (device) => {
-    if (!device.Location) return 'No Building';
-    
-    // Use enhanced device location details first
-    if (device.locationDetails) {
-      return device.locationDetails.building;
-    }
-    
-    // Fallback to locations array
-    const location = locations.find(loc => loc.id === device.Location);
-    return location ? (location.buildingName || location.Building || 'Unknown Building') : 'Unknown Building';
-  };
-
-  // Filter devices based on search and filters
-  const filteredDevices = devices.filter(device => {
-    // Search filter
-    if (searchTerm) {
-      const deviceName = device.DeviceName || device.id;
-      const deviceType = device.DeviceType || '';
-      const locationName = getLocationName(device);
+  // Show message from navigation state
+  useEffect(() => {
+    if (location.state?.message) {
+      setError(null);
+      console.log('Navigation message:', location.state.message);
       
-      const searchText = `${deviceName} ${deviceType} ${locationName}`.toLowerCase();
-      if (!searchText.includes(searchTerm.toLowerCase())) {
-        return false;
-      }
+      window.history.replaceState({}, document.title);
     }
-    
-    // Status filter
-    if (statusFilter !== 'all') {
-      const deviceStatus = device.status || 'OFF';
-      if (statusFilter === 'on' && deviceStatus !== 'ON') return false;
-      if (statusFilter === 'off' && deviceStatus !== 'OFF') return false;
+  }, [location.state]);
+
+  // Initial load
+  useEffect(() => {
+    if (userEmail) {
+      fetchDevices();
+    } else {
+      setLoading(false);
+      setError('User not authenticated');
     }
-    
-    // Location filter
-    if (locationFilter !== 'all' && device.Location !== locationFilter) {
-      return false;
-    }
-    
-    return true;
-  });
+  }, [userEmail, fetchDevices]);
 
   if (loading) {
     return (
@@ -264,12 +267,10 @@ const Devices = () => {
       />
 
       {error && (
-        <div className="error-message">
-          {error}
-          <button onClick={handleRefresh} className="retry-btn">
-            Try Again
-          </button>
-        </div>
+        <ErrorMessage 
+          message={error} 
+          onRetry={handleRefresh} 
+        />
       )}
 
       <DeviceFilters
@@ -285,22 +286,27 @@ const Devices = () => {
 
       <DevicesGrid 
         devices={filteredDevices}
-        locations={locations}
         userEmail={userEmail}
         isSystemAdmin={isUserSystemAdmin}
         userRole={userRole}
+        searchTerm={searchTerm}
         onDeviceClick={handleDeviceClick}
         onDeviceToggle={handleDeviceToggle}
         getLocationName={getLocationName}
         getBuildingName={getBuildingName}
-        searchTerm={searchTerm}
       />
     </div>
   );
 };
 
 // Devices Header Component
-const DevicesHeader = ({ canManage, onRefresh, refreshing, isSystemAdmin, devicesCount, filteredCount }) => (
+const DevicesHeader = ({ 
+  canManage, 
+  onRefresh, 
+  refreshing, 
+  isSystemAdmin, 
+  devicesCount 
+}) => (
   <div className="devices-header">
     <h2>
       {isSystemAdmin ? (
@@ -316,20 +322,43 @@ const DevicesHeader = ({ canManage, onRefresh, refreshing, isSystemAdmin, device
       )}
     </h2>
     <div className="header-actions">
-      <button 
-        onClick={onRefresh}
-        className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
-        disabled={refreshing}
-        title="Refresh devices"
-      >
-        <MdRefresh />
-      </button>
+      <RefreshButton 
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+      />
       {canManage && (
-        <Link to="/devices/add" className="add-device-btn">
-          <MdAdd /> {isSystemAdmin ? 'Register New Device' : 'Claim Device'}
-        </Link>
+        <AddDeviceButton isSystemAdmin={isSystemAdmin} />
       )}
     </div>
+  </div>
+);
+
+// Refresh Button Component
+const RefreshButton = ({ onRefresh, refreshing }) => (
+  <button 
+    onClick={onRefresh}
+    className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
+    disabled={refreshing}
+    title="Refresh devices"
+  >
+    <MdRefresh />
+  </button>
+);
+
+// Add Device Button Component
+const AddDeviceButton = ({ isSystemAdmin }) => (
+  <Link to="/devices/add" className="add-device-btn">
+    <MdAdd /> {isSystemAdmin ? 'Register New Device' : 'Claim Device'}
+  </Link>
+);
+
+// Error Message Component
+const ErrorMessage = ({ message, onRetry }) => (
+  <div className="error-message">
+    {message}
+    <button onClick={onRetry} className="retry-btn">
+      Try Again
+    </button>
   </div>
 );
 
@@ -345,79 +374,91 @@ const DeviceFilters = ({
   isSystemAdmin 
 }) => (
   <div className="filters-section">
-    <div className="search-container">
-      <MdSearch className="search-icon" />
-      <input 
-        type="text" 
-        placeholder={isSystemAdmin ? "     Search all devices..." : "Search devices..."} 
-        value={searchTerm}
-        onChange={(e) => onSearchChange(e.target.value)}
-        className="search-input"
-      />
-    </div>
+    <SearchInput 
+      searchTerm={searchTerm}
+      onSearchChange={onSearchChange}
+      isSystemAdmin={isSystemAdmin}
+    />
     
     <div className="filter-controls">
-      <div className="status-filters">
-        {['all', 'on', 'off'].map(status => (
-          <button
-            key={status}
-            onClick={() => onStatusFilterChange(status)}
-            className={`filter-btn ${statusFilter === status ? 'active' : ''}`}
-          >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </button>
-        ))}
-      </div>
+      <StatusFilters 
+        statusFilter={statusFilter}
+        onStatusFilterChange={onStatusFilterChange}
+      />
       
-      <select 
-        value={locationFilter} 
-        onChange={(e) => onLocationFilterChange(e.target.value)}
-        className="location-select"
-      >
-        <option value="all">All Locations</option>
-        {locations.map(location => (
-          <option key={location.id} value={location.id}>
-            {location.locationName || location.id}
-          </option>
-        ))}
-      </select>
+      <LocationFilter
+        locationFilter={locationFilter}
+        onLocationFilterChange={onLocationFilterChange}
+        locations={locations}
+      />
     </div>
   </div>
+);
+
+// Search Input Component
+const SearchInput = ({ searchTerm, onSearchChange, isSystemAdmin }) => (
+  <div className="search-container">
+    <MdSearch className="search-icon" />
+    <input 
+      type="text" 
+      placeholder={isSystemAdmin ? "Search all devices..." : "Search devices..."} 
+      value={searchTerm}
+      onChange={(e) => onSearchChange(e.target.value)}
+      className="search-input"
+    />
+  </div>
+);
+
+// Status Filters Component
+const StatusFilters = ({ statusFilter, onStatusFilterChange }) => (
+  <div className="status-filters">
+    {STATUS_FILTERS.map(({ value, label }) => (
+      <button
+        key={value}
+        onClick={() => onStatusFilterChange(value)}
+        className={`filter-btn ${statusFilter === value ? 'active' : ''}`}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+);
+
+// Location Filter Component
+const LocationFilter = ({ locationFilter, onLocationFilterChange, locations }) => (
+  <select 
+    value={locationFilter} 
+    onChange={(e) => onLocationFilterChange(e.target.value)}
+    className="location-select"
+  >
+    <option value="all">All Locations</option>
+    {locations.map(location => (
+      <option key={location.id} value={location.id}>
+        {location.locationName || location.id}
+      </option>
+    ))}
+  </select>
 );
 
 // Devices Grid Component
 const DevicesGrid = ({ 
   devices, 
-  locations, 
   userEmail, 
   isSystemAdmin, 
   userRole,
+  searchTerm,
   onDeviceClick, 
   onDeviceToggle, 
   getLocationName, 
-  getBuildingName, 
-  searchTerm 
+  getBuildingName 
 }) => {
   if (devices.length === 0) {
     return (
-      <div className="no-devices">
-        <div className="no-data-content">
-          <h3>
-            {searchTerm ? 'No Devices Found' : 'No Devices Available'}
-          </h3>
-          <p>
-            {searchTerm ? (
-              `No devices match "${searchTerm}". Try adjusting your search terms or filters.`
-            ) : userRole === 'none' ? (
-              "You don't have access to any devices yet. Contact an administrator or create a building to get started."
-            ) : isSystemAdmin ? (
-              "No devices exist in the system yet. Users need to add devices to their buildings."
-            ) : (
-              "No devices found in your accessible locations. Claim devices for your buildings or ask to be assigned to existing devices."
-            )}
-          </p>
-        </div>
-      </div>
+      <NoDevicesMessage 
+        searchTerm={searchTerm}
+        userRole={userRole}
+        isSystemAdmin={isSystemAdmin}
+      />
     );
   }
 
@@ -439,7 +480,37 @@ const DevicesGrid = ({
   );
 };
 
-// Device Card Component - ENHANCED without Owner concept
+// No Devices Message Component
+const NoDevicesMessage = ({ searchTerm, userRole, isSystemAdmin }) => {
+  const getMessage = () => {
+    if (searchTerm) {
+      return `No devices match "${searchTerm}". Try adjusting your search terms or filters.`;
+    }
+    
+    if (userRole === 'none') {
+      return "You don't have access to any devices yet. Contact an administrator or create a building to get started.";
+    }
+    
+    if (isSystemAdmin) {
+      return "No devices exist in the system yet. Users need to add devices to their buildings.";
+    }
+    
+    return "No devices found in your accessible locations. Claim devices for your buildings or ask to be assigned to existing devices.";
+  };
+
+  return (
+    <div className="no-devices">
+      <div className="no-data-content">
+        <h3>
+          {searchTerm ? 'No Devices Found' : 'No Devices Available'}
+        </h3>
+        <p>{getMessage()}</p>
+      </div>
+    </div>
+  );
+};
+
+// Device Card Component
 const DeviceCard = ({ 
   device, 
   userEmail, 
@@ -456,81 +527,110 @@ const DeviceCard = ({
   return (
     <div className="device-card" onClick={onClick}>
       <div className="device-content">
-        <div className="device-header">
-          <h3 className="device-name">
-            {device.DeviceName || device.id}
-          </h3>
-          <div className="device-indicators">
-            {!isClaimed && (
-              <span className="status-badge available" title="Device available for claiming">
-                Available
-              </span>
-            )}
-            {isAssigned && (
-              <span className="assigned-badge" title="Device assigned to you">
-                Assigned
-              </span>
-            )}
-            {isSystemAdmin && (
-              <span className="admin-badge" title="SystemAdmin access">
-                Admin
-              </span>
-            )}
-          </div>
-        </div>
+        <DeviceCardHeader 
+          device={device}
+          isAssigned={isAssigned}
+          isClaimed={isClaimed}
+          isSystemAdmin={isSystemAdmin}
+        />
         
-        <div className="device-details">
-          <div className="detail-item">
-            <span className="detail-label">ID:</span>
-            <span className="detail-value">{device.id}</span>
-          </div>
-          
-          <div className="detail-item">
-            <span className="detail-label">Type:</span>
-            <span className="detail-value">{device.DeviceType || 'Unknown'}</span>
-          </div>
-          
-          <div className="detail-item">
-            <span className="detail-label">Location:</span>
-            <span className="detail-value">{getLocationName(device)}</span>
-          </div>
-          
-          <div className="detail-item">
-            <span className="detail-label">Building:</span>
-            <span className="detail-value">{getBuildingName(device)}</span>
-          </div>
-          
-          {device.AssignedTo && device.AssignedTo.length > 0 && (
-            <div className="detail-item">
-              <span className="detail-label">Assigned:</span>
-              <span className="detail-value">{device.AssignedTo.length} user(s)</span>
-            </div>
-          )}
-        </div>
+        <DeviceCardDetails 
+          device={device}
+          getLocationName={getLocationName}
+          getBuildingName={getBuildingName}
+        />
         
-        <div className="device-actions">
-          <div className="device-status-section">
-            {isClaimed && (
-              <button
-                className={`device-toggle ${deviceStatus === 'ON' ? 'toggle-on' : 'toggle-off'}`}
-                onClick={onToggle}
-                title={`Turn ${deviceStatus === 'ON' ? 'OFF' : 'ON'}`}
-              />
-            )}
-            {!isClaimed && (
-              <span style={{ 
-                fontSize: '0.75rem', 
-                color: '#6b7280', 
-                fontStyle: 'italic' 
-              }}>
-                Not claimed yet
-              </span>
-            )}
-          </div>
-        </div>
+        <DeviceCardActions 
+          device={device}
+          deviceStatus={deviceStatus}
+          isClaimed={isClaimed}
+          onToggle={onToggle}
+        />
       </div>
     </div>
   );
 };
+
+// Device Card Header Component
+const DeviceCardHeader = ({ device, isAssigned, isClaimed, isSystemAdmin }) => (
+  <div className="device-header">
+    <h3 className="device-name">
+      {device.DeviceName || device.id}
+    </h3>
+    <div className="device-indicators">
+      {!isClaimed && (
+        <span className="status-badge available" title="Device available for claiming">
+          Available
+        </span>
+      )}
+      {isAssigned && (
+        <span className="assigned-badge" title="Device assigned to you">
+          Assigned
+        </span>
+      )}
+      {isSystemAdmin && (
+        <span className="admin-badge" title="SystemAdmin access">
+          Admin
+        </span>
+      )}
+    </div>
+  </div>
+);
+
+// Device Card Details Component
+const DeviceCardDetails = ({ device, getLocationName, getBuildingName }) => (
+  <div className="device-details">
+    <DeviceDetailItem label="ID:" value={device.id} />
+    <DeviceDetailItem label="Type:" value={device.DeviceType || 'Unknown'} />
+    <DeviceDetailItem label="Location:" value={getLocationName(device)} />
+    <DeviceDetailItem label="Building:" value={getBuildingName(device)} />
+    
+    {device.AssignedTo && device.AssignedTo.length > 0 && (
+      <DeviceDetailItem 
+        label="Assigned:" 
+        value={`${device.AssignedTo.length} user(s)`} 
+      />
+    )}
+  </div>
+);
+
+// Device Detail Item Component
+const DeviceDetailItem = ({ label, value }) => (
+  <div className="detail-item">
+    <span className="detail-label">{label}</span>
+    <span className="detail-value">{value}</span>
+  </div>
+);
+
+// Device Card Actions Component
+const DeviceCardActions = ({ device, deviceStatus, isClaimed, onToggle }) => (
+  <div className="device-actions">
+    <div className="device-status-section">
+      {isClaimed ? (
+        <DeviceToggle 
+          deviceStatus={deviceStatus}
+          onToggle={onToggle}
+        />
+      ) : (
+        <span style={{ 
+          fontSize: '0.75rem', 
+          color: '#6b7280', 
+          fontStyle: 'italic' 
+        }}>
+          Not claimed yet
+        </span>
+      )}
+    </div>
+  </div>
+);
+
+// Device Toggle Component
+const DeviceToggle = ({ deviceStatus, onToggle }) => (
+  <button
+    className={`device-toggle ${deviceStatus === 'ON' ? 'toggle-on' : 'toggle-off'}`}
+    onClick={onToggle}
+    title={`Turn ${deviceStatus === 'ON' ? 'OFF' : 'ON'}`}
+  />
+);
 
 export default Devices;

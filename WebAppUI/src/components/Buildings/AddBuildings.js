@@ -1,16 +1,26 @@
-// src/components/Buildings/AddBuilding.js
-import React, { useState, useEffect } from 'react';
+// src/components/Buildings/AddBuilding.js - Cross-Platform Compatible
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdClose } from 'react-icons/md';
 import { firestore } from '../../services/firebase';
-import { doc, setDoc, collection, getDocs, query, where, serverTimestamp, getDoc } from 'firebase/firestore';
+import { 
+  doc, 
+  setDoc, 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  serverTimestamp, 
+  getDoc 
+} from 'firebase/firestore';
 import './AddBuildings.css';
 
 const AddBuilding = () => {
   const navigate = useNavigate();
   
+  // Form State
   const [formData, setFormData] = useState({
-    deviceId: '', // Required for all users
+    deviceId: '',
     buildingId: '',
     buildingName: '',
     buildingAddress: '',
@@ -18,21 +28,27 @@ const AddBuilding = () => {
   });
   
   const [locations, setLocations] = useState([
-    { id: '', name: '' } // Start with one empty location
+    { id: '', name: '' }
   ]);
   
+  // UI State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  
+  // Validation State
   const [buildingExists, setBuildingExists] = useState(false);
   const [deviceExists, setDeviceExists] = useState(false);
   const [deviceAvailable, setDeviceAvailable] = useState(false);
   const [isCheckingDevice, setIsCheckingDevice] = useState(false);
   
-  // User role and details
-  const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
+  // User Context
+  const userEmail = useMemo(() => 
+    localStorage.getItem('userEmail') || '', 
+    []
+  );
   
-  // Check if the user can add a building (any user can now add buildings if they have a device ID)
+  // Authentication Check
   useEffect(() => {
     if (!userEmail) {
       setError('You must be logged in to add buildings');
@@ -40,106 +56,53 @@ const AddBuilding = () => {
     }
   }, [userEmail, navigate]);
   
-  // Handle form input changes
-  const handleChange = async (e) => {
-    const { name, value } = e.target;
+  // Building ID Validation
+  const checkBuildingExists = useCallback(async (buildingId) => {
+    if (!buildingId) return;
     
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Check if building ID already exists when changed
-    if (name === 'buildingId' && value) {
-      await checkBuildingExists(value);
-    }
-    
-    // Check if device ID exists and is available when changed
-    if (name === 'deviceId' && value) {
-      await checkDeviceAvailability(value);
-    }
-  };
-  
-  // Handle location input changes
-  const handleLocationChange = (index, value) => {
-    const updatedLocations = [...locations];
-    updatedLocations[index].name = value;
-    
-    // Generate location ID based on building ID and location name
-    if (formData.buildingId && value) {
-      updatedLocations[index].id = `${formData.buildingId}${value.replace(/\s+/g, '')}`;
-    }
-    
-    setLocations(updatedLocations);
-  };
-  
-  // Add new location field
-  const addLocationField = () => {
-    setLocations([...locations, { id: '', name: '' }]);
-  };
-  
-  // Remove location field
-  const removeLocationField = (index) => {
-    if (locations.length <= 1) {
-      setError('At least one location is required');
-      return;
-    }
-    
-    const updatedLocations = [...locations];
-    updatedLocations.splice(index, 1);
-    setLocations(updatedLocations);
-  };
-  
-  // Check if building exists in Firestore
-  const checkBuildingExists = async (buildingId) => {
     try {
       const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
-      setBuildingExists(buildingDoc.exists());
+      const exists = buildingDoc.exists();
+      setBuildingExists(exists);
       
-      if (buildingDoc.exists()) {
+      if (exists) {
         setError('Building ID already exists. Please use a different ID.');
-      } else {
-        // Clear error if it was about building ID
-        if (error && error.includes('Building ID already exists')) {
-          setError(null);
-        }
+      } else if (error && error.includes('Building ID already exists')) {
+        setError(null);
       }
-    } catch (error) {
-      console.error('Error checking building ID:', error);
+    } catch (err) {
+      console.error('Error checking building ID:', err);
     }
-  };
+  }, [error]);
   
-  // Check if device exists and is available
-  const checkDeviceAvailability = async (deviceId) => {
+  // Device Availability Validation
+  const checkDeviceAvailability = useCallback(async (deviceId) => {
+    if (!deviceId) return;
+    
     setIsCheckingDevice(true);
     setDeviceExists(false);
     setDeviceAvailable(false);
     
     try {
-      // Check if device exists in Firestore
       const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
       
       if (!deviceDoc.exists()) {
         setDeviceExists(false);
         setDeviceAvailable(false);
         setError('Device Unavailable');
-        setIsCheckingDevice(false);
         return;
       }
       
       setDeviceExists(true);
       const deviceData = deviceDoc.data();
       
-      // Check if device is already assigned to a location
       if (deviceData.Location) {
-        // Get the location's building
         const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
         
         if (locationDoc.exists()) {
           const locationData = locationDoc.data();
           const deviceBuildingId = locationData.Building;
           
-          // Check if this building has any parent users
           const parentQuery = query(
             collection(firestore, 'USERBUILDING'),
             where('Building', '==', deviceBuildingId),
@@ -152,33 +115,96 @@ const AddBuilding = () => {
             setDeviceAvailable(false);
             setError('Device Unavailable');
           } else {
-            // Device is in a building but no parent is assigned - can be used
             setDeviceAvailable(true);
             setError(null);
           }
         } else {
-          // Location doesn't exist anymore - device can be used
           setDeviceAvailable(true);
           setError(null);
         }
       } else {
-        // Device has no location - available
         setDeviceAvailable(true);
         setError(null);
       }
-    } catch (error) {
-      console.error('Error checking device availability:', error);
+    } catch (err) {
+      console.error('Error checking device availability:', err);
       setDeviceExists(false);
       setDeviceAvailable(false);
       setError('Error checking device availability');
     } finally {
       setIsCheckingDevice(false);
     }
-  };
+  }, []);
   
-  // Save new building
-  const handleSave = async () => {
-    // Validate form data
+  // Form Input Handler
+  const handleChange = useCallback(async (e) => {
+    const { name, value } = e.target;
+    
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    if (name === 'buildingId' && value) {
+      await checkBuildingExists(value);
+    }
+    
+    if (name === 'deviceId' && value) {
+      await checkDeviceAvailability(value);
+    }
+  }, [checkBuildingExists, checkDeviceAvailability]);
+  
+  // Location Management
+  const handleLocationChange = useCallback((index, value) => {
+    setLocations(prev => {
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        name: value,
+        id: formData.buildingId && value 
+          ? `${formData.buildingId}${value.replace(/\s+/g, '')}` 
+          : ''
+      };
+      return updated;
+    });
+  }, [formData.buildingId]);
+  
+  const addLocationField = useCallback(() => {
+    setLocations(prev => [...prev, { id: '', name: '' }]);
+  }, []);
+  
+  const removeLocationField = useCallback((index) => {
+    if (locations.length <= 1) {
+      setError('At least one location is required');
+      return;
+    }
+    
+    setLocations(prev => prev.filter((_, i) => i !== index));
+  }, [locations.length]);
+  
+  // Form Validation
+  const isFormValid = useMemo(() => {
+    return formData.deviceId && 
+           formData.buildingId && 
+           formData.buildingName && 
+           !buildingExists &&
+           deviceExists &&
+           deviceAvailable &&
+           locations.length > 0 &&
+           locations.every(loc => loc.name.trim() !== '');
+  }, [
+    formData.deviceId,
+    formData.buildingId,
+    formData.buildingName,
+    buildingExists,
+    deviceExists,
+    deviceAvailable,
+    locations
+  ]);
+  
+  // Save Handler
+  const handleSave = useCallback(async () => {
+    // Validation
     if (!formData.deviceId) {
       setError('Device ID is required to create a building');
       return;
@@ -199,24 +225,17 @@ const AddBuilding = () => {
       return;
     }
     
-    if (!deviceExists) {
+    if (!deviceExists || !deviceAvailable) {
       setError('Device Unavailable.');
       return;
     }
     
-    if (!deviceAvailable) {
-      setError('Device Unavailable.');
-      return;
-    }
-    
-    // Validate locations
     const validLocations = locations.filter(loc => loc.name.trim() !== '');
     if (validLocations.length === 0) {
       setError('At least one location is required');
       return;
     }
     
-    // Make sure all locations have names
     if (locations.some(loc => loc.name.trim() === '')) {
       setError('All location fields must be filled or removed');
       return;
@@ -226,12 +245,11 @@ const AddBuilding = () => {
       setLoading(true);
       setError(null);
       
-      // Create timestamp for creation date
       const timestamp = serverTimestamp();
       const now = new Date();
       const dateCreated = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
       
-      // 1. Create building in BUILDING collection
+      // Create building
       await setDoc(doc(firestore, 'BUILDING', formData.buildingId), {
         BuildingName: formData.buildingName,
         Address: formData.buildingAddress || '',
@@ -241,19 +259,17 @@ const AddBuilding = () => {
         CreatedBy: userEmail
       });
       
-      // 2. Create USERBUILDING record to associate user with building as parent
+      // Create user-building relationship
       const userBuildingId = `${userEmail.replace(/\./g, '_')}_${formData.buildingId}`;
-      
       await setDoc(doc(firestore, 'USERBUILDING', userBuildingId), {
         User: userEmail,
         Building: formData.buildingId,
-        Role: 'parent', // User becomes parent of the building they create
+        Role: 'parent',
         CreatedAt: timestamp
       });
       
-      // 3. Create locations for this building
+      // Create locations
       for (const location of validLocations) {
-        // Generate location ID if not already set
         const locationId = location.id || `${formData.buildingId}${location.name.replace(/\s+/g, '')}`;
         
         await setDoc(doc(firestore, 'LOCATION', locationId), {
@@ -263,10 +279,10 @@ const AddBuilding = () => {
         });
       }
       
-      // 4. Assign the device to the first location
-      const firstLocationId = validLocations[0].id || `${formData.buildingId}${validLocations[0].name.replace(/\s+/g, '')}`;
+      // Assign device to first location
+      const firstLocationId = validLocations[0].id || 
+        `${formData.buildingId}${validLocations[0].name.replace(/\s+/g, '')}`;
       
-      // Get current device data and update location
       const deviceDoc = await getDoc(doc(firestore, 'DEVICE', formData.deviceId));
       const currentDeviceData = deviceDoc.data();
       
@@ -277,40 +293,81 @@ const AddBuilding = () => {
       
       setSuccess(true);
       
-      // Redirect to buildings page after a short delay
       setTimeout(() => {
         navigate('/buildings');
       }, 1500);
       
-    } catch (error) {
-      console.error('Error adding building:', error);
-      setError('Failed to add building: ' + error.message);
+    } catch (err) {
+      console.error('Error adding building:', err);
+      setError('Failed to add building: ' + err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    formData,
+    buildingExists,
+    deviceExists,
+    deviceAvailable,
+    locations,
+    userEmail,
+    navigate
+  ]);
   
-  // Handle back navigation
-  const handleBack = () => {
+  // Navigation Handler
+  const handleBack = useCallback(() => {
     navigate('/buildings');
+  }, [navigate]);
+  
+  // Device Status Indicator
+  const DeviceStatusIndicator = ({ deviceId, isChecking, exists, available }) => {
+    if (isChecking) {
+      return <span className="checking-message">Checking...</span>;
+    }
+    
+    if (!deviceId) return null;
+    
+    if (!exists) {
+      return <span className="device-invalid">Device unavailable</span>;
+    }
+    
+    if (exists && available) {
+      return <span className="device-valid">Device available</span>;
+    }
+    
+    if (exists && !available) {
+      return <span className="device-invalid">Device unavailable</span>;
+    }
+    
+    return null;
   };
   
-  // Check if form is valid for submission
-  const isFormValid = () => {
-    return formData.deviceId && 
-           formData.buildingId && 
-           formData.buildingName && 
-           !buildingExists &&
-           deviceExists &&
-           deviceAvailable &&
-           locations.length > 0 &&
-           locations.every(loc => loc.name.trim() !== '');
-  };
+  // Location Input Row Component
+  const LocationInputRow = ({ location, index, onChange, onRemove, disabled, canRemove }) => (
+    <div className="location-input-row">
+      <input
+        type="text"
+        value={location.name}
+        onChange={(e) => onChange(index, e.target.value)}
+        placeholder="Enter location name"
+        disabled={disabled}
+        className={location.name ? 'input-valid' : ''}
+      />
+      <button 
+        type="button"
+        className="remove-location-btn"
+        onClick={() => onRemove(index)}
+        disabled={!canRemove}
+        aria-label="Remove location"
+      >
+        <MdClose />
+      </button>
+    </div>
+  );
   
   return (
     <div className="add-building">
       <div className="building-header">
-        <button className="back-button" onClick={handleBack}>
+        <button className="back-button" onClick={handleBack} type="button">
           <MdArrowBack /> Back
         </button>
         <h2>Add New Building</h2>
@@ -319,16 +376,20 @@ const AddBuilding = () => {
       {error && <div className="error-message">{error}</div>}
       {success && <div className="success-message">Building added successfully</div>}
       
-      <div className="building-form">
+      <form className="building-form" onSubmit={(e) => e.preventDefault()}>
         <div className="device-requirement-banner">
           <h4>📱 Device ID Required</h4>
-          <p>A valid device ID is required to create a building. This device will be assigned to your new building. By creating a building, you become a parent/owner of that building.</p>
+          <p>
+            A valid device ID is required to create a building. This device will be assigned to your new building. 
+            By creating a building, you become a parent/owner of that building.
+          </p>
         </div>
         
         <div className="form-group">
-          <label>Device ID *</label>
+          <label htmlFor="deviceId">Device ID *</label>
           <div className="device-input-container">
             <input 
+              id="deviceId"
               type="text" 
               name="deviceId" 
               value={formData.deviceId} 
@@ -336,28 +397,22 @@ const AddBuilding = () => {
               placeholder="Enter device ID"
               disabled={loading}
               className={deviceExists && deviceAvailable ? 'input-valid' : ''}
+              autoComplete="off"
             />
-            {isCheckingDevice && <span className="checking-message">Checking...</span>}
-            {formData.deviceId && !isCheckingDevice && (
-              <>
-                {!deviceExists && (
-                  <span className="device-invalid">Device unavailable</span>
-                )}
-                {deviceExists && deviceAvailable && (
-                  <span className="device-valid">Device available</span>
-                )}
-                {deviceExists && !deviceAvailable && (
-                  <span className="device-invalid">Device unavailable</span>
-                )}
-              </>
-            )}
+            <DeviceStatusIndicator
+              deviceId={formData.deviceId}
+              isChecking={isCheckingDevice}
+              exists={deviceExists}
+              available={deviceAvailable}
+            />
           </div>
           <small>This device will be assigned to the first location in your building</small>
         </div>
         
         <div className="form-group">
-          <label>Building ID *</label>
+          <label htmlFor="buildingId">Building ID *</label>
           <input 
+            id="buildingId"
             type="text" 
             name="buildingId" 
             value={formData.buildingId} 
@@ -365,13 +420,15 @@ const AddBuilding = () => {
             placeholder="Enter building ID"
             disabled={loading}
             className={formData.buildingId && !buildingExists ? 'input-valid' : ''}
+            autoComplete="off"
           />
           <small>Building ID must be unique and cannot be changed later</small>
         </div>
         
         <div className="form-group">
-          <label>Building Name *</label>
+          <label htmlFor="buildingName">Building Name *</label>
           <input 
+            id="buildingName"
             type="text" 
             name="buildingName" 
             value={formData.buildingName} 
@@ -379,34 +436,37 @@ const AddBuilding = () => {
             placeholder="Enter building name"
             disabled={loading}
             className={formData.buildingName ? 'input-valid' : ''}
+            autoComplete="off"
           />
         </div>
         
         <div className="form-group">
-          <label>Address</label>
+          <label htmlFor="buildingAddress">Address</label>
           <input 
+            id="buildingAddress"
             type="text" 
             name="buildingAddress" 
             value={formData.buildingAddress} 
             onChange={handleChange}
             placeholder="Enter building address (optional)"
             disabled={loading}
+            autoComplete="street-address"
           />
         </div>
         
         <div className="form-group">
-          <label>Description</label>
+          <label htmlFor="buildingDescription">Description</label>
           <textarea 
+            id="buildingDescription"
             name="buildingDescription" 
             value={formData.buildingDescription} 
             onChange={handleChange}
             placeholder="Enter building description (optional)"
             disabled={loading}
             rows="3"
-          ></textarea>
+          />
         </div>
         
-        {/* Location inputs */}
         <div className="locations-section">
           <div className="section-header">
             <h3>Locations *</h3>
@@ -414,24 +474,15 @@ const AddBuilding = () => {
           </div>
           
           {locations.map((location, index) => (
-            <div key={index} className="location-input-row">
-              <input
-                type="text"
-                value={location.name}
-                onChange={(e) => handleLocationChange(index, e.target.value)}
-                placeholder="Enter location name"
-                disabled={loading}
-                className={location.name ? 'input-valid' : ''}
-              />
-              <button 
-                type="button"
-                className="remove-location-btn"
-                onClick={() => removeLocationField(index)}
-                disabled={locations.length <= 1}
-              >
-                <MdClose />
-              </button>
-            </div>
+            <LocationInputRow
+              key={index}
+              location={location}
+              index={index}
+              onChange={handleLocationChange}
+              onRemove={removeLocationField}
+              disabled={loading}
+              canRemove={locations.length > 1}
+            />
           ))}
           
           <button 
@@ -453,13 +504,14 @@ const AddBuilding = () => {
         </div>
         
         <button 
+          type="button"
           className="save-button"
           onClick={handleSave}
-          disabled={loading || !isFormValid()}
+          disabled={loading || !isFormValid}
         >
           <MdAdd /> {loading ? 'Adding...' : 'Add Building'}
         </button>
-      </div>
+      </form>
     </div>
   );
 };

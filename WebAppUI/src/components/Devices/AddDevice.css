@@ -317,6 +317,7 @@
   transition: all 0.2s;
   background-color: white;
   color: #1e293b;
+  box-sizing: border-box;
 }
 
 .form-group input::placeholder,
@@ -525,7 +526,6 @@
     column-gap: 2rem;
   }
   
-  /* Full width for certain sections */
   .owner-info-banner,
   .form-group:has(textarea) {
     grid-column: 1 / -1;

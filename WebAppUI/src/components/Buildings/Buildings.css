@@ -1,4 +1,4 @@
-/* src/components/Buildings/Buildings.css */
+/* src/components/Buildings/Buildings.css - Cross-Platform Compatible */
 .buildings-page {
   width: 100%;
   max-width: 100%;
@@ -6,8 +6,10 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  box-sizing: border-box;
 }
 
+/* Loading and Error States */
 .loading {
   display: flex;
   justify-content: center;
@@ -28,21 +30,27 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
+  border: 1px solid #fecaca;
 }
 
 .retry-btn {
   background-color: #dc2626;
-  color: white;
+  color: #ffffff;
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 0.25rem;
   font-size: 0.75rem;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s ease;
+  user-select: none;
 }
 
 .retry-btn:hover {
   background-color: #b91c1c;
+}
+
+.retry-btn:active {
+  background-color: #991b1b;
 }
 
 /* Buildings Header */
@@ -67,6 +75,7 @@
   gap: 0.5rem;
 }
 
+/* Action Buttons */
 .refresh-btn {
   display: flex;
   align-items: center;
@@ -78,12 +87,18 @@
   color: #64748b;
   border-radius: 0.375rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
 .refresh-btn:hover {
   background-color: #e2e8f0;
   transform: translateY(-1px);
+}
+
+.refresh-btn:active {
+  background-color: #cbd5e1;
+  transform: translateY(0);
 }
 
 .refresh-btn.spinning {
@@ -100,21 +115,27 @@
   align-items: center;
   gap: 0.375rem;
   background-color: #10b981;
-  color: white;
+  color: #ffffff;
   border: none;
   border-radius: 0.375rem;
   padding: 0.5rem 0.875rem;
   font-size: clamp(0.75rem, 2vw, 0.875rem);
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   font-weight: 500;
+  user-select: none;
 }
 
 .add-building-btn:hover {
   background-color: #059669;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.add-building-btn:active {
+  background-color: #047857;
+  transform: translateY(0);
 }
 
 /* Search Section */
@@ -146,8 +167,10 @@
   border: 1px solid #e2e8f0;
   border-radius: 0.375rem;
   font-size: clamp(0.75rem, 2vw, 0.875rem);
-  background-color: white;
-  transition: all 0.2s;
+  background-color: #ffffff;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  color: #1e293b;
 }
 
 .search-input:focus {
@@ -168,21 +191,27 @@
 }
 
 .building-card {
-  background-color: white;
+  background-color: #ffffff;
   border-radius: 0.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   padding: 1.25rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
+  border: 1px solid transparent;
 }
 
 .building-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: #e2e8f0;
+}
+
+.building-card:active {
+  transform: translateY(0);
 }
 
 .building-content {
@@ -191,6 +220,7 @@
   flex-direction: column;
 }
 
+/* Building Card Header */
 .building-header {
   display: flex;
   justify-content: space-between;
@@ -210,6 +240,7 @@
   word-break: break-word;
 }
 
+/* Role Badges */
 .role-badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;
@@ -223,24 +254,25 @@
 
 .admin-badge {
   background-color: #10b981;
-  color: white;
+  color: #ffffff;
 }
 
 .parent-badge {
   background-color: #3b82f6;
-  color: white;
+  color: #ffffff;
 }
 
 .children-badge {
   background-color: #8b5cf6;
-  color: white;
+  color: #ffffff;
 }
 
 .default-badge {
   background-color: #6b7280;
-  color: white;
+  color: #ffffff;
 }
 
+/* Building Details */
 .building-details {
   display: flex;
   flex-direction: column;
@@ -259,6 +291,7 @@
   color: #6b7280;
   font-weight: 500;
   min-width: fit-content;
+  flex-shrink: 0;
 }
 
 .detail-value {
@@ -268,6 +301,7 @@
   word-break: break-word;
 }
 
+/* Building Actions */
 .building-actions {
   margin-top: 1rem;
   padding-top: 1rem;
@@ -288,7 +322,8 @@
   font-size: clamp(0.625rem, 1.5vw, 0.75rem);
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
 .edit-button:hover {
@@ -297,15 +332,20 @@
   transform: translateY(-1px);
 }
 
+.edit-button:active {
+  transform: translateY(0);
+}
+
 /* No Buildings State */
 .no-buildings {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 20rem;
-  background-color: white;
+  background-color: #ffffff;
   border-radius: 0.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
 }
 
 .no-data-content {
@@ -328,8 +368,8 @@
   line-height: 1.5;
 }
 
-/* Media Queries for specific breakpoints */
-@media (max-width: 37.5rem) { /* 600px */
+/* Mobile First Responsive Design */
+@media (max-width: 37.5rem) {
   .buildings-page {
     padding: 0.75rem;
     gap: 1rem;
@@ -352,15 +392,31 @@
   .buildings-grid {
     grid-template-columns: 1fr;
   }
+  
+  .building-card {
+    padding: 1rem;
+  }
+  
+  .building-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+  
+  .role-badge {
+    align-self: flex-start;
+  }
 }
 
-@media (min-width: 37.5rem) and (max-width: 64rem) { /* 600px - 1024px */
+/* Tablet */
+@media (min-width: 37.5rem) and (max-width: 64rem) {
   .buildings-grid {
     grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
   }
 }
 
-@media (min-width: 64rem) { /* 1024px+ */
+/* Desktop */
+@media (min-width: 64rem) {
   .buildings-page {
     padding: 2rem;
   }
@@ -379,14 +435,14 @@
   }
 }
 
-/* High DPI displays */
-@media (min-width: 80rem) { /* 1280px+ */
+/* Large Desktop */
+@media (min-width: 80rem) {
   .buildings-grid {
     grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
   }
 }
 
-/* Accessibility */
+/* Focus States for Accessibility */
 .refresh-btn:focus,
 .add-building-btn:focus,
 .search-input:focus,
@@ -400,12 +456,23 @@
   outline-offset: 2px;
 }
 
-/* Reduced Motion */
+/* Keyboard Navigation */
+.building-card[tabindex] {
+  outline: none;
+}
+
+.building-card[tabindex]:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
   .building-card,
   .refresh-btn,
   .add-building-btn,
-  .edit-button {
+  .edit-button,
+  .search-input {
     transition: none;
   }
   
@@ -418,6 +485,17 @@
   .add-building-btn:hover,
   .edit-button:hover {
     transform: none;
+  }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+  .building-card {
+    border: 2px solid #000000;
+  }
+  
+  .role-badge {
+    border: 1px solid currentColor;
   }
 }
 
@@ -436,5 +514,11 @@
   .building-card {
     box-shadow: none;
     border: 1px solid #e5e7eb;
+    break-inside: avoid;
+  }
+  
+  .buildings-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
   }
 }

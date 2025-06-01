@@ -1,5 +1,5 @@
-// src/components/Buildings/Buildings.js
-import React, { useState, useEffect } from 'react';
+// src/components/Buildings/Buildings.js - Cross-Platform Compatible
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MdEdit, MdAdd, MdRefresh, MdSearch, MdAdminPanelSettings } from 'react-icons/md';
 import { firestore } from '../../services/firebase';
@@ -8,6 +8,7 @@ import { isSystemAdmin } from '../../utils/helpers';
 import './Buildings.css';
 
 const Buildings = () => {
+  // State Management
   const [buildings, setBuildings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -16,24 +17,29 @@ const Buildings = () => {
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
   
   const navigate = useNavigate();
-  const userEmail = localStorage.getItem('userEmail') || '';
+  
+  // User Context
+  const userEmail = useMemo(() => 
+    localStorage.getItem('userEmail') || '', 
+    []
+  );
 
   // Check if user is SystemAdmin
-  const checkSystemAdmin = async () => {
+  const checkSystemAdmin = useCallback(async () => {
     if (!userEmail) return false;
     
     try {
       const isAdmin = await isSystemAdmin(userEmail);
       console.log('🔧 SystemAdmin check result:', isAdmin);
       return isAdmin;
-    } catch (error) {
-      console.error('Error checking SystemAdmin status:', error);
+    } catch (err) {
+      console.error('Error checking SystemAdmin status:', err);
       return false;
     }
-  };
+  }, [userEmail]);
 
   // Fetch buildings based on user's access level
-  const fetchBuildings = async () => {
+  const fetchBuildings = useCallback(async () => {
     if (!userEmail) return;
 
     try {
@@ -42,7 +48,6 @@ const Buildings = () => {
 
       console.log('🏢 Fetching buildings for user:', userEmail);
 
-      // Check if user is SystemAdmin
       const isAdmin = await checkSystemAdmin();
       setIsUserSystemAdmin(isAdmin);
       
@@ -51,18 +56,16 @@ const Buildings = () => {
       if (isAdmin) {
         console.log('🔧 SystemAdmin detected - fetching ALL buildings in system');
         
-        // SystemAdmin can see all buildings in the system
         const allBuildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
         
         buildingsData = allBuildingsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          userRoleInBuilding: 'admin' // SystemAdmin has admin role everywhere
+          userRoleInBuilding: 'admin'
         }));
         
         console.log('🏢 SystemAdmin found', buildingsData.length, 'total buildings in system');
         
-        // Sort buildings alphabetically for SystemAdmin
         buildingsData.sort((a, b) => {
           const nameA = a.BuildingName || a.id;
           const nameB = b.BuildingName || b.id;
@@ -72,7 +75,6 @@ const Buildings = () => {
       } else {
         console.log('👨‍👩‍👧‍👦 Regular user - fetching user-specific buildings');
         
-        // Get user's building relationships with their specific roles
         const userBuildingsQuery = query(
           collection(firestore, 'USERBUILDING'),
           where('User', '==', userEmail)
@@ -88,14 +90,12 @@ const Buildings = () => {
 
         console.log('🏢 Found', userBuildingsSnapshot.docs.length, 'building relationships');
 
-        // Process each building relationship
         buildingsData = await Promise.all(
           userBuildingsSnapshot.docs.map(async (userBuildingDoc) => {
             const userBuildingData = userBuildingDoc.data();
             const buildingId = userBuildingData.Building;
             const userRoleInBuilding = userBuildingData.Role;
             
-            // Skip SystemAdmin building for display (not a real building)
             if (buildingId === 'SystemAdmin') {
               return null;
             }
@@ -109,7 +109,7 @@ const Buildings = () => {
                 return {
                   id: buildingId,
                   ...buildingDoc.data(),
-                  userRoleInBuilding: userRoleInBuilding // Store building-specific role
+                  userRoleInBuilding: userRoleInBuilding
                 };
               } else {
                 console.warn(`⚠️ Building ${buildingId} not found in BUILDING collection`);
@@ -122,7 +122,6 @@ const Buildings = () => {
           })
         );
 
-        // Filter out null values and sort
         buildingsData = buildingsData.filter(building => building !== null);
         buildingsData.sort((a, b) => {
           const nameA = a.BuildingName || a.id;
@@ -134,47 +133,53 @@ const Buildings = () => {
       console.log('🏢 Valid buildings loaded:', buildingsData.length);
       setBuildings(buildingsData);
       
-    } catch (error) {
-      console.error('❌ Error fetching buildings:', error);
+    } catch (err) {
+      console.error('❌ Error fetching buildings:', err);
       setError('Failed to load buildings');
     } finally {
       setRefreshing(false);
       setLoading(false);
     }
-  };
+  }, [userEmail, checkSystemAdmin]);
 
   // Initial load
   useEffect(() => {
     fetchBuildings();
-  }, [userEmail]);
+  }, [fetchBuildings]);
 
-  // Manual refresh
-  const handleRefresh = () => {
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
     fetchBuildings();
-  };
+  }, [fetchBuildings]);
 
   // Filter buildings by search term
-  const filteredBuildings = buildings.filter(building => {
-    if (!searchTerm) return true;
-    
-    const buildingName = building.BuildingName || building.id;
-    const buildingAddress = building.Address || '';
-    const createdBy = building.CreatedBy || '';
-    
-    return buildingName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           buildingAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           createdBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           building.id.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const filteredBuildings = useMemo(() => {
+    return buildings.filter(building => {
+      if (!searchTerm) return true;
+      
+      const buildingName = building.BuildingName || building.id;
+      const buildingAddress = building.Address || '';
+      const createdBy = building.CreatedBy || '';
+      
+      return buildingName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             buildingAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             createdBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             building.id.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+  }, [buildings, searchTerm]);
 
-  // Navigate to building detail
-  const handleBuildingClick = (buildingId) => {
+  // Navigation handler
+  const handleBuildingClick = useCallback((buildingId) => {
     navigate(`/buildings/detail/${buildingId}`);
-  };
+  }, [navigate]);
 
-  // Check if user can add buildings (SystemAdmin or have parent role in at least one building or have no buildings)
-  const canAddBuildings = isUserSystemAdmin || buildings.length >= 0; // Always allow non-admins to try
+  // Permission checks
+  const canAddBuildings = useMemo(() => 
+    isUserSystemAdmin || buildings.length >= 0, 
+    [isUserSystemAdmin, buildings.length]
+  );
 
+  // Loading state
   if (loading) {
     return (
       <div className="buildings-page">
@@ -197,7 +202,7 @@ const Buildings = () => {
       {error && (
         <div className="error-message">
           {error}
-          <button onClick={handleRefresh} className="retry-btn">
+          <button onClick={handleRefresh} className="retry-btn" type="button">
             Try Again
           </button>
         </div>
@@ -221,11 +226,17 @@ const Buildings = () => {
 };
 
 // Buildings Header Component
-const BuildingsHeader = ({ canAddBuildings, onRefresh, refreshing, isSystemAdmin, buildingsCount, filteredCount }) => {
-  const getHeaderText = () => {
+const BuildingsHeader = ({ 
+  canAddBuildings, 
+  onRefresh, 
+  refreshing, 
+  isSystemAdmin, 
+  buildingsCount 
+}) => {
+  const getHeaderText = useCallback(() => {
     if (isSystemAdmin) {
       return (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <MdAdminPanelSettings style={{ color: '#10b981' }} />
           System Buildings ({buildingsCount})
         </span>
@@ -233,24 +244,36 @@ const BuildingsHeader = ({ canAddBuildings, onRefresh, refreshing, isSystemAdmin
     }
     
     return (
-      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexDirection: 'column', alignItems: 'flex-start' }}>
+      <span style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '0.5rem', 
+        flexDirection: 'column', 
+        alignItems: 'flex-start' 
+      }}>
         <span>My Buildings ({buildingsCount})</span>
-        <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '400' }}>
+        <span style={{ 
+          fontSize: '0.75rem', 
+          color: '#6b7280', 
+          fontWeight: '400' 
+        }}>
           Different roles across buildings
         </span>
       </span>
     );
-  };
+  }, [isSystemAdmin, buildingsCount]);
 
   return (
     <div className="buildings-header">
       <h2>{getHeaderText()}</h2>
       <div className="header-actions">
         <button 
+          type="button"
           onClick={onRefresh}
           className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
           disabled={refreshing}
           title="Refresh buildings"
+          aria-label="Refresh buildings"
         >
           <MdRefresh />
         </button>
@@ -271,25 +294,32 @@ const SearchControls = ({ searchTerm, onSearchChange, isSystemAdmin }) => (
       <MdSearch className="search-icon" />
       <input 
         type="text" 
-        placeholder={isSystemAdmin ? "    Search all buildings..." : "Search buildings..."} 
+        placeholder={isSystemAdmin ? "Search all buildings..." : "Search buildings..."} 
         value={searchTerm}
         onChange={(e) => onSearchChange(e.target.value)}
         className="search-input"
+        aria-label="Search buildings"
       />
     </div>
   </div>
 );
 
 // Buildings Grid Component
-const BuildingsGrid = ({ buildings, userEmail, onBuildingClick, isSystemAdmin, searchTerm }) => {
-  const getRoleBadgeClass = (roleInBuilding) => {
+const BuildingsGrid = ({ 
+  buildings, 
+  userEmail, 
+  onBuildingClick, 
+  isSystemAdmin, 
+  searchTerm 
+}) => {
+  const getRoleBadgeClass = useCallback((roleInBuilding) => {
     switch(roleInBuilding) {
       case 'admin': return 'admin-badge';
       case 'parent': return 'parent-badge';
       case 'children': return 'children-badge';
       default: return 'default-badge';
     }
-  };
+  }, []);
 
   if (buildings.length === 0) {
     return (
@@ -327,23 +357,19 @@ const BuildingsGrid = ({ buildings, userEmail, onBuildingClick, isSystemAdmin, s
   );
 };
 
-// Building Card Component - Shows building-specific role
+// Building Card Component
 const BuildingCard = ({ building, getRoleBadgeClass, onClick, isSystemAdmin }) => {
-  const formatDate = (dateStr) => {
+  const formatDate = useCallback((dateStr) => {
     if (!dateStr) return 'N/A';
     
-    // Handle Firebase timestamp objects
     if (typeof dateStr === 'object' && dateStr.toDate) {
       return dateStr.toDate().toLocaleDateString();
     }
     
-    // Handle string dates
     if (typeof dateStr === 'string') {
-      // If it's in DD-MM-YYYY format, parse it correctly
       if (dateStr.includes('-')) {
         const parts = dateStr.split('-');
         if (parts.length === 3) {
-          // Assume DD-MM-YYYY format
           const date = new Date(parts[2], parts[1] - 1, parts[0]);
           return date.toLocaleDateString();
         }
@@ -352,32 +378,54 @@ const BuildingCard = ({ building, getRoleBadgeClass, onClick, isSystemAdmin }) =
     }
     
     return dateStr;
-  };
+  }, []);
+
+  const handleCardClick = useCallback(() => {
+    onClick();
+  }, [onClick]);
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  }, [onClick]);
 
   return (
-    <div className="building-card" onClick={onClick}>
+    <div 
+      className="building-card" 
+      onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`View details for ${building.BuildingName || building.id}`}
+    >
       <div className="building-content">
         <div className="building-header">
           <h3 className="building-name">
             {building.BuildingName || building.id}
           </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-  <span className={`role-badge ${getRoleBadgeClass(building.userRoleInBuilding)}`}>
-    {building.userRoleInBuilding}
-    {isSystemAdmin && building.userRoleInBuilding === 'admin' && (
-      <span style={{ marginLeft: '4px' }}>*</span>
-    )}
-  </span>
-  {/* Multi-role indicator */}
-  <span style={{ 
-    fontSize: '10px', 
-    color: '#6b7280', 
-    fontStyle: 'italic',
-    textAlign: 'right'
-  }}>
-    Role in this building
-  </span>
-</div>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'flex-end', 
+            gap: '0.25rem' 
+          }}>
+            <span className={`role-badge ${getRoleBadgeClass(building.userRoleInBuilding)}`}>
+              {building.userRoleInBuilding}
+              {isSystemAdmin && building.userRoleInBuilding === 'admin' && (
+                <span style={{ marginLeft: '0.25rem' }}>*</span>
+              )}
+            </span>
+            <span style={{ 
+              fontSize: '0.625rem', 
+              color: '#6b7280', 
+              fontStyle: 'italic',
+              textAlign: 'right'
+            }}>
+              Role in this building
+            </span>
+          </div>
         </div>
         
         <div className="building-details">
@@ -404,15 +452,6 @@ const BuildingCard = ({ building, getRoleBadgeClass, onClick, isSystemAdmin }) =
               <span className="detail-value">{building.CreatedBy}</span>
             </div>
           )}
-          
-          {/* {isSystemAdmin && (
-            <div className="detail-item">
-              <span className="detail-label">Access Level:</span>
-              <span className="detail-value" style={{ color: '#10b981', fontWeight: '500' }}>
-                Full System Access
-              </span>
-            </div>
-          )} */}
           
           {building.Description && (
             <div className="detail-item">

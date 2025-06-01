@@ -367,6 +367,7 @@
   transition: all 0.2s;
   background-color: white;
   color: #1e293b;
+  box-sizing: border-box;
 }
 
 .info-group input:focus,
@@ -541,7 +542,6 @@
     font-size: 0.8125rem;
   }
   
-  /* Assignment tab mobile styles */
   .assignment-info-banner {
     padding: 0.75rem;
   }
@@ -598,7 +598,6 @@
     column-gap: 2rem;
   }
   
-  /* Full width for certain sections */
   .info-group:has(textarea),
   .info-group:has(.location-display),
   .info-group:has(.assigned-users) {
@@ -614,7 +613,6 @@
     flex-direction: row;
   }
   
-  /* Assignment tab tablet styles */
   .children-list {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -633,7 +631,6 @@
     padding: 1.25rem;
   }
   
-  /* Assignment tab desktop styles */
   .children-list {
     grid-template-columns: repeat(3, 1fr);
   }
