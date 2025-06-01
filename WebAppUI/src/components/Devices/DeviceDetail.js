@@ -1,4 +1,4 @@
-// src/components/Devices/DeviceDetail.js - Simplified without Owner concept
+// src/components/Devices/DeviceDetail.js - Complete with Energy Usage Tab
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore, database } from '../../services/firebase';
@@ -24,9 +24,11 @@ import {
   MdBusiness,
   MdPeople,
   MdPersonAdd,
-  MdAdd
+  MdAdd,
+  MdBolt
 } from 'react-icons/md';
 import TabPanel from '../common/TabPanel';
+import EnergyChart from '../common/EnergyChart';
 import { 
   isSystemAdmin, 
   getUserRoleInBuilding, 
@@ -42,12 +44,6 @@ const DEVICE_TYPES = [
   { value: 'AC', label: 'Air Conditioner' },
   { value: 'Other', label: 'Other' }
 ];
-
-// Tab indices
-const TABS = {
-  DEVICE_INFO: 0,
-  ASSIGNMENT: 1
-};
 
 const DeviceDetail = () => {
   const { deviceId } = useParams();
@@ -615,6 +611,21 @@ const DeviceDetail = () => {
     });
   }
 
+  // Add Energy Usage tab if device has location (claimed)
+  if (device.Location) {
+    tabs.push({
+      label: 'Energy Usage',
+      content: (
+        <EnergyUsageTab
+          deviceId={deviceId}
+          deviceName={device?.DeviceName || device?.id}
+          locationName={locationName}
+          buildingName={buildingName}
+        />
+      )
+    });
+  }
+
   return (
     <div className="device-detail">
       <DeviceHeader 
@@ -1073,6 +1084,28 @@ const ChildItem = ({
     >
       {buttonIcon}
     </button>
+  </div>
+);
+
+// Energy Usage tab component
+const EnergyUsageTab = ({ deviceId, deviceName, locationName, buildingName }) => (
+  <div className="energy-usage-tab">
+    <div className="energy-info-banner">
+      <h4>
+        <MdBolt /> Energy Usage Analytics
+      </h4>
+      <p>
+        Monitor energy consumption for <strong>{deviceName}</strong> located in <strong>{locationName}</strong>, <strong>{buildingName}</strong>.
+      </p>
+    </div>
+    
+    <EnergyChart
+      deviceId={deviceId}
+      title={`Energy Usage - ${deviceName}`}
+      showControls={true}
+      defaultFilter="week"
+      height={350}
+    />
   </div>
 );
 

@@ -1,4 +1,4 @@
-// src/components/Devices/AddDevice.js - Simplified Device Management without Owner
+// src/components/Devices/AddDevice.js - Enhanced with Building Association
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdDevices, MdLocationOn, MdPerson, MdDelete } from 'react-icons/md';
@@ -92,6 +92,11 @@ const AddDevice = () => {
   const getBuildingName = useCallback((locationId) => {
     const location = userLocations.find(loc => loc.id === locationId);
     return location?.buildingName || 'Unknown Building';
+  }, [userLocations]);
+
+  const getBuildingIdFromLocation = useCallback((locationId) => {
+    const location = userLocations.find(loc => loc.id === locationId);
+    return location?.buildingId || null;
   }, [userLocations]);
 
   // Initialize component data
@@ -396,7 +401,7 @@ const AddDevice = () => {
     }, 1500);
   }, [formData, navigate]);
 
-  // Register new device
+  // Register new device with energy usage document
   const registerDevice = useCallback(async (deviceId) => {
     console.log('📱 Registering new device...');
     
@@ -424,6 +429,9 @@ const AddDevice = () => {
       createdAt: new Date().toISOString(),
       locationId: formData.location || ''
     });
+
+    // NEW: Create empty energy usage document for the device
+    await createEnergyUsageDocument(deviceId);
     
     setSuccess(true);
     await fetchRegisteredDevices();
@@ -432,6 +440,36 @@ const AddDevice = () => {
     setTimeout(() => setSuccess(null), 3000);
     console.log('✅ New device registered successfully');
   }, [formData, fetchRegisteredDevices]);
+
+  // NEW: Create empty energy usage document for new device
+  const createEnergyUsageDocument = useCallback(async (deviceId) => {
+    try {
+      console.log(`📊 Creating energy usage structure for device ${deviceId}`);
+      
+      // Create today's date document in the new structure
+      const today = new Date();
+      const dateStr = formatDateForFirestore(today);
+      
+      // Create empty energy usage document at ENERGYUSAGE/{deviceId}/DailyUsage/{yyyy-mm-dd}
+      await setDoc(doc(firestore, 'ENERGYUSAGE', deviceId, 'DailyUsage', dateStr), {
+        usage: 0,
+        //timestamp: new Date().toISOString()
+      });
+      
+      console.log(`✅ Energy usage structure created for device ${deviceId} at DailyUsage/${dateStr}`);
+    } catch (error) {
+      console.error(`❌ Error creating energy usage structure:`, error);
+      // Don't throw error as device registration was successful
+    }
+  }, []);
+
+  // Format date for Firestore document ID (yyyy-mm-dd format)
+  const formatDateForFirestore = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Handle device deletion (admin only)
   const handleDeleteDevice = useCallback(async (deviceId, deviceName, isClaimed) => {
@@ -452,6 +490,9 @@ const AddDevice = () => {
       
       const rtdbRef = ref(database, `Devices/${deviceId}`);
       await remove(rtdbRef);
+
+      // NEW: Remove energy usage documents for the device
+      await removeEnergyUsageDocuments(deviceId);
       
       setSuccess(`Device "${deviceName}" deleted successfully`);
       await fetchRegisteredDevices();
@@ -463,6 +504,24 @@ const AddDevice = () => {
       setError('Failed to delete device: ' + error.message);
     }
   }, [fetchRegisteredDevices]);
+
+  // NEW: Remove all energy usage documents for a device
+  const removeEnergyUsageDocuments = useCallback(async (deviceId) => {
+    try {
+      console.log(`📊 Removing energy usage structure for device ${deviceId}`);
+      
+      // Get all daily usage documents for this device
+      const dailyUsageSnapshot = await getDocs(collection(firestore, 'ENERGYUSAGE', deviceId, 'DailyUsage'));
+      
+      // Delete all daily usage documents
+      const deletePromises = dailyUsageSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deletePromises);
+      
+      console.log(`✅ Energy usage structure removed for device ${deviceId}`);
+    } catch (error) {
+      console.error(`❌ Error removing energy usage structure:`, error);
+    }
+  }, []);
 
   // Handle back navigation
   const handleBack = useCallback(() => {
@@ -694,7 +753,7 @@ const InfoBanner = ({ mode, isUserSystemAdmin }) => {
     if (mode === MODE_TABS.REGISTER && isUserSystemAdmin) {
       return {
         title: 'Register New Device (SystemAdmin)',
-        description: 'Register new devices in the system. These devices will be available for parents to claim.'
+        description: 'Register new devices in the system. An energy usage tracking document will be automatically created for the device.'
       };
     }
     

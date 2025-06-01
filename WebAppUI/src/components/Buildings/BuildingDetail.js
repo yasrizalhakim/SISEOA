@@ -1,4 +1,4 @@
-// src/components/Buildings/BuildingDetail.js - Cross-Platform Compatible
+// src/components/Buildings/BuildingDetail.js - Enhanced with Energy Usage Tab
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
@@ -26,11 +26,14 @@ import {
   MdSave, 
   MdCancel, 
   MdBusiness, 
-  MdDescription 
+  MdDescription,
+  MdBolt
 } from 'react-icons/md';
 import TabPanel from '../common/TabPanel';
+import EnergyChart from '../common/EnergyChart';
 import UserModal from '../common/UserModal';
 import { isSystemAdmin } from '../../utils/helpers';
+import energyUsageService from '../../services/energyUsageService';
 import './BuildingDetail.css';
 
 const BuildingDetail = () => {
@@ -76,6 +79,9 @@ const BuildingDetail = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
   const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
+  
+  // Energy State
+  const [buildingDeviceIds, setBuildingDeviceIds] = useState([]);
   
   // User Context
   const userEmail = useMemo(() => 
@@ -158,6 +164,18 @@ const BuildingDetail = () => {
       console.error('Error refreshing children data:', err);
     }
   }, [userRoleInBuilding, buildingId]);
+
+  // Fetch building device IDs for energy usage
+  const fetchBuildingDeviceIds = useCallback(async () => {
+    try {
+      const deviceIds = await energyUsageService.getBuildingDeviceIds(buildingId);
+      setBuildingDeviceIds(deviceIds);
+      console.log(`🏢 Building ${buildingId} has ${deviceIds.length} devices for energy tracking`);
+    } catch (error) {
+      console.error('Error fetching building device IDs:', error);
+      setBuildingDeviceIds([]);
+    }
+  }, [buildingId]);
   
   // Main data fetching effect
   useEffect(() => {
@@ -238,6 +256,9 @@ const BuildingDetail = () => {
         if (roleInBuilding === 'parent') {
           await fetchChildrenData();
         }
+
+        // Fetch device IDs for energy usage
+        await fetchBuildingDeviceIds();
         
       } catch (err) {
         console.error('Error fetching building data:', err);
@@ -248,7 +269,7 @@ const BuildingDetail = () => {
     };
     
     fetchBuildingData();
-  }, [buildingId, userEmail, getUserRoleInBuilding, fetchChildrenData, isUserSystemAdmin]);
+  }, [buildingId, userEmail, getUserRoleInBuilding, fetchChildrenData, isUserSystemAdmin, fetchBuildingDeviceIds]);
   
   // Edit mode handlers
   const handleEditToggle = useCallback(() => {
@@ -975,6 +996,37 @@ const BuildingDetail = () => {
       )}
     </div>
   );
+
+  // Energy Usage tab component
+  const EnergyUsageTab = () => (
+    <div className="energy-usage-tab">
+      <div className="energy-info-banner">
+        <h4>
+          <MdBolt /> Building Energy Analytics
+        </h4>
+        <p>
+          Monitor aggregated energy consumption for all devices in <strong>{building?.BuildingName || 'this building'}</strong>. 
+          This shows combined usage from {buildingDeviceIds.length} device{buildingDeviceIds.length !== 1 ? 's' : ''} across {locations.length} location{locations.length !== 1 ? 's' : ''}.
+        </p>
+      </div>
+      
+      <EnergyChart
+        buildingId={buildingId}
+        deviceIds={buildingDeviceIds}
+        title={`Building Energy Usage - ${building?.BuildingName || buildingId}`}
+        showControls={true}
+        defaultFilter="week"
+        height={400}
+      />
+      
+      {buildingDeviceIds.length === 0 && (
+        <div className="no-energy-data">
+          <p><strong>No devices available for energy tracking</strong></p>
+          <span>Add devices to locations in this building to start monitoring energy usage.</span>
+        </div>
+      )}
+    </div>
+  );
   
   // Prepare tabs
   const tabs = [
@@ -994,6 +1046,12 @@ const BuildingDetail = () => {
       content: <ChildrenTab />
     });
   }
+
+  // Add Energy Usage tab
+  tabs.push({
+    label: 'Energy Usage',
+    content: <EnergyUsageTab />
+  });
   
   return (
     <div className="building-detail">

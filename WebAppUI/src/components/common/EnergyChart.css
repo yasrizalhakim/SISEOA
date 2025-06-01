@@ -1,0 +1,442 @@
+/* src/components/common/EnergyChart.css - Energy Chart Component Styles */
+
+.energy-chart-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Chart Header */
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.chart-title {
+  margin: 0;
+  color: #1e293b;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* View Controls */
+.view-controls {
+  display: flex;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.control-btn {
+  padding: 0.375rem 0.75rem;
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #64748b;
+  border-right: 1px solid #e2e8f0;
+}
+
+.control-btn:last-child {
+  border-right: none;
+}
+
+.control-btn:hover {
+  color: #334155;
+  background-color: #f1f5f9;
+}
+
+.control-btn.active {
+  color: #22c55e;
+  background-color: white;
+  font-weight: 600;
+}
+
+/* Refresh Button */
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background-color: #f1f5f9;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Error Banner */
+.error-banner {
+  background-color: #fef2f2;
+  color: #dc2626;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border: 1px solid #fecaca;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.error-note {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+/* Loading State */
+.chart-loading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  color: #64748b;
+  gap: 0.75rem;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #f1f5f9;
+  border-radius: 50%;
+  border-top-color: #22c55e;
+  animation: spin 1s ease-in-out infinite;
+}
+
+/* Chart Area */
+.chart-area {
+  width: 100%;
+  min-height: 200px;
+}
+
+/* Custom Tooltip */
+.energy-tooltip {
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+}
+
+.tooltip-label {
+  margin: 0 0 0.25rem 0;
+  font-weight: 500;
+  color: #374151;
+}
+
+.tooltip-value {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.tooltip-indicator {
+  width: 8px;
+  height: 8px;
+  background-color: #22c55e;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Energy Summary */
+.energy-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-top: 0.5rem;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.25rem;
+}
+
+.summary-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.summary-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* No Data State */
+.no-data-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  text-align: center;
+  color: #64748b;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  gap: 0.375rem;
+}
+
+.no-data-state p {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.no-data-state span {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .energy-chart-container {
+    padding: 0.75rem;
+  }
+  
+  .chart-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .chart-controls {
+    justify-content: space-between;
+  }
+  
+  .view-controls {
+    flex: 1;
+  }
+  
+  .control-btn {
+    flex: 1;
+    padding: 0.5rem 0.375rem;
+    text-align: center;
+  }
+  
+  .chart-title {
+    text-align: center;
+    font-size: 0.9375rem;
+  }
+  
+  .energy-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+  
+  .summary-item {
+    gap: 0.125rem;
+  }
+  
+  .summary-label {
+    font-size: 0.6875rem;
+  }
+  
+  .summary-value {
+    font-size: 0.875rem;
+  }
+  
+  .chart-area {
+    min-height: 180px;
+  }
+  
+  .error-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.375rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .energy-chart-container {
+    padding: 1.25rem;
+  }
+  
+  .chart-title {
+    font-size: 1.125rem;
+  }
+  
+  .energy-summary {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .chart-area {
+    min-height: 250px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .energy-chart-container {
+    padding: 1.5rem;
+  }
+  
+  .chart-area {
+    min-height: 300px;
+  }
+}
+
+/* Focus States for Accessibility */
+.control-btn:focus,
+.refresh-btn:focus {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .control-btn,
+  .refresh-btn,
+  .loading-spinner,
+  .refresh-btn .spinning {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* Energy Usage Tab Specific Styles */
+.energy-usage-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.energy-info-banner {
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.energy-info-banner h4 {
+  margin: 0 0 0.75rem 0;
+  color: #0369a1;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.energy-info-banner p {
+  margin: 0;
+  color: #0369a1;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* No Energy Data State */
+.no-energy-data {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  text-align: center;
+  color: #64748b;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  gap: 0.375rem;
+  margin-top: 1rem;
+}
+
+.no-energy-data p {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.no-energy-data span {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Print Styles */
+@media print {
+  .chart-controls {
+    display: none;
+  }
+  
+  .energy-chart-container {
+    box-shadow: none;
+    border: 1px solid #e2e8f0;
+  }
+  
+  .error-banner {
+    background-color: transparent;
+    border: 1px solid #dc2626;
+  }
+  
+  .energy-summary {
+    background-color: transparent;
+    border: 1px solid #e2e8f0;
+  }
+  
+  .energy-info-banner {
+    background-color: transparent;
+    border: 1px solid #0369a1;
+  }
+  
+  .no-energy-data {
+    background-color: transparent;
+    border: 1px solid #64748b;
+  }
+}
