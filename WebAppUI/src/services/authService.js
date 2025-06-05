@@ -1,7 +1,8 @@
 // src/services/authService.js - Simplified Authentication
 
 import { firestore } from './firebase';
-import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+//import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { getUserRole } from '../utils/helpers';
 
 // ==============================================================================

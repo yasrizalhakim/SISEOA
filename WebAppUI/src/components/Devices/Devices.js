@@ -1,4 +1,4 @@
-// src/components/Devices/Devices.js - Simplified without Owner concept
+// src/components/Devices/Devices.js - Enhanced Security and Role-Based Access
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { MdAdd, MdRefresh, MdSearch, MdDevices } from 'react-icons/md';
@@ -7,10 +7,10 @@ import { ref, update } from 'firebase/database';
 import dataService from '../../services/dataService';
 import { 
   getUserRole, 
-  filterUserDevices, 
   canControlDevice, 
   canManageDevices,
-  isSystemAdmin 
+  isSystemAdmin,
+  getUserRoleInBuilding
 } from '../../utils/helpers';
 import './Devices.css';
 
@@ -44,6 +44,44 @@ const Devices = () => {
   const [userRole, setUserRole] = useState('none');
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const [userBuildingRoles, setUserBuildingRoles] = useState(new Map());
+
+  // NEW: Enhanced device filtering with strict security
+  const filterAccessibleDevices = useCallback(async (allDevices) => {
+    const accessibleDevices = [];
+    
+    for (const device of allDevices) {
+      let hasAccess = false;
+      
+      // SystemAdmin has access to all devices
+      if (isUserSystemAdmin) {
+        hasAccess = true;
+      } else if (device.Location) {
+        // Device is claimed - check building access
+        const location = locations.find(loc => loc.id === device.Location);
+        if (location && location.Building) {
+          const roleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
+          
+          if (roleInBuilding === 'parent') {
+            // Parents can see all devices in their buildings
+            hasAccess = true;
+          } else if (roleInBuilding === 'children') {
+            // Children can only see devices they're assigned to
+            const assignedTo = device.AssignedTo || [];
+            hasAccess = assignedTo.includes(userEmail);
+          }
+        }
+      }
+      // Unclaimed devices (no location) are only visible to SystemAdmin
+      
+      if (hasAccess) {
+        accessibleDevices.push(device);
+      }
+    }
+    
+    console.log(`🔐 Filtered ${allDevices.length} devices to ${accessibleDevices.length} accessible devices`);
+    return accessibleDevices;
+  }, [isUserSystemAdmin, userEmail, locations]);
 
   // Memoized filtered devices
   const filteredDevices = useMemo(() => {
@@ -92,12 +130,22 @@ const Devices = () => {
     if (!device.Location) return 'No Building';
     
     if (device.locationDetails) {
-      return device.locationDetails.building;
+      return device.locationDetails.buildingName || device.locationDetails.building;
     }
     
     const location = locations.find(loc => loc.id === device.Location);
     return location ? (location.buildingName || location.Building || 'Unknown Building') : 'Unknown Building';
   }, [locations]);
+
+  // NEW: Get user's role in device's building
+  const getUserRoleInDeviceBuilding = useCallback(async (device) => {
+    if (!device.Location) return 'none';
+    
+    const location = locations.find(loc => loc.id === device.Location);
+    if (!location || !location.Building) return 'none';
+    
+    return await getUserRoleInBuilding(userEmail, location.Building);
+  }, [locations, userEmail]);
 
   // Fetch device location details
   const fetchDeviceLocationDetails = useCallback(async (device) => {
@@ -115,12 +163,28 @@ const Devices = () => {
       const locationDoc = await getDoc(doc(firestore, 'LOCATION', device.Location));
       if (locationDoc.exists()) {
         const locationData = locationDoc.data();
+        
+        // NEW: Fetch building name
+        let buildingName = 'Unknown Building';
+        if (locationData.Building) {
+          try {
+            const buildingDoc = await getDoc(doc(firestore, 'BUILDING', locationData.Building));
+            if (buildingDoc.exists()) {
+              const buildingData = buildingDoc.data();
+              buildingName = buildingData.BuildingName || locationData.Building;
+            }
+          } catch (buildingError) {
+            console.error('Error fetching building details:', buildingError);
+          }
+        }
+        
         return {
           ...device,
           locationDetails: {
             id: device.Location,
             locationName: locationData.LocationName || device.Location,
-            building: locationData.Building || 'Unknown Building'
+            building: locationData.Building || 'Unknown Building',
+            buildingName: buildingName
           }
         };
       }
@@ -167,9 +231,10 @@ const Devices = () => {
       
       setLocations(locationsWithBuildingNames);
 
-      const accessibleDevices = await filterUserDevices(allDevices, userEmail, locationsWithBuildingNames);
+      // NEW: Use enhanced filtering with strict security
+      const accessibleDevices = await filterAccessibleDevices(allDevices);
       
-      console.log('📍 Fetching location details for devices...');
+      console.log('📍 Fetching location details for accessible devices...');
       const devicesWithLocationDetails = await Promise.all(
         accessibleDevices.map(device => fetchDeviceLocationDetails(device))
       );
@@ -185,7 +250,7 @@ const Devices = () => {
       setRefreshing(false);
       setLoading(false);
     }
-  }, [userEmail, fetchDeviceLocationDetails]);
+  }, [userEmail, fetchDeviceLocationDetails, filterAccessibleDevices]);
 
   // Handle device click - navigate to device detail
   const handleDeviceClick = useCallback((deviceId) => {
@@ -294,6 +359,7 @@ const Devices = () => {
         onDeviceToggle={handleDeviceToggle}
         getLocationName={getLocationName}
         getBuildingName={getBuildingName}
+        getUserRoleInDeviceBuilding={getUserRoleInDeviceBuilding}
       />
     </div>
   );
@@ -450,7 +516,8 @@ const DevicesGrid = ({
   onDeviceClick, 
   onDeviceToggle, 
   getLocationName, 
-  getBuildingName 
+  getBuildingName,
+  getUserRoleInDeviceBuilding
 }) => {
   if (devices.length === 0) {
     return (
@@ -474,6 +541,7 @@ const DevicesGrid = ({
           onToggle={(e) => onDeviceToggle(device, e)}
           getLocationName={getLocationName}
           getBuildingName={getBuildingName}
+          getUserRoleInDeviceBuilding={getUserRoleInDeviceBuilding}
         />
       ))}
     </div>
@@ -518,11 +586,24 @@ const DeviceCard = ({
   onClick, 
   onToggle, 
   getLocationName, 
-  getBuildingName 
+  getBuildingName,
+  getUserRoleInDeviceBuilding
 }) => {
+  const [userRoleInBuilding, setUserRoleInBuilding] = React.useState('user');
+  
+  // Get user's role in device building for display logic
+  React.useEffect(() => {
+    const fetchRole = async () => {
+      const role = await getUserRoleInDeviceBuilding(device);
+      setUserRoleInBuilding(role);
+    };
+    fetchRole();
+  }, [device, getUserRoleInDeviceBuilding]);
+  
   const isAssigned = device.AssignedTo && device.AssignedTo.includes(userEmail);
   const deviceStatus = device.status || 'OFF';
   const isClaimed = !!device.Location;
+  const canViewSensitiveInfo = isSystemAdmin || userRoleInBuilding === 'parent';
 
   return (
     <div className="device-card" onClick={onClick}>
@@ -532,10 +613,12 @@ const DeviceCard = ({
           isAssigned={isAssigned}
           isClaimed={isClaimed}
           isSystemAdmin={isSystemAdmin}
+          canViewSensitiveInfo={canViewSensitiveInfo}
         />
         
         <DeviceCardDetails 
           device={device}
+          canViewSensitiveInfo={canViewSensitiveInfo}
           getLocationName={getLocationName}
           getBuildingName={getBuildingName}
         />
@@ -552,7 +635,7 @@ const DeviceCard = ({
 };
 
 // Device Card Header Component
-const DeviceCardHeader = ({ device, isAssigned, isClaimed, isSystemAdmin }) => (
+const DeviceCardHeader = ({ device, isAssigned, isClaimed, isSystemAdmin, canViewSensitiveInfo }) => (
   <div className="device-header">
     <h3 className="device-name">
       {device.DeviceName || device.id}
@@ -578,14 +661,18 @@ const DeviceCardHeader = ({ device, isAssigned, isClaimed, isSystemAdmin }) => (
 );
 
 // Device Card Details Component
-const DeviceCardDetails = ({ device, getLocationName, getBuildingName }) => (
+const DeviceCardDetails = ({ device, canViewSensitiveInfo, getLocationName, getBuildingName }) => (
   <div className="device-details">
-    <DeviceDetailItem label="ID:" value={device.id} />
+    {/* Only show Device ID to users who can view sensitive info */}
+    {canViewSensitiveInfo && (
+      <DeviceDetailItem label="ID:" value={device.id} />
+    )}
     <DeviceDetailItem label="Type:" value={device.DeviceType || 'Unknown'} />
     <DeviceDetailItem label="Location:" value={getLocationName(device)} />
     <DeviceDetailItem label="Building:" value={getBuildingName(device)} />
     
-    {device.AssignedTo && device.AssignedTo.length > 0 && (
+    {/* Only show assigned count to users who can view sensitive info */}
+    {canViewSensitiveInfo && device.AssignedTo && device.AssignedTo.length > 0 && (
       <DeviceDetailItem 
         label="Assigned:" 
         value={`${device.AssignedTo.length} user(s)`} 

@@ -312,15 +312,6 @@ const BuildingsGrid = ({
   isSystemAdmin, 
   searchTerm 
 }) => {
-  const getRoleBadgeClass = useCallback((roleInBuilding) => {
-    switch(roleInBuilding) {
-      case 'admin': return 'admin-badge';
-      case 'parent': return 'parent-badge';
-      case 'children': return 'children-badge';
-      default: return 'default-badge';
-    }
-  }, []);
-
   if (buildings.length === 0) {
     return (
       <div className="no-buildings">
@@ -348,7 +339,6 @@ const BuildingsGrid = ({
         <BuildingCard
           key={building.id}
           building={building}
-          getRoleBadgeClass={getRoleBadgeClass}
           onClick={() => onBuildingClick(building.id)}
           isSystemAdmin={isSystemAdmin}
         />
@@ -358,7 +348,7 @@ const BuildingsGrid = ({
 };
 
 // Building Card Component
-const BuildingCard = ({ building, getRoleBadgeClass, onClick, isSystemAdmin }) => {
+const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
   const formatDate = useCallback((dateStr) => {
     if (!dateStr) return 'N/A';
     
@@ -405,27 +395,6 @@ const BuildingCard = ({ building, getRoleBadgeClass, onClick, isSystemAdmin }) =
           <h3 className="building-name">
             {building.BuildingName || building.id}
           </h3>
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'flex-end', 
-            gap: '0.25rem' 
-          }}>
-            <span className={`role-badge ${getRoleBadgeClass(building.userRoleInBuilding)}`}>
-              {building.userRoleInBuilding}
-              {isSystemAdmin && building.userRoleInBuilding === 'admin' && (
-                <span style={{ marginLeft: '0.25rem' }}>*</span>
-              )}
-            </span>
-            <span style={{ 
-              fontSize: '0.625rem', 
-              color: '#6b7280', 
-              fontStyle: 'italic',
-              textAlign: 'right'
-            }}>
-              Role in this building
-            </span>
-          </div>
         </div>
         
         <div className="building-details">
@@ -446,7 +415,7 @@ const BuildingCard = ({ building, getRoleBadgeClass, onClick, isSystemAdmin }) =
             <span className="detail-value">{formatDate(building.DateCreated || building.CreatedAt)}</span>
           </div>
 
-          {building.CreatedBy && (
+          {building.CreatedBy && building.userRoleInBuilding !== 'parent' && (
             <div className="detail-item">
               <span className="detail-label">Created by:</span>
               <span className="detail-value">{building.CreatedBy}</span>

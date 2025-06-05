@@ -1,4 +1,4 @@
-// src/components/Devices/DeviceDetail.js - Complete with Energy Usage Tab
+// src/components/Devices/DeviceDetail.js - Complete with Enhanced Security and Building Name Display
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore, database } from '../../services/firebase';
@@ -35,6 +35,7 @@ import {
   getUserBuildingRoles 
 } from '../../utils/helpers';
 import './DeviceDetail.css';
+import { notifyDeviceDeleted, notifyParentDeviceDeleted } from '../../services/notificationService';
 
 // Device types options
 const DEVICE_TYPES = [
@@ -67,6 +68,7 @@ const DeviceDetail = () => {
   const [canEdit, setCanEdit] = useState(false);
   const [canDelete, setCanDelete] = useState(false);
   const [canAssignUsers, setCanAssignUsers] = useState(false);
+  const [canViewSensitiveInfo, setCanViewSensitiveInfo] = useState(true);
   
   // Assignment state
   const [buildingChildren, setBuildingChildren] = useState([]);
@@ -93,8 +95,60 @@ const DeviceDetail = () => {
 
   const buildingName = useMemo(() => {
     if (!device?.Location) return 'No Building';
-    return device?.locationDetails?.building || 'Unknown Building';
+    return device?.locationDetails?.buildingName || 'Unknown Building';
   }, [device]);
+
+  // NEW: Check if user has access to this device
+  const checkDeviceAccess = useCallback(async (deviceData) => {
+    try {
+      console.log('🔐 Checking device access for user:', userEmail);
+      
+      const isAdmin = await isSystemAdmin(userEmail);
+      if (isAdmin) {
+        console.log('✅ SystemAdmin access granted');
+        return true;
+      }
+      
+      // If device has no location (unclaimed), only SystemAdmin can access
+      if (!deviceData.Location) {
+        console.log('❌ Device unclaimed - only SystemAdmin access allowed');
+        return false;
+      }
+      
+      // Get the building from device location
+      const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
+      if (!locationDoc.exists()) {
+        console.log('❌ Device location not found');
+        return false;
+      }
+      
+      const locationData = locationDoc.data();
+      const buildingId = locationData.Building;
+      
+      // Check if user has role in the building
+      const roleInBuilding = await getUserRoleInBuilding(userEmail, buildingId);
+      
+      if (roleInBuilding === 'parent') {
+        console.log('✅ Parent access granted to building device');
+        return true;
+      }
+      
+      if (roleInBuilding === 'children') {
+        // Check if child is assigned to this device
+        const assignedTo = deviceData.AssignedTo || [];
+        const hasAccess = assignedTo.includes(userEmail);
+        console.log(`${hasAccess ? '✅' : '❌'} Child access ${hasAccess ? 'granted' : 'denied'} - device assignment check`);
+        return hasAccess;
+      }
+      
+      console.log('❌ No access - user has no role in device building');
+      return false;
+      
+    } catch (error) {
+      console.error('Error checking device access:', error);
+      return false;
+    }
+  }, [userEmail]);
 
   // Fetch device and permission data
   const fetchDeviceData = useCallback(async () => {
@@ -114,22 +168,33 @@ const DeviceDetail = () => {
         return;
       }
       
-      const deviceData = await enrichDeviceData(deviceId, deviceDoc.data());
-      setDevice(deviceData);
+      const deviceData = deviceDoc.data();
+      
+      // NEW: Check device access before proceeding
+      const hasAccess = await checkDeviceAccess(deviceData);
+      if (!hasAccess) {
+        setError('You do not have access to this device');
+        setLoading(false);
+        return;
+      }
+      
+      const enrichedDevice = await enrichDeviceData(deviceId, deviceData);
+      setDevice(enrichedDevice);
       setEditData({
-        DeviceName: deviceData.DeviceName || '',
-        DeviceDescription: deviceData.DeviceDescription || '',
-        DeviceType: deviceData.DeviceType || '',
-        Location: deviceData.Location || ''
+        DeviceName: enrichedDevice.DeviceName || '',
+        DeviceDescription: enrichedDevice.DeviceDescription || '',
+        DeviceType: enrichedDevice.DeviceType || '',
+        Location: enrichedDevice.Location || ''
       });
       
-      console.log('📱 Device data loaded:', deviceData);
+      console.log('📱 Device data loaded:', enrichedDevice);
       
-      const permissions = await calculatePermissions(isAdmin, deviceData);
+      const permissions = await calculatePermissions(isAdmin, enrichedDevice);
       setUserRoleInBuilding(permissions.roleInDeviceBuilding);
       setCanEdit(permissions.canEditDevice);
       setCanDelete(permissions.canDeleteDevice);
       setCanAssignUsers(permissions.canAssignDevice);
+      setCanViewSensitiveInfo(permissions.canViewSensitiveInfo);
       
       console.log('🔐 Permissions:', permissions);
       
@@ -137,8 +202,8 @@ const DeviceDetail = () => {
         await fetchUserBuildingsAndLocations();
       }
       
-      if (permissions.canAssignDevice && deviceData.Location && deviceData.locationDetails) {
-        await fetchBuildingChildren(deviceData.locationDetails.building, deviceData.AssignedTo || []);
+      if (permissions.canAssignDevice && enrichedDevice.Location && enrichedDevice.locationDetails) {
+        await fetchBuildingChildren(enrichedDevice.locationDetails.building, enrichedDevice.AssignedTo || []);
       }
       
     } catch (error) {
@@ -147,7 +212,7 @@ const DeviceDetail = () => {
     } finally {
       setLoading(false);
     }
-  }, [deviceId, userEmail]);
+  }, [deviceId, userEmail, checkDeviceAccess]);
 
   // Enrich device data with location and status information
   const enrichDeviceData = useCallback(async (deviceId, deviceData) => {
@@ -159,10 +224,26 @@ const DeviceDetail = () => {
         const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
         if (locationDoc.exists()) {
           const locationData = locationDoc.data();
+          
+          // NEW: Fetch building name for display
+          let buildingName = 'Unknown Building';
+          if (locationData.Building) {
+            try {
+              const buildingDoc = await getDoc(doc(firestore, 'BUILDING', locationData.Building));
+              if (buildingDoc.exists()) {
+                const buildingData = buildingDoc.data();
+                buildingName = buildingData.BuildingName || locationData.Building;
+              }
+            } catch (buildingError) {
+              console.error('Error fetching building details:', buildingError);
+            }
+          }
+          
           enrichedDevice.locationDetails = {
             id: deviceData.Location,
             locationName: locationData.LocationName || deviceData.Location,
-            building: locationData.Building || 'Unknown Building'
+            building: locationData.Building || 'Unknown Building',
+            buildingName: buildingName
           };
         }
       } catch (locationError) {
@@ -194,6 +275,7 @@ const DeviceDetail = () => {
     let canEditDevice = isAdmin;
     let canDeleteDevice = isAdmin;
     let canAssignDevice = false;
+    let canViewSensitiveInfo = isAdmin; // NEW: Children can't see sensitive info
     let roleInDeviceBuilding = 'user';
     
     if (deviceData?.Location && deviceData?.locationDetails) {
@@ -204,6 +286,10 @@ const DeviceDetail = () => {
         canEditDevice = true;
         canDeleteDevice = true;
         canAssignDevice = true;
+        canViewSensitiveInfo = true;
+      } else if (roleInDeviceBuilding === 'children') {
+        // Children can't see sensitive info like device ID and assigned users
+        canViewSensitiveInfo = false;
       }
     }
     
@@ -211,6 +297,7 @@ const DeviceDetail = () => {
       canEditDevice,
       canDeleteDevice,
       canAssignDevice,
+      canViewSensitiveInfo,
       roleInDeviceBuilding,
       isSystemAdmin: isAdmin
     };
@@ -511,6 +598,31 @@ const DeviceDetail = () => {
       alert('Deletion cancelled - confirmation text did not match');
       return;
     }
+
+    // Get device location and building to notify parent
+    if (device?.Location && device?.locationDetails) {
+      try {
+        const buildingId = device.locationDetails.building;
+        // Get building parent
+        const parentQuery = query(
+          collection(firestore, 'USERBUILDING'),
+          where('Building', '==', buildingId),
+          where('Role', '==', 'parent')
+        );
+        const parentSnapshot = await getDocs(parentQuery);
+        
+        if (!parentSnapshot.empty) {
+          const parentEmail = parentSnapshot.docs[0].data().User;
+          await notifyParentDeviceDeleted(
+            parentEmail,
+            device.DeviceName || device.id,
+            device.locationDetails.building
+          );
+        }
+      } catch (notificationError) {
+        console.error('❌ Failed to send parent notification:', notificationError);
+      }
+    }
     
     try {
       setDeleting(true);
@@ -579,6 +691,7 @@ const DeviceDetail = () => {
           deleting={deleting}
           canEdit={canEdit}
           canDelete={canDelete}
+          canViewSensitiveInfo={canViewSensitiveInfo}
           allUserBuildings={allUserBuildings}
           allUserLocations={allUserLocations}
           error={error}
@@ -659,6 +772,7 @@ const DeviceInfoTab = ({
   deleting,
   canEdit,
   canDelete,
+  canViewSensitiveInfo,
   allUserBuildings,
   allUserLocations,
   error,
@@ -693,6 +807,7 @@ const DeviceInfoTab = ({
       isEditing={isEditing}
       saving={saving}
       canEdit={canEdit}
+      canViewSensitiveInfo={canViewSensitiveInfo}
       allUserBuildings={allUserBuildings}
       allUserLocations={allUserLocations}
       locationName={locationName}
@@ -760,6 +875,7 @@ const DeviceInfoForm = ({
   isEditing,
   saving,
   canEdit,
+  canViewSensitiveInfo,
   allUserBuildings,
   allUserLocations,
   locationName,
@@ -767,7 +883,10 @@ const DeviceInfoForm = ({
   onInputChange
 }) => (
   <div className="device-info-form">
-    <InfoField label="Device ID" value={device?.id || ''} className="device-id" />
+    {/* Only show Device ID to users who can view sensitive info */}
+    {canViewSensitiveInfo && (
+      <InfoField label="Device ID" value={device?.id || ''} className="device-id" />
+    )}
     
     <EditableField
       label="Device Name *"
@@ -830,7 +949,8 @@ const DeviceInfoForm = ({
       />
     )}
     
-    {device?.AssignedTo && device.AssignedTo.length > 0 && (
+    {/* Only show Assigned To info to users who can view sensitive info */}
+    {canViewSensitiveInfo && device?.AssignedTo && device.AssignedTo.length > 0 && (
       <div className="info-group">
         <label>Assigned To</label>
         <div className="assigned-users">

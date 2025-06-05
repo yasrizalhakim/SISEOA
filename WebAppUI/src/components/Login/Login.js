@@ -1,8 +1,10 @@
-// src/components/Login/Login.js
+// src/components/Login/Login.js - Fixed
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { loginUser } from '../../services/authService'; // Import loginUser function
+import { checkUserPendingApproval } from '../../services/notificationService';
 import './Login.css';
 
 const Login = ({ setIsAuthenticated }) => {
@@ -26,7 +28,10 @@ const Login = ({ setIsAuthenticated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.email || !formData.password) {
+    // Use formData properties instead of undefined variables
+    const { email, password } = formData;
+    
+    if (!email || !password) {
       setError('Please enter both email and password');
       return;
     }
@@ -35,34 +40,27 @@ const Login = ({ setIsAuthenticated }) => {
     setError('');
     
     try {
-      // Get user document from Firestore
-      const userDoc = await getDoc(doc(firestore, 'USER', formData.email));
-      
-      if (!userDoc.exists()) {
-        setError('Invalid email or password');
+      // Check if user is pending approval first
+      const isPending = await checkUserPendingApproval(email);
+      if (isPending) {
+        setError('Your account is pending approval. Please wait for parent approval.');
         setLoading(false);
         return;
       }
+
+      const user = await loginUser(email, password);
       
-      const userData = userDoc.data();
-      
-      // Simple password check (in production, use proper authentication)
-      if (userData.Password !== formData.password) {
-        setError('Invalid email or password');
-        setLoading(false);
-        return;
-      }
-      
-      // Store user information in localStorage
-      localStorage.setItem('userEmail', formData.email);
-      localStorage.setItem('userName', userData.Name || '');
+      // Store user data
+      localStorage.setItem('userEmail', user.email);
+      localStorage.setItem('userName', user.name);
+      localStorage.setItem('userRole', user.role);
       
       setIsAuthenticated(true);
       navigate('/dashboard');
       
     } catch (error) {
       console.error('Login error:', error);
-      setError('Failed to login. Please try again.');
+      setError(error.message || 'Login failed');
     } finally {
       setLoading(false);
     }

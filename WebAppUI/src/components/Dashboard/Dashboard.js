@@ -1,17 +1,19 @@
-// src/components/Dashboard/Dashboard.js - Enhanced and Consolidated
+// src/components/Dashboard/Dashboard.js - Enhanced with Strict Security and Energy Overview
 
 import React, { useState, useEffect } from 'react';
-import { MdDevices, MdBolt, MdLocationOn, MdWarning, MdAdd, MdRefresh, MdAdminPanelSettings } from 'react-icons/md';
+import { MdDevices, MdBolt, MdLocationOn, MdWarning, MdAdd, MdRefresh, MdAdminPanelSettings, MdBusiness } from 'react-icons/md';
 import { Link } from 'react-router-dom';
 import { database } from '../../services/firebase';
 import { ref, get, update } from 'firebase/database';
+import EnergyOverview from '../Dashboard/EnergyOverview';
 import dataService from '../../services/dataService';
 import { 
   getUserRole, 
   filterUserDevices, 
   canControlDevice, 
   canManageDevices,
-  isSystemAdmin 
+  isSystemAdmin,
+  getUserRoleInBuilding
 } from '../../utils/helpers';
 import './Dashboard.css';
 
@@ -20,10 +22,13 @@ const Dashboard = () => {
     totalDevices: 0,
     activeDevices: 0,
     locations: 0,
+    buildings: 0,
     alerts: 0
   });
   const [devices, setDevices] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [accessibleBuildings, setAccessibleBuildings] = useState([]);
+  const [accessibleDeviceIds, setAccessibleDeviceIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -34,7 +39,72 @@ const Dashboard = () => {
   // Get current user
   const userEmail = localStorage.getItem('userEmail') || '';
 
-  // Main data fetcher
+  // NEW: Enhanced device filtering with strict security (same as Devices.js)
+  const filterAccessibleDevices = async (allDevices, allLocations) => {
+    const accessibleDevices = [];
+    
+    for (const device of allDevices) {
+      let hasAccess = false;
+      
+      // SystemAdmin has access to all devices
+      if (isUserSystemAdmin) {
+        hasAccess = true;
+      } else if (device.Location) {
+        // Device is claimed - check building access
+        const location = allLocations.find(loc => loc.id === device.Location);
+        if (location && location.Building) {
+          const roleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
+          
+          if (roleInBuilding === 'parent') {
+            // Parents can see all devices in their buildings
+            hasAccess = true;
+          } else if (roleInBuilding === 'children') {
+            // Children can only see devices they're assigned to
+            const assignedTo = device.AssignedTo || [];
+            hasAccess = assignedTo.includes(userEmail);
+          }
+        }
+      }
+      // Unclaimed devices (no location) are only visible to SystemAdmin
+      
+      if (hasAccess) {
+        accessibleDevices.push(device);
+      }
+    }
+    
+    console.log(`🔐 Dashboard filtered ${allDevices.length} devices to ${accessibleDevices.length} accessible devices`);
+    return accessibleDevices;
+  };
+
+  // NEW: Get accessible buildings for user
+  const getAccessibleBuildings = async (allLocations) => {
+    const buildings = new Set();
+    
+    if (isUserSystemAdmin) {
+      // SystemAdmin can see all buildings
+      const { getDocs, collection } = await import('firebase/firestore');
+      const { firestore } = await import('../../services/firebase');
+      
+      const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
+      buildingsSnapshot.docs.forEach(doc => {
+        buildings.add(doc.id);
+      });
+    } else {
+      // Regular users - only buildings they have access to
+      for (const location of allLocations) {
+        if (location.Building) {
+          const roleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
+          if (roleInBuilding === 'parent' || roleInBuilding === 'children') {
+            buildings.add(location.Building);
+          }
+        }
+      }
+    }
+    
+    return Array.from(buildings);
+  };
+
+  // Main data fetcher with enhanced security
   const fetchDashboardData = async () => {
     try {
       setRefreshing(true);
@@ -64,23 +134,39 @@ const Dashboard = () => {
       const { devices: allDevices, locations: allLocations } = await dataService.getUserDevicesAndLocations(userEmail);
       setLocations(allLocations);
 
-      // Filter devices based on user permissions
-      const accessibleDevices = await filterUserDevices(allDevices, userEmail, allLocations);
+      // NEW: Use strict security filtering
+      const accessibleDevices = await filterAccessibleDevices(allDevices, allLocations);
       setDevices(accessibleDevices);
 
-      // Calculate stats
+      // NEW: Get accessible buildings
+      const userAccessibleBuildings = await getAccessibleBuildings(allLocations);
+      setAccessibleBuildings(userAccessibleBuildings);
+
+      // NEW: Get accessible device IDs for energy overview
+      const deviceIds = accessibleDevices.map(device => device.id);
+      setAccessibleDeviceIds(deviceIds);
+
+      // Calculate stats based on accessible data only
       const totalDevices = accessibleDevices.length;
       const activeDevices = accessibleDevices.filter(device => device.status === 'ON').length;
-      const uniqueLocations = new Set(accessibleDevices.map(device => device.Location).filter(Boolean)).size;
+      
+      // Only count locations in accessible buildings
+      const accessibleLocations = allLocations.filter(location => {
+        if (!location.Building) return false;
+        return userAccessibleBuildings.includes(location.Building);
+      });
+      const uniqueLocations = accessibleLocations.length;
+      const uniqueBuildings = userAccessibleBuildings.length;
 
-      // For SystemAdmin, show system-wide stats
+      // For SystemAdmin, show system-wide stats as well
       let systemStats = {};
       if (isAdmin) {
         console.log('🔧 Calculating system-wide stats for SystemAdmin');
         systemStats = {
           totalSystemDevices: allDevices.length,
           totalSystemLocations: allLocations.length,
-          activeSystemDevices: allDevices.filter(device => device.status === 'ON').length
+          activeSystemDevices: allDevices.filter(device => device.status === 'ON').length,
+          totalSystemBuildings: await getSystemBuildingsCount()
         };
       }
 
@@ -88,14 +174,16 @@ const Dashboard = () => {
         totalDevices,
         activeDevices,
         locations: uniqueLocations,
+        buildings: uniqueBuildings,
         alerts: 0, // Could be calculated based on device issues, etc.
         ...systemStats
       });
 
-      console.log('📊 Dashboard stats:', { 
+      console.log('📊 Dashboard stats (accessible only):', { 
         totalDevices, 
         activeDevices, 
         uniqueLocations,
+        uniqueBuildings,
         ...(isAdmin && { systemStats })
       });
 
@@ -105,6 +193,20 @@ const Dashboard = () => {
     } finally {
       setRefreshing(false);
       setLoading(false);
+    }
+  };
+
+  // Helper to get total system buildings count for SystemAdmin
+  const getSystemBuildingsCount = async () => {
+    try {
+      const { getDocs, collection } = await import('firebase/firestore');
+      const { firestore } = await import('../../services/firebase');
+      
+      const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
+      return buildingsSnapshot.docs.length;
+    } catch (error) {
+      console.error('Error getting system buildings count:', error);
+      return 0;
     }
   };
 
@@ -184,7 +286,7 @@ const Dashboard = () => {
               fontSize: '12px', 
               opacity: 0.9 
             }}>
-              System Total: {dashboardData.totalSystemDevices} devices, {dashboardData.totalSystemLocations} locations
+              System Total: {dashboardData.totalSystemDevices} devices, {dashboardData.totalSystemBuildings} buildings
             </span>
           )}
         </div>
@@ -209,16 +311,20 @@ const Dashboard = () => {
             `${dashboardData.activeDevices} accessible to you` : null}
         />
         <StatCard
+          icon={<MdBusiness />}
+          value={isUserSystemAdmin ? dashboardData.totalSystemBuildings || dashboardData.buildings : dashboardData.buildings}
+          label={isUserSystemAdmin ? "System Buildings" : "My Buildings"}
+          color="purple"
+          subtitle={isUserSystemAdmin && dashboardData.buildings !== dashboardData.totalSystemBuildings ? 
+            `${dashboardData.buildings} accessible to you` : null}
+        />
+        <StatCard
           icon={<MdLocationOn />}
           value={isUserSystemAdmin ? dashboardData.totalSystemLocations || dashboardData.locations : dashboardData.locations}
           label={isUserSystemAdmin ? "System Locations" : "My Locations"}
-          color="purple"
-        />
-        <StatCard
-          icon={<MdWarning />}
-          value={dashboardData.alerts}
-          label="Alerts"
           color="red"
+          subtitle={isUserSystemAdmin && dashboardData.locations !== dashboardData.totalSystemLocations ? 
+            `${dashboardData.locations} accessible to you` : null}
         />
       </div>
 
@@ -236,7 +342,12 @@ const Dashboard = () => {
           canManage={canManage}
         />
         
-        <EnergyPanel />
+        {/* NEW: Enhanced Energy Panel with actual data */}
+        <EnergyPanel 
+          deviceIds={accessibleDeviceIds}
+          isSystemAdmin={isUserSystemAdmin}
+          devicesCount={devices.length}
+        />
       </div>
     </div>
   );
@@ -418,11 +529,6 @@ const DeviceOverviewPanel = ({
                 <div className="device-name">{device.DeviceName || device.id}</div>
                 <div className="device-location">{getLocationName(device.Location)}</div>
                 <div className="device-type">{device.DeviceType || 'Unknown'}</div>
-                {isSystemAdmin && device.AssignedTo && device.AssignedTo.length > 0 && (
-                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                    Assigned to: {device.AssignedTo.length} user(s)
-                  </div>
-                )}
               </div>
               <DeviceToggle 
                 device={device} 
@@ -447,9 +553,6 @@ const DeviceOverviewPanel = ({
             ) : isSystemAdmin ? (
               <div>
                 <p><strong>No available device!</strong></p>
-                {/* <p style={{ fontSize: '12px', color: '#64748b', marginTop: '10px' }}>
-                  No available device.
-                </p> */}
               </div>
             ) : (
               <div>
@@ -475,34 +578,58 @@ const DeviceOverviewPanel = ({
   );
 };
 
-// Energy Panel Component (Placeholder for now)
-const EnergyPanel = () => (
+// NEW: Enhanced Energy Panel Component with actual data
+const EnergyPanel = ({ deviceIds, isSystemAdmin, devicesCount }) => (
   <div className="panel energy-panel">
     <div className="panel-header">
-      <h3>Energy Overview</h3>
+      <h3>
+        <MdBolt style={{ color: '#22c55e', marginRight: '0.5rem' }} />
+        Energy Overview
+        {isSystemAdmin && (
+          <span style={{ 
+            marginLeft: '8px', 
+            fontSize: '12px', 
+            backgroundColor: '#10b981', 
+            color: 'white', 
+            padding: '2px 6px', 
+            borderRadius: '12px' 
+          }}>
+            Admin
+          </span>
+        )}
+      </h3>
     </div>
-    <div className="energy-placeholder">
-      <p>📊 Energy consumption data</p>
-      <p>Coming soon...</p>
-      {/* <div style={{ 
-        marginTop: '20px', 
-        padding: '15px', 
-        backgroundColor: '#f0f9ff', 
-        borderRadius: '6px',
-        fontSize: '14px',
-        color: '#0369a1'
-      }}>
-        <p style={{ margin: 0 }}>
-          Future features:
-        </p>
-        <ul style={{ margin: '8px 0 0 20px', fontSize: '13px' }}>
-          <li>Real-time energy consumption</li>
-          <li>Usage trends and analytics</li>
-          <li>Energy efficiency recommendations</li>
-          <li>Cost calculations</li>
-        </ul>
-      </div> */}
-    </div>
+    
+    {devicesCount > 0 ? (
+      <EnergyOverview 
+        deviceIds={deviceIds}
+        className="dashboard-energy-overview"
+        height={250}
+      />
+    ) : (
+      <div className="energy-placeholder">
+        <p>📊 No accessible devices</p>
+        <p>{isSystemAdmin ? 'No devices in system yet' : 'No devices assigned to you yet'}</p>
+        <div style={{ 
+          marginTop: '20px', 
+          padding: '15px', 
+          backgroundColor: '#f0f9ff', 
+          borderRadius: '6px',
+          fontSize: '14px',
+          color: '#0369a1'
+        }}>
+          <p style={{ margin: 0 }}>
+            Energy tracking will show:
+          </p>
+          <ul style={{ margin: '8px 0 0 20px', fontSize: '13px' }}>
+            <li>Real-time energy consumption</li>
+            <li>7-day usage trends</li>
+            <li>Peak usage analytics</li>
+            <li>Device activity overview</li>
+          </ul>
+        </div>
+      </div>
+    )}
   </div>
 );
 

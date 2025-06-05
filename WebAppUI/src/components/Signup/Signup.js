@@ -4,6 +4,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import './Signup.css';
+import { 
+  notifyNewUserRequest, 
+  notifyDeviceClaimed 
+} from '../../services/notificationService';
 
 const Signup = ({ setIsAuthenticated }) => {
   const [activeTab, setActiveTab] = useState('parent'); // 'parent' or 'children'
@@ -313,6 +317,19 @@ const Signup = ({ setIsAuthenticated }) => {
     setTimeout(() => {
       navigate('/dashboard');
     }, 1500);
+
+    // **NEW: Create notification for parent about device claiming and building creation**
+    try {
+      await notifyDeviceClaimed(
+        formData.email,
+        deviceData.DeviceName || formData.deviceId,
+        formData.buildingName
+      );
+      console.log('📢 Parent notification sent for device claiming');
+    } catch (notificationError) {
+      console.error('❌ Failed to send notification:', notificationError);
+      // Don't fail the registration if notification fails
+    }
   };
   
   const registerChildren = async () => {
@@ -378,6 +395,20 @@ const Signup = ({ setIsAuthenticated }) => {
     setTimeout(() => {
       navigate('/dashboard');
     }, 1500);
+
+    // **NEW: Create notification for parent about new user request**
+    try {
+      const parentData = parentDoc.data();
+      await notifyNewUserRequest(
+        formData.parentEmail,
+        formData.userName,
+        formData.email
+      );
+      console.log('📢 Parent notification sent for new user request');
+    } catch (notificationError) {
+      console.error('❌ Failed to send notification:', notificationError);
+      // Don't fail the registration if notification fails
+    }
   };
   
   return (

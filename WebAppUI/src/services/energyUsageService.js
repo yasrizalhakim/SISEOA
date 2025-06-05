@@ -1,4 +1,4 @@
-// src/services/energyUsageService.js - Energy Usage Data Management
+// src/services/energyUsageService.js - Fixed Energy Usage Data Management
 
 import { firestore } from './firebase';
 import { 
@@ -42,11 +42,13 @@ export const getDeviceEnergyUsage = async (deviceId, filter = 'day', date = new 
         
         if (energyDoc.exists()) {
           const data = energyDoc.data();
+          // Note: Using capital 'U' in 'Usage' to match Firestore structure
           usageData.push({
             date: new Date(currentDate),
             dateStr: dateStr,
-            usage: data.usage || 0,
-            //timestamp: data.timestamp || null
+            usage: data.Usage || 0, // Fixed: was data.usage, now data.Usage
+            lastUpdated: data.LastUpdated || null,
+            deviceWattage: data.DeviceWattage || null
           });
         } else {
           // Add zero usage for missing days
@@ -54,7 +56,8 @@ export const getDeviceEnergyUsage = async (deviceId, filter = 'day', date = new 
             date: new Date(currentDate),
             dateStr: dateStr,
             usage: 0,
-            //timestamp: null
+            lastUpdated: null,
+            deviceWattage: null
           });
         }
       } catch (docError) {
@@ -63,7 +66,8 @@ export const getDeviceEnergyUsage = async (deviceId, filter = 'day', date = new 
           date: new Date(currentDate),
           dateStr: dateStr,
           usage: 0,
-          //timestamp: null
+          lastUpdated: null,
+          deviceWattage: null
         });
       }
       
@@ -104,6 +108,7 @@ export const getBuildingEnergyUsage = async (buildingId, deviceIds, filter = 'da
       const dateStr = formatDateForFirestore(currentDate);
       let totalUsage = 0;
       let devicesWithData = 0;
+      const deviceDataForDay = [];
       
       // Get usage for all devices on this date
       for (const deviceId of deviceIds) {
@@ -113,11 +118,35 @@ export const getBuildingEnergyUsage = async (buildingId, deviceIds, filter = 'da
           
           if (energyDoc.exists()) {
             const data = energyDoc.data();
-            totalUsage += data.usage || 0;
-            devicesWithData++;
+            const deviceUsage = data.Usage || 0; // Fixed: was data.usage, now data.Usage
+            totalUsage += deviceUsage;
+            
+            if (deviceUsage > 0) {
+              devicesWithData++;
+            }
+            
+            deviceDataForDay.push({
+              deviceId: deviceId,
+              usage: deviceUsage,
+              wattage: data.DeviceWattage || null,
+              lastUpdated: data.LastUpdated || null
+            });
+          } else {
+            deviceDataForDay.push({
+              deviceId: deviceId,
+              usage: 0,
+              wattage: null,
+              lastUpdated: null
+            });
           }
         } catch (docError) {
           console.warn(`No energy data for device ${deviceId} on ${dateStr}`);
+          deviceDataForDay.push({
+            deviceId: deviceId,
+            usage: 0,
+            wattage: null,
+            lastUpdated: null
+          });
         }
       }
       
@@ -126,7 +155,8 @@ export const getBuildingEnergyUsage = async (buildingId, deviceIds, filter = 'da
         dateStr: dateStr,
         usage: totalUsage,
         devicesWithData: devicesWithData,
-        totalDevices: deviceIds.length
+        totalDevices: deviceIds.length,
+        deviceBreakdown: deviceDataForDay // Include individual device data for debugging
       });
       
       currentDate.setDate(currentDate.getDate() + 1);
@@ -162,15 +192,28 @@ export const getBuildingDeviceIds = async (buildingId) => {
       return [];
     }
     
-    // Get all devices in these locations
-    const devicesQuery = query(
-      collection(firestore, 'DEVICE'),
-      where('Location', 'in', locationIds)
-    );
-    const devicesSnapshot = await getDocs(devicesQuery);
-    const deviceIds = devicesSnapshot.docs.map(doc => doc.id);
+    console.log(`📍 Found ${locationIds.length} locations in building: ${locationIds}`);
     
-    console.log(`📱 Found ${deviceIds.length} devices in building ${buildingId}`);
+    // Get all devices in these locations
+    // Handle Firestore 'in' query limitation (max 10 values)
+    const deviceIds = [];
+    const batches = [];
+    
+    for (let i = 0; i < locationIds.length; i += 10) {
+      batches.push(locationIds.slice(i, i + 10));
+    }
+    
+    for (const batch of batches) {
+      const devicesQuery = query(
+        collection(firestore, 'DEVICE'),
+        where('Location', 'in', batch)
+      );
+      const devicesSnapshot = await getDocs(devicesQuery);
+      const batchDeviceIds = devicesSnapshot.docs.map(doc => doc.id);
+      deviceIds.push(...batchDeviceIds);
+    }
+    
+    console.log(`📱 Found ${deviceIds.length} devices in building ${buildingId}: ${deviceIds}`);
     return deviceIds;
   } catch (error) {
     console.error('Error getting building device IDs:', error);
@@ -194,7 +237,8 @@ export const getDeviceEnergyUsageSummary = async (deviceId, filter = 'day') => {
         averageUsage: 0,
         peakUsage: 0,
         daysWithData: 0,
-        totalDays: 0
+        totalDays: 0,
+        deviceWattage: null
       };
     }
     
@@ -203,12 +247,16 @@ export const getDeviceEnergyUsageSummary = async (deviceId, filter = 'day') => {
     const peakUsage = Math.max(...usageData.map(item => item.usage));
     const averageUsage = daysWithData > 0 ? totalUsage / daysWithData : 0;
     
+    // Get device wattage from the most recent data point that has it
+    const deviceWattage = usageData.find(item => item.deviceWattage)?.deviceWattage || null;
+    
     return {
-      totalUsage: Number(totalUsage.toFixed(2)),
-      averageUsage: Number(averageUsage.toFixed(2)),
-      peakUsage: Number(peakUsage.toFixed(2)),
+      totalUsage: Number(totalUsage.toFixed(6)), // Increased precision for small values
+      averageUsage: Number(averageUsage.toFixed(6)),
+      peakUsage: Number(peakUsage.toFixed(6)),
       daysWithData: daysWithData,
-      totalDays: usageData.length
+      totalDays: usageData.length,
+      deviceWattage: deviceWattage
     };
   } catch (error) {
     console.error('Error getting device energy usage summary:', error);
@@ -217,7 +265,8 @@ export const getDeviceEnergyUsageSummary = async (deviceId, filter = 'day') => {
       averageUsage: 0,
       peakUsage: 0,
       daysWithData: 0,
-      totalDays: 0
+      totalDays: 0,
+      deviceWattage: null
     };
   }
 };
@@ -239,7 +288,8 @@ export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') 
         peakUsage: 0,
         daysWithData: 0,
         totalDays: 0,
-        deviceCount: 0
+        deviceCount: 0,
+        activeDevices: 0
       };
     }
     
@@ -252,7 +302,8 @@ export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') 
         peakUsage: 0,
         daysWithData: 0,
         totalDays: 0,
-        deviceCount: deviceIds.length
+        deviceCount: deviceIds.length,
+        activeDevices: 0
       };
     }
     
@@ -261,13 +312,24 @@ export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') 
     const peakUsage = Math.max(...usageData.map(item => item.usage));
     const averageUsage = daysWithData > 0 ? totalUsage / daysWithData : 0;
     
+    // Calculate active devices (devices that have reported usage)
+    const activeDevices = new Set();
+    usageData.forEach(dayData => {
+      dayData.deviceBreakdown?.forEach(deviceData => {
+        if (deviceData.usage > 0) {
+          activeDevices.add(deviceData.deviceId);
+        }
+      });
+    });
+    
     return {
-      totalUsage: Number(totalUsage.toFixed(2)),
-      averageUsage: Number(averageUsage.toFixed(2)),
-      peakUsage: Number(peakUsage.toFixed(2)),
+      totalUsage: Number(totalUsage.toFixed(6)), // Increased precision
+      averageUsage: Number(averageUsage.toFixed(6)),
+      peakUsage: Number(peakUsage.toFixed(6)),
       daysWithData: daysWithData,
       totalDays: usageData.length,
-      deviceCount: deviceIds.length
+      deviceCount: deviceIds.length,
+      activeDevices: activeDevices.size
     };
   } catch (error) {
     console.error('Error getting building energy usage summary:', error);
@@ -277,8 +339,108 @@ export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') 
       peakUsage: 0,
       daysWithData: 0,
       totalDays: 0,
-      deviceCount: 0
+      deviceCount: 0,
+      activeDevices: 0
     };
+  }
+};
+
+/**
+ * Get energy status history for a device (individual on/off events)
+ * @param {string} deviceId - Device ID
+ * @param {string} filter - 'day', 'week', or 'month'
+ * @param {Date} date - Base date for filtering (default: today)
+ * @returns {Promise<Array>} Array of energy status events
+ */
+export const getDeviceEnergyStatusHistory = async (deviceId, filter = 'day', date = new Date()) => {
+  try {
+    console.log(`📊 Fetching energy status history for device ${deviceId}, filter: ${filter}`);
+    
+    const { startDate, endDate } = getDateRange(filter, date);
+    
+    // Get all energy status documents in the date range
+    // Path: ENERGYUSAGE/{deviceId}/DeviceEnergyStatus/{timestamp}
+    const energyStatusQuery = query(
+      collection(firestore, 'ENERGYUSAGE', deviceId, 'DeviceEnergyStatus')
+    );
+    
+    const energyStatusSnapshot = await getDocs(energyStatusQuery);
+    const statusEvents = [];
+    
+    energyStatusSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const timestamp = new Date(data.Timestamp);
+      
+      // Filter by date range
+      if (timestamp >= startDate && timestamp <= endDate) {
+        statusEvents.push({
+          id: doc.id,
+          timestamp: timestamp,
+          energyUsed: data.EnergyUsed || 0,
+          date: data.Date || '',
+          deviceWattage: data.DeviceWattage || null,
+          ...data
+        });
+      }
+    });
+    
+    // Sort by timestamp
+    statusEvents.sort((a, b) => a.timestamp - b.timestamp);
+    
+    console.log(`📊 Found ${statusEvents.length} energy status events for device ${deviceId}`);
+    return statusEvents;
+  } catch (error) {
+    console.error('Error fetching device energy status history:', error);
+    return [];
+  }
+};
+
+/**
+ * Get device status history (ON/OFF events)
+ * @param {string} deviceId - Device ID
+ * @param {string} filter - 'day', 'week', or 'month'
+ * @param {Date} date - Base date for filtering (default: today)
+ * @returns {Promise<Array>} Array of device status events
+ */
+export const getDeviceStatusHistory = async (deviceId, filter = 'day', date = new Date()) => {
+  try {
+    console.log(`📊 Fetching device status history for device ${deviceId}, filter: ${filter}`);
+    
+    const { startDate, endDate } = getDateRange(filter, date);
+    
+    // Get all device status documents in the date range
+    // Path: ENERGYUSAGE/{deviceId}/DeviceStatusUsage/{timestamp}
+    const statusQuery = query(
+      collection(firestore, 'ENERGYUSAGE', deviceId, 'DeviceStatusUsage')
+    );
+    
+    const statusSnapshot = await getDocs(statusQuery);
+    const statusEvents = [];
+    
+    statusSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const timestamp = new Date(data.Timestamp);
+      
+      // Filter by date range
+      if (timestamp >= startDate && timestamp <= endDate) {
+        statusEvents.push({
+          id: doc.id,
+          timestamp: timestamp,
+          status: data.Status || 'OFF',
+          timestampStr: data.Timestamp || '',
+          ...data
+        });
+      }
+    });
+    
+    // Sort by timestamp
+    statusEvents.sort((a, b) => a.timestamp - b.timestamp);
+    
+    console.log(`📊 Found ${statusEvents.length} status events for device ${deviceId}`);
+    return statusEvents;
+  } catch (error) {
+    console.error('Error fetching device status history:', error);
+    return [];
   }
 };
 
@@ -384,8 +546,8 @@ export const getSampleEnergyData = (filter = 'day') => {
     data.push({
       date: new Date(currentDate),
       dateStr: formatDateForFirestore(currentDate),
-      usage: Math.random() * 50 + 10, // Random usage between 10-60 kWh
-      //timestamp: currentDate.toISOString()
+      usage: Number((Math.random() * 0.05 + 0.01).toFixed(6)), // Small realistic values (0.01-0.06 kWh)
+      lastUpdated: new Date().toISOString()
     });
     
     currentDate.setDate(currentDate.getDate() + 1);
@@ -404,6 +566,8 @@ export default {
   getBuildingDeviceIds,
   getDeviceEnergyUsageSummary,
   getBuildingEnergyUsageSummary,
+  getDeviceEnergyStatusHistory,
+  getDeviceStatusHistory,
   formatDateForDisplay,
   getSampleEnergyData
 };

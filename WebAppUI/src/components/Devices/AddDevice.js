@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdDevices, MdLocationOn, MdPerson, MdDelete } from 'react-icons/md';
 import { firestore, database } from '../../services/firebase';
+import { notifyDeviceRegistered } from '../../services/notificationService';
 import { 
   doc, 
   setDoc, 
@@ -20,6 +21,7 @@ import {
   getUserBuildingRoles 
 } from '../../utils/helpers';
 import './AddDevice.css';
+
 
 // Initial form state
 const INITIAL_FORM_DATA = {
@@ -402,44 +404,58 @@ const AddDevice = () => {
   }, [formData, navigate]);
 
   // Register new device with energy usage document
-  const registerDevice = useCallback(async (deviceId) => {
-    console.log('📱 Registering new device...');
-    
-    const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
-    if (deviceDoc.exists()) {
-      setError('Device ID already exists.');
-      setLoading(false);
-      return;
-    }
-    
-    const deviceData = {
-      AssignedTo: [],
-      DeviceDescription: formData.deviceDescription.trim() || '',
-      DeviceName: formData.deviceName.trim(),
-      DeviceType: formData.deviceType || 'Other',
-      Location: formData.location || null
-    };
-    
-    await setDoc(doc(firestore, 'DEVICE', deviceId), deviceData);
-    
-    const rtdbRef = ref(database, `Devices/${deviceId}`);
-    await set(rtdbRef, {
-      status: 'OFF',
-      lastSeen: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      locationId: formData.location || ''
-    });
+  // Register new device with notification
+const registerDevice = useCallback(async (deviceId) => {
+  console.log('📱 Registering new device...');
+  
+  const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
+  if (deviceDoc.exists()) {
+    setError('Device ID already exists.');
+    setLoading(false);
+    return;
+  }
+  
+  const deviceData = {
+    AssignedTo: [],
+    DeviceDescription: formData.deviceDescription.trim() || '',
+    DeviceName: formData.deviceName.trim(),
+    DeviceType: formData.deviceType || 'Other',
+    Location: formData.location || null
+  };
+  
+  await setDoc(doc(firestore, 'DEVICE', deviceId), deviceData);
+  
+  const rtdbRef = ref(database, `Devices/${deviceId}`);
+  await set(rtdbRef, {
+    status: 'OFF',
+    lastSeen: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    locationId: formData.location || ''
+  });
 
-    // NEW: Create empty energy usage document for the device
-    await createEnergyUsageDocument(deviceId);
-    
-    setSuccess(true);
-    await fetchRegisteredDevices();
-    setFormData(INITIAL_FORM_DATA);
-    
-    setTimeout(() => setSuccess(null), 3000);
-    console.log('✅ New device registered successfully');
-  }, [formData, fetchRegisteredDevices]);
+  // Create empty energy usage document for the device
+  await createEnergyUsageDocument(deviceId);
+  
+  // **NEW: Create notification for SystemAdmin**
+  try {
+    await notifyDeviceRegistered(
+      formData.deviceName.trim(),
+      deviceId,
+      userEmail
+    );
+    console.log('📢 SystemAdmin notification sent for device registration');
+  } catch (notificationError) {
+    console.error('❌ Failed to send notification:', notificationError);
+    // Don't fail the device registration if notification fails
+  }
+  
+  setSuccess(true);
+  await fetchRegisteredDevices();
+  setFormData(INITIAL_FORM_DATA);
+  
+  setTimeout(() => setSuccess(null), 3000);
+  console.log('✅ New device registered successfully');
+}, [formData, fetchRegisteredDevices, userEmail]);
 
   // NEW: Create empty energy usage document for new device
   const createEnergyUsageDocument = useCallback(async (deviceId) => {
@@ -732,6 +748,8 @@ const DeviceForm = ({
     />
   </div>
 );
+
+
 
 // Info banner component
 const InfoBanner = ({ mode, isUserSystemAdmin }) => {

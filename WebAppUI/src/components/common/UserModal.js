@@ -1,6 +1,7 @@
-// src/components/common/UserModal.js - Updated for Location-Based Device Management
+// src/components/common/UserModal.js - Updated for Location-Based Device Management with Auto-Assignment
 import React, { useState, useEffect } from 'react';
 import { firestore } from '../../services/firebase';
+import { notifyLocationAssigned } from '../../services/notificationService';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { MdClose, MdPerson, MdLocationOn, MdCheck, MdRemove, MdInfo } from 'react-icons/md';
 import './UserModal.css';
@@ -9,7 +10,7 @@ const UserModal = ({
   isOpen, 
   onClose, 
   userId, 
-  userRole, // This is now the user's role in the specific building
+  userRole, 
   userEmail, 
   buildingId = null,
   onUserUpdate = null,
@@ -18,7 +19,7 @@ const UserModal = ({
   const [user, setUser] = useState(null);
   const [assignedLocations, setAssignedLocations] = useState([]);
   const [availableLocations, setAvailableLocations] = useState([]);
-  const [locationDevices, setLocationDevices] = useState({}); // Map of locationId -> devices array
+  const [locationDevices, setLocationDevices] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -66,7 +67,7 @@ const UserModal = ({
   // Check if current user is a parent of the viewed user in the specific building
   const checkParentChildRelationship = async (childUserId, parentUserEmail) => {
     try {
-      // Method 1: Check direct parent relationship via ParentEmail field
+      // Check direct parent relationship via ParentEmail field
       const childUserDoc = await getDoc(doc(firestore, 'USER', childUserId));
       if (childUserDoc.exists()) {
         const childData = childUserDoc.data();
@@ -75,13 +76,11 @@ const UserModal = ({
         }
       }
 
-      // Method 2: Check building-based parent-child relationship (building-specific)
+      // Check building-based parent-child relationship
       if (buildingId) {
-        // Get current user's role in this building
         const currentUserRole = await getCurrentUserRoleInBuilding();
         
         if (currentUserRole === 'parent') {
-          // Check if the child user has 'children' role in this same building
           const childBuildingQuery = query(
             collection(firestore, 'USERBUILDING'),
             where('User', '==', childUserId),
@@ -134,10 +133,8 @@ const UserModal = ({
       let hasPermission = false;
       
       if (currentUserRoleInBuilding === 'admin') {
-        // SystemAdmin and building admins cannot manage children - only view
         hasPermission = false;
       } else if (currentUserRoleInBuilding === 'parent') {
-        // Check if current user is a parent of the viewed user in this building
         hasPermission = await checkParentChildRelationship(userId, userEmail);
       }
 
@@ -166,28 +163,18 @@ const UserModal = ({
     try {
       console.log('📍 Fetching locations and devices for building:', buildingId);
       
-      // Get all locations in this building
       const locationsQuery = query(
         collection(firestore, 'LOCATION'),
         where('Building', '==', buildingId)
       );
       const locationsSnapshot = await getDocs(locationsQuery);
       
-      const locations = [];
       const devicesByLocation = {};
       
       // For each location, get its devices
       for (const locationDoc of locationsSnapshot.docs) {
-        const locationData = locationDoc.data();
         const locationId = locationDoc.id;
         
-        locations.push({
-          id: locationId,
-          name: locationData.LocationName || locationId,
-          ...locationData
-        });
-        
-        // Get devices in this location
         const devicesQuery = query(
           collection(firestore, 'DEVICE'),
           where('Location', '==', locationId)
@@ -202,7 +189,7 @@ const UserModal = ({
       
       setLocationDevices(devicesByLocation);
       
-      console.log('📍 Locations loaded:', locations.length);
+      console.log('📍 Locations loaded:', locationsSnapshot.docs.length);
       console.log('📱 Devices by location:', devicesByLocation);
       
     } catch (error) {
@@ -213,7 +200,6 @@ const UserModal = ({
   // Fetch user's current location assignments
   const fetchUserLocationAssignments = async () => {
     try {
-      // Get user's building relationship to find assigned locations
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
         where('User', '==', userId),
@@ -226,7 +212,6 @@ const UserModal = ({
         const userBuildingData = userBuildingSnapshot.docs[0].data();
         const assignedLocationIds = userBuildingData.AssignedLocations || [];
         
-        // Get all locations in building
         const locationsQuery = query(
           collection(firestore, 'LOCATION'),
           where('Building', '==', buildingId)
@@ -265,6 +250,64 @@ const UserModal = ({
     }
   };
 
+  // NEW: Auto-assign user to all devices in a location
+  const autoAssignUserToLocationDevices = async (locationId, userId) => {
+    try {
+      console.log('🔄 Auto-assigning user to all devices in location:', locationId);
+      
+      const devices = locationDevices[locationId] || [];
+      
+      for (const device of devices) {
+        const currentAssignedTo = device.AssignedTo || [];
+        
+        // Only add if user is not already assigned
+        if (!currentAssignedTo.includes(userId)) {
+          const updatedAssignedTo = [...currentAssignedTo, userId];
+          
+          await updateDoc(doc(firestore, 'DEVICE', device.id), {
+            AssignedTo: updatedAssignedTo
+          });
+          
+          console.log(`✅ User ${userId} auto-assigned to device ${device.id}`);
+        }
+      }
+      
+      console.log(`🎯 Auto-assigned user to ${devices.length} devices in location ${locationId}`);
+      
+    } catch (error) {
+      console.error('❌ Error auto-assigning user to location devices:', error);
+    }
+  };
+
+  // NEW: Auto-unassign user from all devices in a location
+  const autoUnassignUserFromLocationDevices = async (locationId, userId) => {
+    try {
+      console.log('🔄 Auto-unassigning user from all devices in location:', locationId);
+      
+      const devices = locationDevices[locationId] || [];
+      
+      for (const device of devices) {
+        const currentAssignedTo = device.AssignedTo || [];
+        
+        // Only remove if user is currently assigned
+        if (currentAssignedTo.includes(userId)) {
+          const updatedAssignedTo = currentAssignedTo.filter(id => id !== userId);
+          
+          await updateDoc(doc(firestore, 'DEVICE', device.id), {
+            AssignedTo: updatedAssignedTo
+          });
+          
+          console.log(`✅ User ${userId} auto-unassigned from device ${device.id}`);
+        }
+      }
+      
+      console.log(`🎯 Auto-unassigned user from ${devices.length} devices in location ${locationId}`);
+      
+    } catch (error) {
+      console.error('❌ Error auto-unassigning user from location devices:', error);
+    }
+  };
+
   // Handle assigning location to user
   const handleAssignLocation = async (locationId) => {
     try {
@@ -272,7 +315,6 @@ const UserModal = ({
       
       console.log('➕ Assigning location to user:', locationId);
       
-      // Get current user building relationship
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
         where('User', '==', userId),
@@ -297,10 +339,12 @@ const UserModal = ({
       
       const updatedAssignedLocations = [...currentAssignedLocations, locationId];
       
-      // Update user building relationship with new location
       await updateDoc(userBuildingDoc.ref, {
         AssignedLocations: updatedAssignedLocations
       });
+      
+      // NEW: Auto-assign user to all devices in this location
+      await autoAssignUserToLocationDevices(locationId, userId);
       
       // Update local state
       const locationToMove = availableLocations.find(loc => loc.id === locationId);
@@ -312,16 +356,28 @@ const UserModal = ({
       setSuccess('Location assigned successfully');
       setTimeout(() => setSuccess(null), 3000);
       
-      // Call callback if provided
       if (onUserUpdate) {
         onUserUpdate();
       }
       
-      console.log('✅ Location assigned successfully');
+      console.log('✅ Location assigned successfully with auto device assignment');
       
     } catch (error) {
       console.error('❌ Error assigning location:', error);
       setError('Failed to assign location');
+    }
+
+    try {
+      const location = availableLocations.find(loc => loc.id === locationId);
+      
+      await notifyLocationAssigned(
+        userId,
+        location?.name || locationId,
+        buildingId
+      );
+      console.log('📢 Child notification sent for location assignment');
+    } catch (notificationError) {
+      console.error('❌ Failed to send notification:', notificationError);
     }
   };
 
@@ -332,7 +388,6 @@ const UserModal = ({
       
       console.log('➖ Unassigning location from user:', locationId);
       
-      // Get current user building relationship
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
         where('User', '==', userId),
@@ -352,10 +407,12 @@ const UserModal = ({
       
       const updatedAssignedLocations = currentAssignedLocations.filter(id => id !== locationId);
       
-      // Update user building relationship
       await updateDoc(userBuildingDoc.ref, {
         AssignedLocations: updatedAssignedLocations
       });
+      
+      // NEW: Auto-unassign user from all devices in this location
+      await autoUnassignUserFromLocationDevices(locationId, userId);
       
       // Update local state
       const locationToMove = assignedLocations.find(loc => loc.id === locationId);
@@ -367,12 +424,11 @@ const UserModal = ({
       setSuccess('Location unassigned successfully');
       setTimeout(() => setSuccess(null), 3000);
       
-      // Call callback if provided
       if (onUserUpdate) {
         onUserUpdate();
       }
       
-      console.log('✅ Location unassigned successfully');
+      console.log('✅ Location unassigned successfully with auto device unassignment');
       
     } catch (error) {
       console.error('❌ Error unassigning location:', error);
@@ -421,22 +477,6 @@ const UserModal = ({
                       <span>{user.ContactNo}</span>
                     </div>
                   )}
-                  {user.ParentEmail && (
-                    <div className="detail-item">
-                      <label>Parent:</label>
-                      <span>{user.ParentEmail}</span>
-                    </div>
-                  )}
-                  {buildingId && (
-                    <div className="detail-item">
-                      <label>Role in Building:</label>
-                      <span className={`role-badge ${userRole}`}>{userRole}</span>
-                    </div>
-                  )}
-                  <div className="detail-item">
-                    <label>Your Role:</label>
-                    <span className={`role-badge ${userRoleInBuilding}`}>{userRoleInBuilding}</span>
-                  </div>
                 </div>
               </div>
 
@@ -460,7 +500,7 @@ const UserModal = ({
                                 <span>Devices: {locationDevices[location.id]?.length || 0} device(s)</span>
                                 {locationDevices[location.id]?.length > 0 && (
                                   <span style={{ fontSize: '11px', color: '#059669', fontStyle: 'italic' }}>
-                                    Access to: {locationDevices[location.id].map(d => d.DeviceName || d.id).join(', ')}
+                                    Auto-assigned to: {locationDevices[location.id].map(d => d.DeviceName || d.id).join(', ')}
                                   </span>
                                 )}
                               </div>
@@ -468,7 +508,7 @@ const UserModal = ({
                             <button
                               className="device-action-btn unassign"
                               onClick={() => handleUnassignLocation(location.id)}
-                              title="Remove access to this location"
+                              title="Remove access to this location and all its devices"
                             >
                               <MdRemove />
                             </button>
@@ -495,7 +535,7 @@ const UserModal = ({
                                 <span>Devices: {locationDevices[location.id]?.length || 0} device(s)</span>
                                 {locationDevices[location.id]?.length > 0 && (
                                   <span style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>
-                                    Contains: {locationDevices[location.id].map(d => d.DeviceName || d.id).join(', ')}
+                                    Will auto-assign to: {locationDevices[location.id].map(d => d.DeviceName || d.id).join(', ')}
                                   </span>
                                 )}
                               </div>
@@ -503,7 +543,7 @@ const UserModal = ({
                             <button
                               className="device-action-btn assign"
                               onClick={() => handleAssignLocation(location.id)}
-                              title="Give access to this location"
+                              title="Give access to this location and auto-assign to all its devices"
                             >
                               <MdCheck />
                             </button>

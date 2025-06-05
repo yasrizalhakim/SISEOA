@@ -15,6 +15,7 @@ import Users from './components/Users/Users';
 import UserDetail from './components/Users/UserDetail';
 import Profile from './components/Profile/Profile';
 import Notification from './components/Notifications/Notification';
+import Reports from './components/Reports/Reports';
 import './App.css';
 
 function App() {
@@ -94,7 +95,7 @@ function App() {
             
             {/* Placeholder routes for other features */}
             <Route path="automation" element={<div>Automation - Coming Soon</div>} />
-            <Route path="reports" element={<div>Reports - Coming Soon</div>} />
+            <Route path="reports" element={<Reports />} />
             <Route path="notifications" element={<Notification />} />
             
             {/* Default redirect */}
