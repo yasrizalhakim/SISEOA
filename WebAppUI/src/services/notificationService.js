@@ -1,62 +1,67 @@
-// src/services/notificationService.js - Fixed checkUserPendingApproval function
+// src/services/notificationService.js - Simplified Invitation System
 
 import { firestore } from './firebase';
-import { addDoc, collection, serverTimestamp, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-
-/**
- * Simplified notification service with role-based notifications
- * Creates notifications in NOTIFICATION collection with auto-generated IDs
- */
+import { 
+  addDoc, 
+  collection, 
+  serverTimestamp, 
+  query, 
+  where, 
+  getDocs, 
+  orderBy, 
+  limit,
+  doc,
+  updateDoc,
+  getDoc,
+  setDoc
+} from 'firebase/firestore';
 
 // Notification types
 export const NOTIFICATION_TYPES = {
   SYSTEM: 'system',
-  APPROVAL: 'approval', 
-  INFO: 'info',
-  ACTION_REQUIRED: 'action_required'
+  INVITATION: 'invitation',
+  INFO: 'info'
 };
 
-// User roles
-export const USER_ROLES = {
-  SYSTEM_ADMIN: 'systemAdmin',
-  PARENT: 'parent', 
-  CHILDREN: 'children'
+// Invitation status
+export const INVITATION_STATUS = {
+  PENDING: 'pending',
+  ACCEPTED: 'accepted',
+  DECLINED: 'declined',
+  ERROR: 'error'
 };
 
 /**
- * Core function to create notifications in Firestore
- * @param {Object} notificationData - Notification data
- * @returns {Promise<string>} Document ID of created notification
+ * Create a notification
  */
 const createNotification = async ({
   title,
   message,
-  role,
-  userId = null,
+  userId,
   type,
-  actions = null
+  invitationData = null
 }) => {
   try {
     const notificationData = {
       title,
       message,
-      role,
       userId,
       type,
       timestamp: serverTimestamp(),
       read: false
     };
 
-    // Add actions if provided
-    if (actions && (type === NOTIFICATION_TYPES.APPROVAL || type === NOTIFICATION_TYPES.ACTION_REQUIRED)) {
-      notificationData.actions = actions;
+    // Add invitation data if it's an invitation notification
+    if (type === NOTIFICATION_TYPES.INVITATION && invitationData) {
+      notificationData.invitation = {
+        ...invitationData,
+        status: INVITATION_STATUS.PENDING
+      };
     }
 
     console.log('📢 Creating notification:', notificationData);
 
-    // Use addDoc for auto-generated ID
     const docRef = await addDoc(collection(firestore, 'NOTIFICATION'), notificationData);
-    
     console.log('✅ Notification created with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
@@ -66,203 +71,181 @@ const createNotification = async ({
 };
 
 /**
- * Get SystemAdmin email (first SystemAdmin found)
- * @returns {Promise<string|null>} SystemAdmin email or null
+ * Send building invitation to user
  */
-const getSystemAdminEmail = async () => {
+export const sendBuildingInvitation = async (parentEmail, childEmail, buildingId, buildingName) => {
   try {
-    const systemAdminQuery = query(
+    console.log('📨 Sending building invitation:', { parentEmail, childEmail, buildingId, buildingName });
+
+    // Check if child user exists
+    const childDoc = await getDoc(doc(firestore, 'USER', childEmail));
+    if (!childDoc.exists()) {
+      throw new Error('User not found. Please check the email address.');
+    }
+
+    const childData = childDoc.data();
+
+    // Check if user already has access to this building
+    const existingAccess = query(
       collection(firestore, 'USERBUILDING'),
-      where('Building', '==', 'SystemAdmin'),
-      where('Role', '==', 'admin'),
-      limit(1)
+      where('User', '==', childEmail),
+      where('Building', '==', buildingId)
     );
+    const accessSnapshot = await getDocs(existingAccess);
     
-    const snapshot = await getDocs(systemAdminQuery);
-    if (!snapshot.empty) {
-      return snapshot.docs[0].data().User;
+    if (!accessSnapshot.empty) {
+      throw new Error('User already has access to this building.');
     }
-    return null;
+
+    // Check for pending invitations
+    const pendingInvitations = query(
+      collection(firestore, 'NOTIFICATION'),
+      where('userId', '==', childEmail),
+      where('type', '==', NOTIFICATION_TYPES.INVITATION)
+    );
+    const pendingSnapshot = await getDocs(pendingInvitations);
+    
+    // Check if there's already a pending invitation for this building
+    const existingInvite = pendingSnapshot.docs.find(doc => {
+      const data = doc.data();
+      return data.invitation && 
+             data.invitation.buildingId === buildingId && 
+             data.invitation.status === INVITATION_STATUS.PENDING;
+    });
+
+    if (existingInvite) {
+      throw new Error('There is already a pending invitation for this building.');
+    }
+
+    // Create invitation notification
+    const notificationId = await createNotification({
+      title: 'Building Invitation',
+      message: `You've been invited to join "${buildingName}"`,
+      userId: childEmail,
+      type: NOTIFICATION_TYPES.INVITATION,
+      invitationData: {
+        buildingId: buildingId,
+        buildingName: buildingName,
+        parentEmail: parentEmail,
+        childEmail: childEmail,
+        invitedAt: new Date().toISOString()
+      }
+    });
+
+    console.log('✅ Building invitation sent successfully');
+    return notificationId;
   } catch (error) {
-    console.error('Error getting SystemAdmin email:', error);
-    return null;
+    console.error('❌ Error sending building invitation:', error);
+    throw error;
   }
 };
 
 /**
- * SystemAdmin Notifications
+ * Respond to building invitation
  */
+export const respondToBuildingInvitation = async (notificationId, response) => {
+  try {
+    console.log(`📝 Responding to invitation ${notificationId} with: ${response}`);
 
-/**
- * Notify SystemAdmin when new device is registered
- */
-export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy) => {
-  const systemAdminEmail = await getSystemAdminEmail();
-  if (!systemAdminEmail) {
-    console.log('No SystemAdmin found, skipping notification');
-    return null;
+    // Get the notification
+    const notificationRef = doc(firestore, 'NOTIFICATION', notificationId);
+    const notificationDoc = await getDoc(notificationRef);
+
+    if (!notificationDoc.exists()) {
+      throw new Error('Invitation not found');
+    }
+
+    const notificationData = notificationDoc.data();
+
+    if (!notificationData.invitation) {
+      throw new Error('Invalid invitation data');
+    }
+
+    if (notificationData.invitation.status !== INVITATION_STATUS.PENDING) {
+      throw new Error('This invitation has already been responded to');
+    }
+
+    const { buildingId, buildingName, parentEmail, childEmail } = notificationData.invitation;
+
+    let updateStatus = INVITATION_STATUS.ERROR;
+    let updateMessage = 'ERROR: Please contact the admin';
+
+    if (response === 'accept') {
+      try {
+        // Verify building still exists
+        const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
+        if (!buildingDoc.exists()) {
+          updateMessage = 'ERROR: Building no longer exists';
+        } else {
+          // Verify child user still exists
+          const childDoc = await getDoc(doc(firestore, 'USER', childEmail));
+          if (!childDoc.exists()) {
+            updateMessage = 'ERROR: User account not found';
+          } else {
+            // Create user-building relationship
+            const userBuildingId = `${childEmail.replace(/\./g, '_')}_${buildingId}`;
+            await setDoc(doc(firestore, 'USERBUILDING', userBuildingId), {
+              User: childEmail,
+              Building: buildingId,
+              Role: 'children',
+              AssignedLocations: [],
+              CreatedAt: serverTimestamp()
+            });
+
+            updateStatus = INVITATION_STATUS.ACCEPTED;
+            updateMessage = `Invitation accepted! You've joined "${buildingName}"`;
+
+            // Send notification to parent
+            await createNotification({
+              title: 'Invitation Accepted',
+              message: `${childEmail} has accepted your invitation to join "${buildingName}"`,
+              userId: parentEmail,
+              type: NOTIFICATION_TYPES.INFO
+            });
+
+            console.log('✅ User successfully added to building');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error accepting invitation:', error);
+        updateStatus = INVITATION_STATUS.ERROR;
+        updateMessage = 'ERROR: Failed to join building. Please contact admin.';
+      }
+    } else if (response === 'decline') {
+      updateStatus = INVITATION_STATUS.DECLINED;
+      updateMessage = `Invitation declined for "${buildingName}"`;
+
+      // Send notification to parent
+      try {
+        await createNotification({
+          title: 'Invitation Declined',
+          message: `${childEmail} has declined your invitation to join "${buildingName}"`,
+          userId: parentEmail,
+          type: NOTIFICATION_TYPES.INFO
+        });
+      } catch (error) {
+        console.error('❌ Error sending decline notification to parent:', error);
+      }
+    }
+
+    // Update the notification
+    await updateDoc(notificationRef, {
+      message: updateMessage,
+      'invitation.status': updateStatus,
+      'invitation.respondedAt': new Date().toISOString(),
+      read: true
+    });
+
+    console.log('✅ Invitation response processed successfully');
+    return { status: updateStatus, message: updateMessage };
+  } catch (error) {
+    console.error('❌ Error responding to invitation:', error);
+    throw error;
   }
-
-  return await createNotification({
-    title: 'New Device Registered',
-    message: `Device ${deviceName} has been successfully added.`,
-    role: USER_ROLES.SYSTEM_ADMIN,
-    userId: systemAdminEmail,
-    type: NOTIFICATION_TYPES.SYSTEM
-  });
 };
 
 /**
- * Notify SystemAdmin when device is deleted
- */
-export const notifyDeviceDeleted = async (deviceName, deviceId, deletedBy) => {
-  const systemAdminEmail = await getSystemAdminEmail();
-  if (!systemAdminEmail) return null;
-
-  return await createNotification({
-    title: 'Device Deleted',
-    message: `Device ${deviceName} has been deleted by ${deletedBy}.`,
-    role: USER_ROLES.SYSTEM_ADMIN,
-    userId: systemAdminEmail,
-    type: NOTIFICATION_TYPES.SYSTEM
-  });
-};
-
-/**
- * Parent Notifications  
- */
-
-/**
- * Notify parent when new user requests to join with their email
- */
-export const notifyNewUserRequest = async (parentEmail, childName, childEmail) => {
-  return await createNotification({
-    title: 'New User Request',
-    message: `A user has requested to join your building.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.APPROVAL,
-    actions: {
-      acceptLabel: 'Approve',
-      declineLabel: 'Reject'
-    }
-  });
-};
-
-/**
- * Notify parent when they claim a device and create building
- */
-export const notifyDeviceClaimed = async (parentEmail, deviceName, buildingName) => {
-  return await createNotification({
-    title: 'Device Claimed',
-    message: `You have claimed ${deviceName} and created a building.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Notify parent when building is created
- */
-export const notifyBuildingCreated = async (parentEmail, buildingName) => {
-  return await createNotification({
-    title: 'Building Created',
-    message: `Your building "${buildingName}" has been successfully created.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Notify parent when building is deleted
- */
-export const notifyBuildingDeleted = async (parentEmail, buildingName) => {
-  return await createNotification({
-    title: 'Building Deleted',
-    message: `Your building "${buildingName}" has been deleted.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Notify parent when their device is deleted
- */
-export const notifyParentDeviceDeleted = async (parentEmail, deviceName, buildingName) => {
-  return await createNotification({
-    title: 'Device Deleted',
-    message: `Device ${deviceName} in building "${buildingName}" has been deleted by an administrator.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Notify parent when invitation is sent to child
- */
-export const notifyInvitationSent = async (parentEmail, childName, buildingName) => {
-  return await createNotification({
-    title: 'Invitation Sent', 
-    message: `You've invited ${childName} to join your building.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Notify parent when child responds to invitation
- */
-export const notifyInvitationResponse = async (parentEmail, childName, response, buildingName) => {
-  return await createNotification({
-    title: 'Invitation Response',
-    message: `${childName} has ${response} your building invitation.`,
-    role: USER_ROLES.PARENT,
-    userId: parentEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Children Notifications
- */
-
-/**
- * Notify child when receiving building invitation
- */
-export const notifyBuildingInvitation = async (childEmail, buildingName, parentName) => {
-  return await createNotification({
-    title: 'Building Invitation',
-    message: `You've been invited to join ${buildingName}.`,
-    role: USER_ROLES.CHILDREN,
-    userId: childEmail,
-    type: NOTIFICATION_TYPES.ACTION_REQUIRED,
-    actions: {
-      acceptLabel: 'Join',
-      declineLabel: 'Decline'
-    }
-  });
-};
-
-/**
- * Notify child when location is assigned to them
- */
-export const notifyLocationAssigned = async (childEmail, locationName, buildingName) => {
-  return await createNotification({
-    title: 'Location Assigned',
-    message: `You've been assigned to ${locationName} in ${buildingName}.`,
-    role: USER_ROLES.CHILDREN,
-    userId: childEmail,
-    type: NOTIFICATION_TYPES.INFO
-  });
-};
-
-/**
- * Get user notifications with filters
+ * Get user notifications
  */
 export const getUserNotifications = async (userEmail, filters = {}) => {
   try {
@@ -299,8 +282,102 @@ export const getUserNotifications = async (userEmail, filters = {}) => {
 };
 
 /**
- * FIXED: Check if user has pending approval
- * This function now properly validates the userEmail string parameter
+ * Send simple info notification
+ */
+export const sendInfoNotification = async (userEmail, title, message) => {
+  return await createNotification({
+    title,
+    message,
+    userId: userEmail,
+    type: NOTIFICATION_TYPES.INFO
+  });
+};
+
+/**
+ * Send system notification
+ */
+export const sendSystemNotification = async (userEmail, title, message) => {
+  return await createNotification({
+    title,
+    message,
+    userId: userEmail,
+    type: NOTIFICATION_TYPES.SYSTEM
+  });
+};
+
+// SystemAdmin utilities
+const getSystemAdminEmail = async () => {
+  try {
+    const systemAdminQuery = query(
+      collection(firestore, 'USERBUILDING'),
+      where('Building', '==', 'SystemAdmin'),
+      where('Role', '==', 'admin'),
+      limit(1)
+    );
+    
+    const snapshot = await getDocs(systemAdminQuery);
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data().User;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting SystemAdmin email:', error);
+    return null;
+  }
+};
+
+/**
+ * Notify SystemAdmin about device registration
+ */
+export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy) => {
+  const systemAdminEmail = await getSystemAdminEmail();
+  if (!systemAdminEmail) return null;
+
+  return await sendSystemNotification(
+    systemAdminEmail,
+    'New Device Registered',
+    `Device ${deviceName} has been successfully added by ${registeredBy}.`
+  );
+};
+
+/**
+ * Notify SystemAdmin about device deletion
+ */
+export const notifyDeviceDeleted = async (deviceName, deviceId, deletedBy) => {
+  const systemAdminEmail = await getSystemAdminEmail();
+  if (!systemAdminEmail) return null;
+
+  return await sendSystemNotification(
+    systemAdminEmail,
+    'Device Deleted',
+    `Device ${deviceName} has been deleted by ${deletedBy}.`
+  );
+};
+
+/**
+ * Notify parent when their device is deleted
+ */
+export const notifyParentDeviceDeleted = async (parentEmail, deviceName, buildingName) => {
+  return await sendInfoNotification(
+    parentEmail,
+    'Device Deleted',
+    `Device ${deviceName} in building "${buildingName}" has been deleted by an administrator.`
+  );
+};
+
+/**
+ * Notify child when location is assigned to them
+ */
+export const notifyLocationAssigned = async (childEmail, locationName, buildingName) => {
+  return await sendInfoNotification(
+    childEmail,
+    'Location Assigned',
+    `You've been assigned to ${locationName} in ${buildingName}.`
+  );
+};
+
+/**
+ * Check if user has pending approval - simplified version
  */
 export const checkUserPendingApproval = async (userEmail) => {
   try {
@@ -326,21 +403,21 @@ export const checkUserPendingApproval = async (userEmail) => {
       return false;
     }
     
-    // Check if there are approval notifications for this user
-    // Query for approval type notifications
-    const approvalQuery = query(
+    // Check if there are pending invitation notifications for this user
+    const pendingInvitations = query(
       collection(firestore, 'NOTIFICATION'),
-      where('type', '==', NOTIFICATION_TYPES.APPROVAL)
+      where('userId', '==', userEmail),
+      where('type', '==', NOTIFICATION_TYPES.INVITATION)
     );
     
-    const approvalSnapshot = await getDocs(approvalQuery);
+    const invitationSnapshot = await getDocs(pendingInvitations);
     
-    // Look for notifications mentioning this user
-    for (const doc of approvalSnapshot.docs) {
+    // Look for pending invitations
+    for (const doc of invitationSnapshot.docs) {
       const data = doc.data();
-      if (data.message && typeof data.message === 'string' && data.message.includes(userEmail)) {
-        console.log('⏳ Found pending approval notification for user');
-        return true; // User is pending approval
+      if (data.invitation && data.invitation.status === INVITATION_STATUS.PENDING) {
+        console.log('⏳ Found pending invitation for user');
+        return true; // User has pending invitations
       }
     }
     
@@ -353,28 +430,16 @@ export const checkUserPendingApproval = async (userEmail) => {
 };
 
 export default {
-  // SystemAdmin notifications
+  sendBuildingInvitation,
+  respondToBuildingInvitation,
+  getUserNotifications,
+  sendInfoNotification,
+  sendSystemNotification,
   notifyDeviceRegistered,
   notifyDeviceDeleted,
-  
-  // Parent notifications
-  notifyNewUserRequest,
-  notifyDeviceClaimed,
-  notifyBuildingCreated,
-  notifyBuildingDeleted,
   notifyParentDeviceDeleted,
-  notifyInvitationSent, 
-  notifyInvitationResponse,
-  
-  // Children notifications
-  notifyBuildingInvitation,
   notifyLocationAssigned,
-  
-  // Utilities
-  getUserNotifications,
   checkUserPendingApproval,
-  
-  // Constants
   NOTIFICATION_TYPES,
-  USER_ROLES
+  INVITATION_STATUS
 };

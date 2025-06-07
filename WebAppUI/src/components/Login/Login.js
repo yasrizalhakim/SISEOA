@@ -1,10 +1,7 @@
-// src/components/Login/Login.js - Fixed
+// src/components/Login/Login.js - Removed Notification Approval Feature
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { firestore } from '../../services/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { loginUser } from '../../services/authService'; // Import loginUser function
-import { checkUserPendingApproval } from '../../services/notificationService';
+import { loginUser } from '../../services/authService';
 import './Login.css';
 
 const Login = ({ setIsAuthenticated }) => {
@@ -28,7 +25,6 @@ const Login = ({ setIsAuthenticated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Use formData properties instead of undefined variables
     const { email, password } = formData;
     
     if (!email || !password) {
@@ -40,14 +36,6 @@ const Login = ({ setIsAuthenticated }) => {
     setError('');
     
     try {
-      // Check if user is pending approval first
-      const isPending = await checkUserPendingApproval(email);
-      if (isPending) {
-        setError('Your account is pending approval. Please wait for parent approval.');
-        setLoading(false);
-        return;
-      }
-
       const user = await loginUser(email, password);
       
       // Store user data

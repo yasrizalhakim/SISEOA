@@ -1,4 +1,4 @@
-/* src/components/Notifications/Notification.css - Simplified */
+/* src/components/Notifications/Notification.css - Simplified with Invitation Styling */
 .notifications-page {
   width: 100%;
   max-width: 1000px;
@@ -317,6 +317,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  min-width: 4rem;
 }
 
 .action-btn.accept {
@@ -324,7 +325,7 @@
   color: white;
 }
 
-.action-btn.accept:hover {
+.action-btn.accept:hover:not(:disabled) {
   background-color: #15803d;
   transform: translateY(-1px);
 }
@@ -334,9 +335,44 @@
   color: white;
 }
 
-.action-btn.decline:hover {
+.action-btn.decline:hover:not(:disabled) {
   background-color: #b91c1c;
   transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Notification Status */
+.notification-status {
+  margin-left: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-badge.accepted {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.status-badge.declined {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.status-badge.error {
+  background-color: #fef3c7;
+  color: #d97706;
 }
 
 /* Unread Indicator */
@@ -450,6 +486,11 @@
   .notification-actions {
     margin-left: 0;
     justify-content: center;
+  }
+  
+  .notification-status {
+    margin-left: 0;
+    text-align: center;
   }
   
   .action-btn {

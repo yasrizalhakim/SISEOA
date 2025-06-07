@@ -1,4 +1,5 @@
-// src/components/Buildings/BuildingDetail.js - Enhanced with Energy Usage Tab
+// src/components/Buildings/BuildingDetail.js - Updated with Invitation-Based Child Addition
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
@@ -34,8 +35,8 @@ import EnergyChart from '../common/EnergyChart';
 import UserModal from '../common/UserModal';
 import { isSystemAdmin } from '../../utils/helpers';
 import energyUsageService from '../../services/energyUsageService';
+import { sendBuildingInvitation } from '../../services/notificationService';
 import './BuildingDetail.css';
-import { notifyBuildingDeleted, notifyParentDeviceDeleted } from '../../services/notificationService';
 
 const BuildingDetail = () => {
   const { buildingId } = useParams();
@@ -70,10 +71,18 @@ const BuildingDetail = () => {
   const [isAddingLocation, setIsAddingLocation] = useState(false);
   const [isRemovingLocation, setIsRemovingLocation] = useState(false);
   
-  // Child Management State
+  // Child Management State - Updated for invitations
   const [newChildEmail, setNewChildEmail] = useState('');
-  const [isAddingChild, setIsAddingChild] = useState(false);
+  const [isSendingInvitation, setIsSendingInvitation] = useState(false);
   const [showAddChildForm, setShowAddChildForm] = useState(false);
+  
+  // Email Validation State
+  const [emailStatus, setEmailStatus] = useState({
+    checking: false,
+    exists: false,
+    available: false,
+    message: ''
+  });
   
   // Modal State
   const [selectedUserId, setSelectedUserId] = useState(null);
@@ -166,6 +175,31 @@ const BuildingDetail = () => {
     }
   }, [userRoleInBuilding, buildingId]);
 
+  // Get current user's assigned locations for children role
+  const getCurrentUserAssignedLocations = useCallback(async () => {
+    if (userRoleInBuilding !== 'children') return [];
+    
+    try {
+      const userBuildingQuery = query(
+        collection(firestore, 'USERBUILDING'),
+        where('User', '==', userEmail),
+        where('Building', '==', buildingId)
+      );
+      
+      const userBuildingSnapshot = await getDocs(userBuildingQuery);
+      
+      if (!userBuildingSnapshot.empty) {
+        const userBuildingData = userBuildingSnapshot.docs[0].data();
+        return userBuildingData.AssignedLocations || [];
+      }
+      
+      return [];
+    } catch (err) {
+      console.error('Error getting user assigned locations:', err);
+      return [];
+    }
+  }, [userRoleInBuilding, userEmail, buildingId]);
+
   // Fetch building device IDs for energy usage
   const fetchBuildingDeviceIds = useCallback(async () => {
     try {
@@ -233,26 +267,54 @@ const BuildingDetail = () => {
           setLocations(locationsList);
           console.log(`📍 Found ${locationsList.length} locations`);
           
-          // Fetch devices
+          // Fetch devices based on user role
           const devicesList = [];
-          for (const location of locationsList) {
-            const devicesQuery = query(
-              collection(firestore, 'DEVICE'),
-              where('Location', '==', location.id)
-            );
+          
+          if (roleInBuilding === 'children') {
+            // For children, only fetch devices in their assigned locations
+            const assignedLocations = await getCurrentUserAssignedLocations();
+            console.log(`👶 Child user assigned to ${assignedLocations.length} locations:`, assignedLocations);
             
-            const devicesSnapshot = await getDocs(devicesQuery);
-            devicesSnapshot.docs.forEach(doc => {
-              devicesList.push({
-                id: doc.id,
-                ...doc.data(),
-                locationName: location.LocationName || location.id
+            for (const assignedLocationId of assignedLocations) {
+              const location = locationsList.find(loc => loc.id === assignedLocationId);
+              if (location) {
+                const devicesQuery = query(
+                  collection(firestore, 'DEVICE'),
+                  where('Location', '==', assignedLocationId)
+                );
+                
+                const devicesSnapshot = await getDocs(devicesQuery);
+                devicesSnapshot.docs.forEach(doc => {
+                  devicesList.push({
+                    id: doc.id,
+                    ...doc.data(),
+                    locationName: location.LocationName || location.id
+                  });
+                });
+              }
+            }
+            console.log(`📱 Child can access ${devicesList.length} devices in assigned locations`);
+          } else {
+            // For parents and other roles, fetch all devices
+            for (const location of locationsList) {
+              const devicesQuery = query(
+                collection(firestore, 'DEVICE'),
+                where('Location', '==', location.id)
+              );
+              
+              const devicesSnapshot = await getDocs(devicesQuery);
+              devicesSnapshot.docs.forEach(doc => {
+                devicesList.push({
+                  id: doc.id,
+                  ...doc.data(),
+                  locationName: location.LocationName || location.id
+                });
               });
-            });
+            }
+            console.log(`📱 Found ${devicesList.length} total devices`);
           }
           
           setDevices(devicesList);
-          console.log(`📱 Found ${devicesList.length} devices`);
           
           // Fetch children for parent users
           if (roleInBuilding === 'parent') {
@@ -272,7 +334,7 @@ const BuildingDetail = () => {
     };
     
     fetchBuildingData();
-  }, [buildingId, userEmail, getUserRoleInBuilding, fetchChildrenData, isUserSystemAdmin, fetchBuildingDeviceIds]);
+  }, [buildingId, userEmail, getUserRoleInBuilding, fetchChildrenData, isUserSystemAdmin, fetchBuildingDeviceIds, getCurrentUserAssignedLocations]);
   
   // Edit mode handlers
   const handleEditToggle = useCallback(() => {
@@ -358,13 +420,6 @@ const BuildingDetail = () => {
     if (confirmation !== 'DELETE') {
       alert('Deletion cancelled - confirmation text did not match');
       return;
-    }
-
-    try {
-      await notifyBuildingDeleted(userEmail, building.BuildingName || building.id);
-      console.log('📢 Parent notification sent for building deletion');
-    } catch (notificationError) {
-      console.error('❌ Failed to send notification:', notificationError);
     }
     
     try {
@@ -549,81 +604,155 @@ const BuildingDetail = () => {
     }
   }, [userRoleInBuilding, buildingId]);
   
-  // Child management
-  const handleAddChild = useCallback(async () => {
-    if (userRoleInBuilding !== 'parent') {
-      setError('Only parents can add children to this building');
-      return;
-    }
+  // UPDATED: Child Management - Now uses invitation system
+  const checkEmailAvailability = useCallback(async (email) => {
+    if (!email || !email.includes('@')) return;
     
-    if (!newChildEmail.trim()) {
-      setError('Email is required');
-      return;
-    }
-    
-    if (!newChildEmail.includes('@')) {
-      setError('Please enter a valid email address');
-      return;
-    }
+    setEmailStatus(prev => ({ ...prev, checking: true, message: 'Checking email...' }));
     
     try {
-      setIsAddingChild(true);
-      setError(null);
+      const trimmedEmail = email.trim();
       
-      const userDoc = await getDoc(doc(firestore, 'USER', newChildEmail));
+      // Check if user exists in the system
+      const userDoc = await getDoc(doc(firestore, 'USER', trimmedEmail));
+      
       if (!userDoc.exists()) {
-        setError('User not found. Please make sure the email is registered in the system.');
-        setIsAddingChild(false);
+        setEmailStatus({
+          checking: false,
+          exists: false,
+          available: false,
+          message: 'User not found'
+        });
         return;
       }
       
+      // Check if user already has access to this building
       const existingUserQuery = query(
         collection(firestore, 'USERBUILDING'),
-        where('User', '==', newChildEmail),
+        where('User', '==', trimmedEmail),
         where('Building', '==', buildingId)
       );
       
       const existingUserSnapshot = await getDocs(existingUserQuery);
       
       if (!existingUserSnapshot.empty) {
-        setError('User already has access to this building');
-        setIsAddingChild(false);
+        setEmailStatus({
+          checking: false,
+          exists: true,
+          available: false,
+          message: 'Already has access'
+        });
         return;
       }
       
-      const formattedEmail = newChildEmail.replace(/\./g, '_');
-      const userBuildingId = `${formattedEmail}_${buildingId}`;
-      
-      await setDoc(doc(firestore, 'USERBUILDING', userBuildingId), {
-        User: newChildEmail,
-        Building: buildingId,
-        Role: 'children',
-        AssignedLocations: [],
-        CreatedAt: serverTimestamp()
+      // User exists and is available
+      setEmailStatus({
+        checking: false,
+        exists: true,
+        available: true,
+        message: 'Available to invite'
       });
       
-      const userData = userDoc.data();
-      setChildren(prev => [
-        ...prev,
-        {
-          id: newChildEmail,
-          userBuildingId: userBuildingId,
-          assignedLocations: [],
-          ...userData
-        }
-      ]);
-      
-      setNewChildEmail('');
-      setShowAddChildForm(false);
-      setSuccess('Child user added successfully');
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error adding child:', err);
-      setError('Failed to add child user: ' + err.message);
-    } finally {
-      setIsAddingChild(false);
+      console.error('Error checking email availability:', err);
+      setEmailStatus({
+        checking: false,
+        exists: false,
+        available: false,
+        message: 'Error checking email'
+      });
     }
-  }, [userRoleInBuilding, newChildEmail, buildingId]);
+  }, [buildingId]);
+
+  const handleNewChildEmailChange = useCallback((e) => {
+    const value = e.target.value;
+    setNewChildEmail(value);
+    
+    // Clear errors when user starts typing
+    if (error && (error.includes('Email') || error.includes('User not found') || error.includes('already has access'))) {
+      setError(null);
+    }
+    
+    // Reset email status when input is cleared
+    if (!value.trim()) {
+      setEmailStatus({
+        checking: false,
+        exists: false,
+        available: false,
+        message: ''
+      });
+      return;
+    }
+    
+    // Check email availability when user stops typing (debounce)
+    const timeoutId = setTimeout(() => {
+      if (value.trim() && value.includes('@')) {
+        checkEmailAvailability(value);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timeoutId);
+  }, [error, checkEmailAvailability]);
+
+  // UPDATED: Send invitation instead of directly adding child
+  const handleSendInvitation = useCallback(async () => {
+    if (userRoleInBuilding !== 'parent') {
+      setError('Only parents can invite users to this building');
+      return;
+    }
+    
+    const trimmedEmail = newChildEmail.trim();
+    
+    if (!trimmedEmail) {
+      setError('Email is required');
+      return;
+    }
+    
+    if (!trimmedEmail.includes('@')) {
+      setError('Please enter a valid email address');
+      return;
+    }
+    
+    // Check email availability before proceeding
+    if (!emailStatus.exists || !emailStatus.available) {
+      setError('Please enter a valid email of a registered user who doesn\'t already have access to this building');
+      return;
+    }
+    
+    try {
+      setIsSendingInvitation(true);
+      setError(null);
+      
+      console.log('📨 Sending building invitation to:', trimmedEmail);
+      
+      await sendBuildingInvitation(
+        userEmail,
+        trimmedEmail,
+        buildingId,
+        building.BuildingName || building.id
+      );
+      
+      // Reset form
+      setNewChildEmail('');
+      setEmailStatus({
+        checking: false,
+        exists: false,
+        available: false,
+        message: ''
+      });
+      setShowAddChildForm(false);
+      setSuccess(`Invitation sent to ${trimmedEmail}. They will receive a notification to join this building.`);
+      setTimeout(() => setSuccess(null), 5000);
+      
+      console.log('✅ Building invitation sent successfully');
+      
+    } catch (err) {
+      console.error('❌ Error sending invitation:', err);
+      setError(err.message || 'Failed to send invitation');
+    } finally {
+      setIsSendingInvitation(false);
+    }
+  }, [userRoleInBuilding, newChildEmail, buildingId, emailStatus, userEmail, building]);
   
   const handleRemoveChild = useCallback(async (childId, userBuildingId) => {
     if (userRoleInBuilding !== 'parent') {
@@ -881,7 +1010,26 @@ const BuildingDetail = () => {
 
   const DevicesTab = () => (
     <div className="devices-tab">
-      <h3><MdDevices /> Devices ({devices.length})</h3>
+      <h3>
+        <MdDevices /> 
+        {userRoleInBuilding === 'children' ? 'My Accessible Devices' : 'Devices'} ({devices.length})
+      </h3>
+      
+      {userRoleInBuilding === 'children' && (
+        <div className="children-device-info" style={{
+          backgroundColor: '#f0f9ff',
+          padding: '12px',
+          borderRadius: '6px',
+          marginBottom: '16px',
+          border: '1px solid #bae6fd'
+        }}>
+          <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+            📍 You can only see devices in locations you're assigned to. 
+            Currently showing devices from your {devices.length > 0 ? 'assigned locations' : 'assigned locations (none found)'}.
+          </p>
+        </div>
+      )}
+      
       {devices.length > 0 ? (
         <div className="devices-list">
           {devices.map(device => (
@@ -902,16 +1050,27 @@ const BuildingDetail = () => {
                 <span>ID: {device.id}</span>
                 <span>Location: {device.locationName}</span>
                 <span>Type: {device.DeviceType || 'N/A'}</span>
+                {userRoleInBuilding === 'children' && (
+                  <span style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic' }}>
+                    ✓ Accessible via location assignment
+                  </span>
+                )}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <p className="no-data-message">No devices found for this building</p>
+        <p className="no-data-message">
+          {userRoleInBuilding === 'children' 
+            ? "No devices found in your assigned locations. Ask a parent to assign you to locations with devices."
+            : "No devices found for this building"
+          }
+        </p>
       )}
     </div>
   );
 
+  // UPDATED: Children Tab with invitation system
   const ChildrenTab = () => (
     <div className="children-tab">
       <div className="children-header">
@@ -921,9 +1080,22 @@ const BuildingDetail = () => {
             <button
               type="button"
               className="add-child-btn"
-              onClick={() => setShowAddChildForm(!showAddChildForm)}
+              onClick={() => {
+                setShowAddChildForm(!showAddChildForm);
+                // Clear any existing errors and email status when toggling form
+                if (!showAddChildForm) {
+                  setError(null);
+                  setNewChildEmail('');
+                  setEmailStatus({
+                    checking: false,
+                    exists: false,
+                    available: false,
+                    message: ''
+                  });
+                }
+              }}
             >
-              <MdPersonAdd /> Add Child
+              <MdPersonAdd /> Send Invitation
             </button>
           </div>
         )}
@@ -931,20 +1103,69 @@ const BuildingDetail = () => {
       
       {showAddChildForm && permissions.canManageChildren && (
         <div className="add-child-form">
-          <input
-            type="email"
-            value={newChildEmail}
-            onChange={(e) => setNewChildEmail(e.target.value)}
-            placeholder="Enter child's email address"
-            disabled={isAddingChild}
-          />
+          <div className="email-input-container" style={{ position: 'relative', flex: 1 }}>
+            <input
+              type="email"
+              value={newChildEmail}
+              onChange={handleNewChildEmailChange}
+              placeholder="Enter user's email address to invite"
+              disabled={isSendingInvitation}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isSendingInvitation && emailStatus.exists && emailStatus.available) {
+                  handleSendInvitation();
+                }
+                if (e.key === 'Escape') {
+                  setShowAddChildForm(false);
+                  setNewChildEmail('');
+                  setEmailStatus({
+                    checking: false,
+                    exists: false,
+                    available: false,
+                    message: ''
+                  });
+                  setError(null);
+                }
+              }}
+              style={{
+                paddingRight: '100px',
+                borderColor: emailStatus.exists && emailStatus.available ? '#22c55e' : 
+                            emailStatus.exists && !emailStatus.available ? '#ef4444' : '#e2e8f0'
+              }}
+              autoFocus
+            />
+            {emailStatus.checking && (
+              <span style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '12px',
+                color: '#6b7280'
+              }}>
+                Checking...
+              </span>
+            )}
+            {!emailStatus.checking && emailStatus.message && (
+              <span style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '12px',
+                color: emailStatus.available ? '#16a34a' : '#dc2626',
+                fontWeight: '500'
+              }}>
+                {emailStatus.available ? '✓' : '✗'}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             className="confirm-add-btn"
-            onClick={handleAddChild}
-            disabled={isAddingChild || !newChildEmail.trim()}
+            onClick={handleSendInvitation}
+            disabled={isSendingInvitation || !emailStatus.exists || !emailStatus.available}
           >
-            {isAddingChild ? 'Adding...' : 'Add'}
+            {isSendingInvitation ? 'Sending...' : 'Send Invite'}
           </button>
           <button
             type="button"
@@ -952,11 +1173,34 @@ const BuildingDetail = () => {
             onClick={() => {
               setShowAddChildForm(false);
               setNewChildEmail('');
+              setEmailStatus({
+                checking: false,
+                exists: false,
+                available: false,
+                message: ''
+              });
+              setError(null);
             }}
-            disabled={isAddingChild}
+            disabled={isSendingInvitation}
           >
             Cancel
           </button>
+        </div>
+      )}
+
+      {/* Info about invitation system */}
+      {permissions.canManageChildren && (
+        <div style={{
+          backgroundColor: '#f0f9ff',
+          padding: '12px',
+          borderRadius: '6px',
+          marginBottom: '16px',
+          border: '1px solid #bae6fd'
+        }}>
+          <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+            📨 When you send an invitation, the user will receive a notification to join this building. 
+            They can accept or decline the invitation.
+          </p>
         </div>
       )}
       

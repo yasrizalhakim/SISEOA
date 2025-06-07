@@ -1,6 +1,6 @@
-// src/components/Notifications/Notification.js - Simplified with Search/Filter
+// src/components/Notifications/Notification.js - Simplified with Invitation Handling
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   MdNotifications, 
   MdRefresh, 
@@ -11,21 +11,18 @@ import {
   MdError,
   MdPersonAdd,
   MdSearch,
-  MdFilterList
+  MdFilterList,
+  MdCheck,
+  MdClose
 } from 'react-icons/md';
 import { firestore } from '../../services/firebase';
+import { updateDoc, doc, writeBatch } from 'firebase/firestore';
 import { 
-  updateDoc,
-  doc,
-  writeBatch,
-  query,
-  where,
-  getDocs,
-  collection,
-  orderBy,
-  limit
-} from 'firebase/firestore';
-import { NOTIFICATION_TYPES, getUserNotifications } from '../../services/notificationService';
+  NOTIFICATION_TYPES, 
+  INVITATION_STATUS,
+  getUserNotifications,
+  respondToBuildingInvitation
+} from '../../services/notificationService';
 import './Notification.css';
 
 const Notifications = () => {
@@ -42,11 +39,12 @@ const Notifications = () => {
   const [readFilter, setReadFilter] = useState('all');
   
   const [unreadCount, setUnreadCount] = useState(0);
+  const [respondingToInvite, setRespondingToInvite] = useState(null);
   
   const userEmail = localStorage.getItem('userEmail') || '';
 
   // Fetch notifications
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = async () => {
     if (!userEmail) {
       setError('User not authenticated');
       setLoading(false);
@@ -76,7 +74,7 @@ const Notifications = () => {
       setRefreshing(false);
       setLoading(false);
     }
-  }, [userEmail]);
+  };
 
   // Filter and search notifications
   useEffect(() => {
@@ -109,7 +107,7 @@ const Notifications = () => {
   // Initial load
   useEffect(() => {
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [userEmail]);
 
   // Manual refresh
   const handleRefresh = () => {
@@ -123,7 +121,6 @@ const Notifications = () => {
         read: true
       });
       
-      // Update local state
       setNotifications(prev => 
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       );
@@ -147,7 +144,6 @@ const Notifications = () => {
         return;
       }
 
-      // Batch update all unread notifications
       const batch = writeBatch(firestore);
       
       unreadNotifications.forEach(notification => {
@@ -158,7 +154,6 @@ const Notifications = () => {
 
       await batch.commit();
       
-      // Update local state
       setNotifications(prev => 
         prev.map(n => ({ ...n, read: true }))
       );
@@ -174,6 +169,44 @@ const Notifications = () => {
     }
   };
 
+  // Handle invitation response
+  const handleInvitationResponse = async (notificationId, response) => {
+    try {
+      setRespondingToInvite(notificationId);
+      setError(null);
+
+      console.log(`📝 Responding to invitation ${notificationId}: ${response}`);
+
+      const result = await respondToBuildingInvitation(notificationId, response);
+      
+      // Update local notification
+      setNotifications(prev => 
+        prev.map(n => {
+          if (n.id === notificationId) {
+            return {
+              ...n,
+              message: result.message,
+              invitation: {
+                ...n.invitation,
+                status: result.status
+              },
+              read: true
+            };
+          }
+          return n;
+        })
+      );
+
+      setSuccess(response === 'accept' ? 'Invitation accepted!' : 'Invitation declined');
+      
+    } catch (error) {
+      console.error(`❌ Error responding to invitation:`, error);
+      setError(error.message || 'Failed to respond to invitation');
+    } finally {
+      setRespondingToInvite(null);
+    }
+  };
+
   // Clear messages after timeout
   useEffect(() => {
     if (success) {
@@ -182,17 +215,22 @@ const Notifications = () => {
     }
   }, [success]);
 
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   // Get notification icon
   const getNotificationIcon = (type) => {
     switch (type) {
       case NOTIFICATION_TYPES.SYSTEM:
         return <MdInfo className="notification-icon info" />;
-      case NOTIFICATION_TYPES.APPROVAL:
+      case NOTIFICATION_TYPES.INVITATION:
         return <MdPersonAdd className="notification-icon warning" />;
       case NOTIFICATION_TYPES.INFO:
         return <MdCheckCircle className="notification-icon success" />;
-      case NOTIFICATION_TYPES.ACTION_REQUIRED:
-        return <MdWarning className="notification-icon error" />;
       default:
         return <MdNotifications className="notification-icon default" />;
     }
@@ -258,7 +296,6 @@ const Notifications = () => {
 
       {/* Search and Filters */}
       <div className="search-filters-section">
-        {/* Search */}
         <div className="search-container">
           <MdSearch className="search-icon" />
           <input
@@ -270,7 +307,6 @@ const Notifications = () => {
           />
         </div>
 
-        {/* Filters */}
         <div className="filters-container">
           <div className="filter-group">
             <MdFilterList className="filter-icon" />
@@ -281,9 +317,8 @@ const Notifications = () => {
             >
               <option value="all">All Types</option>
               <option value={NOTIFICATION_TYPES.SYSTEM}>System</option>
-              <option value={NOTIFICATION_TYPES.APPROVAL}>Approval</option>
+              <option value={NOTIFICATION_TYPES.INVITATION}>Invitations</option>
               <option value={NOTIFICATION_TYPES.INFO}>Info</option>
-              <option value={NOTIFICATION_TYPES.ACTION_REQUIRED}>Action Required</option>
             </select>
           </div>
 
@@ -326,8 +361,10 @@ const Notifications = () => {
               key={notification.id}
               notification={notification}
               onMarkAsRead={markAsRead}
+              onInvitationResponse={handleInvitationResponse}
               getNotificationIcon={getNotificationIcon}
               formatTime={formatTime}
+              isResponding={respondingToInvite === notification.id}
             />
           ))
         )}
@@ -340,13 +377,25 @@ const Notifications = () => {
 const NotificationCard = ({ 
   notification, 
   onMarkAsRead, 
+  onInvitationResponse,
   getNotificationIcon, 
-  formatTime 
+  formatTime,
+  isResponding 
 }) => {
   const handleCardClick = () => {
     if (!notification.read) {
       onMarkAsRead(notification.id);
     }
+  };
+
+  const handleAccept = (e) => {
+    e.stopPropagation();
+    onInvitationResponse(notification.id, 'accept');
+  };
+
+  const handleDecline = (e) => {
+    e.stopPropagation();
+    onInvitationResponse(notification.id, 'decline');
   };
 
   return (
@@ -369,26 +418,38 @@ const NotificationCard = ({
           {notification.message}
         </div>
         
-        {/* Action buttons for approval/action_required types */}
-        {notification.type === NOTIFICATION_TYPES.APPROVAL && notification.actions && (
+        {/* Invitation Actions */}
+        {notification.type === NOTIFICATION_TYPES.INVITATION && 
+         notification.invitation && 
+         notification.invitation.status === INVITATION_STATUS.PENDING && (
           <div className="notification-actions">
-            <button className="action-btn accept">
-              {notification.actions.acceptLabel || 'Accept'}
+            <button 
+              className="action-btn accept"
+              onClick={handleAccept}
+              disabled={isResponding}
+            >
+              <MdCheck /> {isResponding ? 'Processing...' : 'Accept'}
             </button>
-            <button className="action-btn decline">
-              {notification.actions.declineLabel || 'Decline'}
+            <button 
+              className="action-btn decline"
+              onClick={handleDecline}
+              disabled={isResponding}
+            >
+              <MdClose /> {isResponding ? 'Processing...' : 'Decline'}
             </button>
           </div>
         )}
 
-        {notification.type === NOTIFICATION_TYPES.ACTION_REQUIRED && notification.actions && (
-          <div className="notification-actions">
-            <button className="action-btn accept">
-              {notification.actions.acceptLabel || 'Accept'}
-            </button>
-            <button className="action-btn decline">
-              {notification.actions.declineLabel || 'Decline'}
-            </button>
+        {/* Show invitation status for non-pending invitations */}
+        {notification.type === NOTIFICATION_TYPES.INVITATION && 
+         notification.invitation && 
+         notification.invitation.status !== INVITATION_STATUS.PENDING && (
+          <div className="notification-status">
+            <span className={`status-badge ${notification.invitation.status}`}>
+              {notification.invitation.status === INVITATION_STATUS.ACCEPTED && '✅ Accepted'}
+              {notification.invitation.status === INVITATION_STATUS.DECLINED && '❌ Declined'}
+              {notification.invitation.status === INVITATION_STATUS.ERROR && '⚠️ Error'}
+            </span>
           </div>
         )}
       </div>
