@@ -1,4 +1,4 @@
-// src/components/Users/Users.js - Redesigned to match Buildings component consistency
+// src/components/Users/Users.js - Updated to use USERBUILDING for parent-child relationships
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MdAdd, MdPerson, MdFamilyRestroom, MdHome, MdAdminPanelSettings, MdBusiness, MdLocationOn, MdEmail, MdPhone, MdRefresh, MdSearch, MdSettings } from 'react-icons/md';
@@ -48,11 +48,11 @@ const Users = () => {
       }
 
       // Priority: admin > parent > user (all users can see user management if they have any role)
-    if (hasAdminRole) return 'admin';
-    if (hasParentRole) return 'parent';
+      if (hasAdminRole) return 'admin';
+      if (hasParentRole) return 'parent';
 
-    // Even children can access user management (they may become parents later)
-    return 'user'; // Changed from 'none' to 'user' to allow access
+      // Even children can access user management (they may become parents later)
+      return 'user'; // Changed from 'none' to 'user' to allow access
     } catch (error) {
       console.error('Error determining user access type:', error);
       return 'none';
@@ -78,28 +78,26 @@ const Users = () => {
       console.log('🔍 User access type:', accessType);
 
       if (accessType === 'systemadmin') {
-        console.log('🔧 SystemAdmin detected - fetching all parents');
+        console.log('🔧 SystemAdmin detected - fetching all parents via USERBUILDING');
         await fetchSystemAdminUsers(usersList, buildingsList);
         
       } else if (accessType === 'admin') {
-        console.log('🏢 Building admin detected - fetching parents in managed buildings');
+        console.log('🏢 Building admin detected - fetching parents in managed buildings via USERBUILDING');
         await fetchBuildingAdminUsers(usersList, buildingsList, usersBuildingMap);
         
       } else if (accessType === 'parent') {
-        console.log('👨‍👩‍👧‍👦 Parent user detected - fetching children in owned buildings');
+        console.log('👨‍👩‍👧‍👦 Parent user detected - fetching children via USERBUILDING');
         await fetchParentUsers(usersList, buildingsList, usersBuildingMap);
         
       } else if (accessType === 'user') {
-  console.log('👤 Basic user detected - showing their own info and potential children');
-  // Even basic users can see user management for their potential children
-  // or if they become parents later
-  await fetchBasicUserInfo(usersList, buildingsList, usersBuildingMap);
-  
-} else {
-  setError('You do not have access to user management.');
-  setLoading(false);
-  return;
-}
+        console.log('👤 Basic user detected - showing their own info');
+        await fetchBasicUserInfo(usersList, buildingsList, usersBuildingMap);
+        
+      } else {
+        setError('You do not have access to user management.');
+        setLoading(false);
+        return;
+      }
       
       setUsers(usersList);
       setBuildings(buildingsList);
@@ -122,30 +120,29 @@ const Users = () => {
   }, [userEmail, determineUserAccessType]);
 
   // Fetch basic user info for users who are only children but might become parents
-const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) => {
-  // Get current user's details and show a minimal view
-  const currentUserDoc = await getDoc(doc(firestore, 'USER', userEmail));
-  
-  if (currentUserDoc.exists()) {
-    const userData = currentUserDoc.data();
+  const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) => {
+    // Get current user's details and show a minimal view
+    const currentUserDoc = await getDoc(doc(firestore, 'USER', userEmail));
     
-    usersList.push({
-      id: userEmail,
-      email: userEmail,
-      ...userData,
-      role: 'user',
-      buildingAccess: []
-    });
-  }
-  
-  // Show message that they can create buildings to become parents
-  usersBuildingMap["potential"] = [];
-};
-
+    if (currentUserDoc.exists()) {
+      const userData = currentUserDoc.data();
+      
+      usersList.push({
+        id: userEmail,
+        email: userEmail,
+        ...userData,
+        role: 'user',
+        buildingAccess: []
+      });
+    }
+    
+    // Show message that they can create buildings to become parents
+    usersBuildingMap["potential"] = [];
+  };
 
   // Fetch users for SystemAdmin (all parents)
   const fetchSystemAdminUsers = async (usersList, buildingsList) => {
-    // Get all parents in the system
+    // Get all parents in the system via USERBUILDING
     const parentsQuery = query(
       collection(firestore, 'USERBUILDING'),
       where('Role', '==', 'parent')
@@ -166,7 +163,7 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
-        // Get user's building access
+        // Get user's building access via USERBUILDING
         const userBuildingQuery = query(
           collection(firestore, 'USERBUILDING'),
           where('User', '==', email)
@@ -210,7 +207,7 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
 
   // Fetch users for building admins (parents in buildings they admin)
   const fetchBuildingAdminUsers = async (usersList, buildingsList, usersBuildingMap) => {
-    // Get buildings where current user is admin
+    // Get buildings where current user is admin via USERBUILDING
     const adminBuildingsQuery = query(
       collection(firestore, 'USERBUILDING'),
       where('User', '==', userEmail),
@@ -238,7 +235,7 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
       usersBuildingMap[buildingId] = [];
     }
     
-    // For each building, get parents
+    // For each building, get parents via USERBUILDING
     for (const buildingId of adminBuildingIds) {
       const parentsQuery = query(
         collection(firestore, 'USERBUILDING'),
@@ -278,9 +275,9 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
     }
   };
 
-  // Fetch users for parents (children in buildings they own)
+  // UPDATED: Fetch users for parents (children in buildings they manage) - Using USERBUILDING only
   const fetchParentUsers = async (usersList, buildingsList, usersBuildingMap) => {
-    // Get buildings where the user has 'parent' role
+    // Get buildings where the user has 'parent' role via USERBUILDING
     const parentBuildingsQuery = query(
       collection(firestore, 'USERBUILDING'),
       where('User', '==', userEmail),
@@ -306,7 +303,7 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
       usersBuildingMap[buildingId] = [];
     }
     
-    // Fetch children for each building
+    // UPDATED: Fetch children for each building where current user is parent via USERBUILDING
     for (const buildingId of parentBuildingIds) {
       const childrenQuery = query(
         collection(firestore, 'USERBUILDING'),
@@ -320,13 +317,18 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
         const childData = childDoc.data();
         const childEmail = childData.User;
         
+        // Get child user details
         const childUserDoc = await getDoc(doc(firestore, 'USER', childEmail));
         
         if (childUserDoc.exists()) {
+          const childUserData = childUserDoc.data();
+          
+          // UPDATED: Since we're only using USERBUILDING, any children in buildings where 
+          // current user is parent are considered manageable by the current user
           const childUser = {
             id: childEmail,
             email: childEmail,
-            ...childUserDoc.data(),
+            ...childUserData,
             role: 'children',
             buildingRole: childData.Role,
             buildingAccess: [{
@@ -341,49 +343,15 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
           if (!usersList.find(u => u.id === childEmail)) {
             usersList.push(childUser);
           }
+          
+          console.log(`✅ Added ${childEmail} as child in building ${buildingId} via USERBUILDING logic`);
         }
       }
     }
     
-    // Handle unassigned children
-    const allChildrenQuery = query(
-      collection(firestore, 'USER'),
-      where('ParentEmail', '==', userEmail)
-    );
-    
-    const allChildrenSnapshot = await getDocs(allChildrenQuery);
-    
-    for (const childDoc of allChildrenSnapshot.docs) {
-      const childEmail = childDoc.id;
-      const childData = childDoc.data();
-      
-      const childBuildingQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', childEmail)
-      );
-      
-      const childBuildingSnapshot = await getDocs(childBuildingQuery);
-      
-      if (childBuildingSnapshot.empty) {
-        const unassignedChild = {
-          id: childEmail,
-          email: childEmail,
-          ...childData,
-          role: 'children',
-          buildingRole: 'children',
-          buildingAccess: []
-        };
-        
-        if (!usersBuildingMap["unassigned"]) {
-          usersBuildingMap["unassigned"] = [];
-        }
-        usersBuildingMap["unassigned"].push(unassignedChild);
-        
-        if (!usersList.find(u => u.id === childEmail)) {
-          usersList.push(unassignedChild);
-        }
-      }
-    }
+    // UPDATED: Handle unassigned children - users who have building access but not in buildings where current user is parent
+    // Since we're using USERBUILDING only, we won't show "unassigned" children as parent-child is building-specific
+    console.log('ℹ️ Parent-child relationships are now building-specific via USERBUILDING');
   };
   
   // Initial load
@@ -438,19 +406,6 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
     }
   };
 
-  // Check if user has no access
-  // if (currentUserType === 'none' && !loading) {
-  //   return (
-  //     <div className="users-page">
-  //       <div className="users-header">
-  //         <h2>User Management</h2>
-  //       </div>
-  //       <div className="error-message">
-  //         You do not have permission to access user management. You need to have a parent or admin role in at least one building to access this page.
-  //       </div>
-  //     </div>
-  //   );
-  // }
   
   if (loading) {
     return (
@@ -499,7 +454,7 @@ const fetchBasicUserInfo = async (usersList, buildingsList, usersBuildingMap) =>
   );
 };
 
-// Users Header Component - Updated for multi-role support
+// Users Header Component - Updated for USERBUILDING-based multi-role support
 const UsersHeader = ({ currentUserType, isUserSystemAdmin, userCount, filteredCount, onRefresh, refreshing }) => {
   const getHeaderContent = () => {
     if (currentUserType === 'systemadmin') {
@@ -512,7 +467,14 @@ const UsersHeader = ({ currentUserType, isUserSystemAdmin, userCount, filteredCo
     } else if (currentUserType === 'admin') {
       return `Managed Users (${userCount})`;
     } else if (currentUserType === 'parent') {
-      return `My Children (${userCount})`;
+      return (
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <span>My Children ({userCount})</span>
+          <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '400' }}>
+            Children in buildings where you are parent
+          </span>
+        </span>
+      );
     } else {
       return (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
@@ -621,7 +583,7 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
     );
   }
 
-  // Building-based view (admin or parent)
+  // Building-based view (admin or parent) - Updated for USERBUILDING logic
   return (
     <div>
       <div className="users-stats">
@@ -654,16 +616,18 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
               <h3>
                 <MdHome />
                 {building.BuildingName || building.id}
+                <span style={{ 
+                  fontSize: '12px', 
+                  fontWeight: '400', 
+                  color: '#6b7280',
+                  marginLeft: '8px'
+                }}>
+                  {/* {currentUserType === 'parent' ? 
+                    '(Children where you are parent)' : 
+                    '(Parents in building you admin)'
+                  } */}
+                </span>
               </h3>
-              <span style={{ 
-                fontSize: '12px', 
-                backgroundColor: currentUserType === 'admin' ? '#3b82f6' : '#8b5cf6', 
-                color: 'white', 
-                padding: '2px 6px', 
-                borderRadius: '12px'
-              }}>
-                Your Role: {currentUserType}
-              </span>
             </div>
             
             <div className="building-category-content">
@@ -690,7 +654,7 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
                     <p>
                       {currentUserType === 'admin' 
                         ? 'No parents in this building' 
-                        : 'No children in this building'
+                        : 'No children in this building where you are parent'
                       }
                     </p>
                   </div>
@@ -706,39 +670,14 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
             <p>
               {currentUserType === 'admin' 
                 ? "You don't have admin access to any buildings."
-                : "You don't have any buildings. Create a building first to add children."
+                : "You don't have parent role in any buildings. You need to be assigned as parent in buildings to manage children."
               }
             </p>
           </div>
         </div>
       )}
       
-      {/* Unassigned children (only for parents) */}
-      {currentUserType === 'parent' && usersByBuilding["unassigned"] && usersByBuilding["unassigned"].length > 0 && (
-        <div className="building-category">
-          <div className="building-category-header unassigned">
-            <h3>Unassigned Children</h3>
-          </div>
-          
-          <div className="building-category-content">
-            <div className="users-grid">
-              {usersByBuilding["unassigned"]
-                .filter(user => !searchTerm || 
-                  (user.Name || user.email).toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  user.email.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                .map(user => (
-                  <UserCard 
-                    key={user.id}
-                    user={user}
-                    currentUserType={currentUserType}
-                    onClick={() => onUserCardClick(user.id)}
-                  />
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* UPDATED: Removed unassigned children since parent-child is now building-specific */}
     </div>
   );
 };
@@ -761,9 +700,7 @@ const UserCard = ({ user, currentUserType, onClick }) => {
           <h3 className="user-name">
             {user.Name || user.email}
           </h3>
-          <span className={`role-badge ${getRoleBadgeClass(user.role)}`}>
-            {user.role}
-          </span>
+          
         </div>
         
         <div className="user-details">
@@ -779,21 +716,22 @@ const UserCard = ({ user, currentUserType, onClick }) => {
             </div>
           )}
           
-          {user.ParentEmail && (
+          {/* UPDATED: Show building-specific role instead of legacy ParentEmail */}
+          {user.buildingRole && (
             <div className="detail-item">
-              <span className="detail-label">Parent:</span>
-              <span className="detail-value">{user.ParentEmail}</span>
+              <span className="detail-label">Building Role:</span>
+              <span className="detail-value">{user.buildingRole}</span>
             </div>
           )}
         </div>
-
+        
         {/* Building Access Display */}
-        {user.buildingAccess && user.buildingAccess.length > 0 && (
+        {/* {user.buildingAccess && user.buildingAccess.length > 0 && (
           <div className="access-level-section">
             <h4>Building Access</h4>
             <div className="buildings-access-list">
-              {user.buildingAccess.slice(0, 3).map(building => (
-                <div key={building.id} className="building-access-item">
+              {user.buildingAccess.slice(0, 3).map((building, index) => (
+                <div key={index} className="building-access-item">
                   <span className="building-name">{building.name}</span>
                   <span className={`building-role ${building.role}`}>
                     {building.role}
@@ -802,14 +740,12 @@ const UserCard = ({ user, currentUserType, onClick }) => {
               ))}
               {user.buildingAccess.length > 3 && (
                 <div className="building-access-item">
-                  <span className="building-name">
-                    +{user.buildingAccess.length - 3} more...
-                  </span>
+                  <span className="building-name">+{user.buildingAccess.length - 3} more...</span>
                 </div>
               )}
             </div>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );
