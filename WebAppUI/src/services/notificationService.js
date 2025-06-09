@@ -1,4 +1,4 @@
-// src/services/notificationService.js - Simplified Invitation System
+// src/services/notificationService.js - Enhanced with Building and Device Notifications
 
 import { firestore } from './firebase';
 import { 
@@ -20,7 +20,8 @@ import {
 export const NOTIFICATION_TYPES = {
   SYSTEM: 'system',
   INVITATION: 'invitation',
-  INFO: 'info'
+  INFO: 'info',
+  SUCCESS: 'success' // NEW: For positive actions like building creation
 };
 
 // Invitation status
@@ -294,6 +295,18 @@ export const sendInfoNotification = async (userEmail, title, message) => {
 };
 
 /**
+ * Send success notification
+ */
+export const sendSuccessNotification = async (userEmail, title, message) => {
+  return await createNotification({
+    title,
+    message,
+    userId: userEmail,
+    type: NOTIFICATION_TYPES.SUCCESS
+  });
+};
+
+/**
  * Send system notification
  */
 export const sendSystemNotification = async (userEmail, title, message) => {
@@ -326,18 +339,117 @@ const getSystemAdminEmail = async () => {
   }
 };
 
+// ================================
+// NEW NOTIFICATION FUNCTIONS
+// ================================
+
 /**
- * Notify SystemAdmin about device registration
+ * NEW: Notify parent when they successfully create a building
+ */
+export const notifyParentBuildingCreated = async (parentEmail, buildingName, buildingId) => {
+  try {
+    console.log('🏢 Notifying parent about building creation:', { parentEmail, buildingName, buildingId });
+    
+    return await sendSuccessNotification(
+      parentEmail,
+      'Building Created Successfully',
+      `Your building "${buildingName}" has been created successfully! You can now add locations and claim devices.`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying parent about building creation:', error);
+    return null;
+  }
+};
+
+/**
+ * NEW: Notify parent when they add a location to their building
+ */
+export const notifyParentLocationAdded = async (parentEmail, locationName, buildingName) => {
+  try {
+    console.log('📍 Notifying parent about location addition:', { parentEmail, locationName, buildingName });
+    
+    return await sendSuccessNotification(
+      parentEmail,
+      'Location Added Successfully',
+      `Location "${locationName}" has been added to your building "${buildingName}". You can now assign devices and users to this location.`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying parent about location addition:', error);
+    return null;
+  }
+};
+
+/**
+ * NEW: Notify parent when they successfully claim a device
+ */
+export const notifyParentDeviceClaimed = async (parentEmail, deviceName, deviceId, locationName, buildingName) => {
+  try {
+    console.log('📱 Notifying parent about device claim:', { parentEmail, deviceName, deviceId, locationName, buildingName });
+    
+    return await sendSuccessNotification(
+      parentEmail,
+      'Device Claimed Successfully',
+      `Device "${deviceName}" has been successfully claimed and assigned to "${locationName}" in your building "${buildingName}".`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying parent about device claim:', error);
+    return null;
+  }
+};
+
+/**
+ * ENHANCED: Notify SystemAdmin about device registration (already exists but enhanced)
  */
 export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy) => {
-  const systemAdminEmail = await getSystemAdminEmail();
-  if (!systemAdminEmail) return null;
+  try {
+    const systemAdminEmail = await getSystemAdminEmail();
+    if (!systemAdminEmail) {
+      console.log('⚠️ No SystemAdmin found to notify about device registration');
+      return null;
+    }
 
-  return await sendSystemNotification(
-    systemAdminEmail,
-    'New Device Registered',
-    `Device ${deviceName} has been successfully added by ${registeredBy}.`
-  );
+    console.log('🔧 Notifying SystemAdmin about device registration:', { deviceName, deviceId, registeredBy });
+
+    return await sendSystemNotification(
+      systemAdminEmail,
+      'New Device Registered',
+      `A new device "${deviceName}" (ID: ${deviceId}) has been registered in the system by ${registeredBy}.`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying SystemAdmin about device registration:', error);
+    return null;
+  }
+};
+
+/**
+ * NEW: Notify SystemAdmin when admin adds/registers a device 
+ * (This is different from user registration - for admin actions)
+ */
+export const notifyAdminDeviceAdded = async (deviceName, deviceId, addedBy) => {
+  try {
+    const systemAdminEmail = await getSystemAdminEmail();
+    if (!systemAdminEmail) {
+      console.log('⚠️ No SystemAdmin found to notify about admin device addition');
+      return null;
+    }
+
+    // Don't notify if the admin adding the device is the SystemAdmin themselves
+    if (systemAdminEmail === addedBy) {
+      console.log('📝 Skipping admin notification - device added by SystemAdmin themselves');
+      return null;
+    }
+
+    console.log('🔧 Notifying SystemAdmin about admin device addition:', { deviceName, deviceId, addedBy });
+
+    return await sendSystemNotification(
+      systemAdminEmail,
+      'Device Added by Admin',
+      `Administrator ${addedBy} has added device "${deviceName}" (ID: ${deviceId}) to the system.`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying SystemAdmin about admin device addition:', error);
+    return null;
+  }
 };
 
 /**
@@ -350,7 +462,7 @@ export const notifyDeviceDeleted = async (deviceName, deviceId, deletedBy) => {
   return await sendSystemNotification(
     systemAdminEmail,
     'Device Deleted',
-    `Device ${deviceName} has been deleted by ${deletedBy}.`
+    `Device "${deviceName}" (ID: ${deviceId}) has been deleted by ${deletedBy}.`
   );
 };
 
@@ -361,7 +473,7 @@ export const notifyParentDeviceDeleted = async (parentEmail, deviceName, buildin
   return await sendInfoNotification(
     parentEmail,
     'Device Deleted',
-    `Device ${deviceName} in building "${buildingName}" has been deleted by an administrator.`
+    `Device "${deviceName}" in building "${buildingName}" has been deleted by an administrator.`
   );
 };
 
@@ -372,7 +484,7 @@ export const notifyLocationAssigned = async (childEmail, locationName, buildingN
   return await sendInfoNotification(
     childEmail,
     'Location Assigned',
-    `You've been assigned to ${locationName} in ${buildingName}.`
+    `You've been assigned to "${locationName}" in "${buildingName}".`
   );
 };
 
@@ -434,7 +546,12 @@ export default {
   respondToBuildingInvitation,
   getUserNotifications,
   sendInfoNotification,
+  sendSuccessNotification,
   sendSystemNotification,
+  notifyParentBuildingCreated, // NEW
+  notifyParentLocationAdded,   // NEW
+  notifyParentDeviceClaimed,   // NEW
+  notifyAdminDeviceAdded,      // NEW
   notifyDeviceRegistered,
   notifyDeviceDeleted,
   notifyParentDeviceDeleted,

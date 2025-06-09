@@ -1,4 +1,4 @@
-// src/components/Notifications/Notification.js - Simplified with Invitation Handling
+// src/components/Notifications/Notification.js - Enhanced with New Notification Types
 
 import React, { useState, useEffect } from 'react';
 import { 
@@ -13,7 +13,12 @@ import {
   MdSearch,
   MdFilterList,
   MdCheck,
-  MdClose
+  MdClose,
+  MdBusiness,
+  MdLocationOn,
+  MdDevices,
+  MdAdminPanelSettings,
+  MdCelebration
 } from 'react-icons/md';
 import { firestore } from '../../services/firebase';
 import { updateDoc, doc, writeBatch } from 'firebase/firestore';
@@ -222,15 +227,25 @@ const Notifications = () => {
     }
   }, [error]);
 
-  // Get notification icon
-  const getNotificationIcon = (type) => {
+  // ENHANCED: Get notification icon with new types
+  const getNotificationIcon = (type, title) => {
     switch (type) {
       case NOTIFICATION_TYPES.SYSTEM:
-        return <MdInfo className="notification-icon info" />;
+        return <MdAdminPanelSettings className="notification-icon info" />;
       case NOTIFICATION_TYPES.INVITATION:
         return <MdPersonAdd className="notification-icon warning" />;
+      case NOTIFICATION_TYPES.SUCCESS:
+        // Use specific icons based on the title/content
+        if (title?.toLowerCase().includes('building')) {
+          return <MdBusiness className="notification-icon success" />;
+        } else if (title?.toLowerCase().includes('location')) {
+          return <MdLocationOn className="notification-icon success" />;
+        } else if (title?.toLowerCase().includes('device')) {
+          return <MdDevices className="notification-icon success" />;
+        }
+        return <MdCelebration className="notification-icon success" />;
       case NOTIFICATION_TYPES.INFO:
-        return <MdCheckCircle className="notification-icon success" />;
+        return <MdInfo className="notification-icon info" />;
       default:
         return <MdNotifications className="notification-icon default" />;
     }
@@ -316,6 +331,7 @@ const Notifications = () => {
               className="filter-select"
             >
               <option value="all">All Types</option>
+              <option value={NOTIFICATION_TYPES.SUCCESS}>Success</option>
               <option value={NOTIFICATION_TYPES.SYSTEM}>System</option>
               <option value={NOTIFICATION_TYPES.INVITATION}>Invitations</option>
               <option value={NOTIFICATION_TYPES.INFO}>Info</option>
@@ -373,7 +389,7 @@ const Notifications = () => {
   );
 };
 
-// Notification Card Component
+// ENHANCED: Notification Card Component with new notification types
 const NotificationCard = ({ 
   notification, 
   onMarkAsRead, 
@@ -398,15 +414,27 @@ const NotificationCard = ({
     onInvitationResponse(notification.id, 'decline');
   };
 
+  // Get card styling based on notification type
+  const getCardClass = () => {
+    let baseClass = `notification-card ${!notification.read ? 'unread' : ''}`;
+    
+    // Add special styling for success notifications
+    if (notification.type === NOTIFICATION_TYPES.SUCCESS) {
+      baseClass += ' success-notification';
+    }
+    
+    return baseClass;
+  };
+
   return (
     <div 
-      className={`notification-card ${!notification.read ? 'unread' : ''}`}
+      className={getCardClass()}
       onClick={handleCardClick}
     >
       <div className="notification-content">
         <div className="notification-header">
           <div className="notification-title">
-            {getNotificationIcon(notification.type)}
+            {getNotificationIcon(notification.type, notification.title)}
             <span>{notification.title}</span>
           </div>
           <div className="notification-time">

@@ -5,6 +5,10 @@ import { MdArrowBack, MdAdd, MdDevices, MdLocationOn, MdPerson, MdDelete } from 
 import { firestore, database } from '../../services/firebase';
 import { notifyDeviceRegistered } from '../../services/notificationService';
 import { 
+  notifyParentDeviceClaimed, 
+  notifyAdminDeviceAdded 
+} from '../../services/notificationService';
+import { 
   doc, 
   setDoc, 
   collection, 
@@ -393,15 +397,34 @@ const AddDevice = () => {
     
     console.log('✅ Device claimed successfully');
     setSuccess(true);
+
+    try {
+    // Get location and building names for notification
+    const location = userLocations.find(loc => loc.id === formData.location);
+    const locationName = location ? location.locationName : formData.location;
+    const buildingName = location ? location.buildingName : 'Unknown Building';
     
-    setTimeout(() => {
-      navigate(`/devices/detail/${deviceId}`, {
-        state: {
-          message: `Device "${formData.deviceName}" has been claimed successfully.`
-        }
-      });
-    }, 1500);
-  }, [formData, navigate]);
+    await notifyParentDeviceClaimed(
+      userEmail,
+      formData.deviceName.trim(),
+      deviceId,
+      locationName,
+      buildingName
+    );
+    console.log('📢 Device claim notification sent to parent');
+  } catch (notificationError) {
+    console.error('❌ Failed to send device claim notification:', notificationError);
+    // Don't fail the device claim if notification fails
+  }
+  
+  setTimeout(() => {
+    navigate(`/devices/detail/${deviceId}`, {
+      state: {
+        message: `Device "${formData.deviceName}" has been claimed successfully.`
+      }
+    });
+  }, 1500);
+}, [formData, navigate, userEmail, userLocations]);
 
   // Register new device with energy usage document
   // Register new device with notification
@@ -435,6 +458,9 @@ const registerDevice = useCallback(async (deviceId) => {
 
   // Create empty energy usage document for the device
   await createEnergyUsageDocument(deviceId);
+
+  // Create empty energy usage document for the device
+  await createEnergyUsageDocument(deviceId);
   
   // **NEW: Create notification for SystemAdmin**
   try {
@@ -448,6 +474,20 @@ const registerDevice = useCallback(async (deviceId) => {
     console.error('❌ Failed to send notification:', notificationError);
     // Don't fail the device registration if notification fails
   }
+
+  if (isUserSystemAdmin) {
+    try {
+      await notifyAdminDeviceAdded(
+        formData.deviceName.trim(),
+        deviceId,
+        userEmail
+      );
+      console.log('📢 Admin device addition notification sent');
+    } catch (notificationError) {
+      console.error('❌ Failed to send admin device addition notification:', notificationError);
+      // Don't fail the device registration if notification fails
+    }
+  }
   
   setSuccess(true);
   await fetchRegisteredDevices();
@@ -455,7 +495,7 @@ const registerDevice = useCallback(async (deviceId) => {
   
   setTimeout(() => setSuccess(null), 3000);
   console.log('✅ New device registered successfully');
-}, [formData, fetchRegisteredDevices, userEmail]);
+}, [formData, fetchRegisteredDevices, userEmail, isUserSystemAdmin]);
 
   // NEW: Create empty energy usage document for new device
   const createEnergyUsageDocument = useCallback(async (deviceId) => {

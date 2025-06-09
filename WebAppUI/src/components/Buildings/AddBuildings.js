@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdClose } from 'react-icons/md';
 import { firestore } from '../../services/firebase';
+import { notifyParentBuildingCreated } from '../../services/notificationService';
 import { 
   doc, 
   setDoc, 
@@ -292,15 +293,27 @@ const AddBuilding = () => {
       });
       
       setSuccess(true);
-      
-      setTimeout(() => {
-        navigate('/buildings');
-      }, 1500);
-      
-    } catch (err) {
-      console.error('Error adding building:', err);
-      setError('Failed to add building: ' + err.message);
-    } finally {
+
+      try {
+    await notifyParentBuildingCreated(
+      userEmail,
+      formData.buildingName,
+      formData.buildingId
+    );
+    console.log('📢 Building creation notification sent to parent');
+  } catch (notificationError) {
+    console.error('❌ Failed to send building creation notification:', notificationError);
+    // Don't fail the building creation if notification fails
+  }
+  
+  setTimeout(() => {
+    navigate('/buildings');
+  }, 1500);
+  
+} catch (err) {
+  console.error('Error adding building:', err);
+  setError('Failed to add building: ' + err.message);
+} finally {
       setLoading(false);
     }
   }, [

@@ -1,4 +1,4 @@
-/* src/components/Notifications/Notification.css - Simplified with Invitation Styling */
+/* src/components/Notifications/Notification.css - Enhanced with Success Notification Styling */
 .notifications-page {
   width: 100%;
   max-width: 1000px;
@@ -227,6 +227,21 @@
   background-color: #f8fafc;
 }
 
+/* NEW: Success notification styling */
+.notification-card.success-notification {
+  border-left: 4px solid #16a34a;
+  background-color: #f0fdf4;
+}
+
+.notification-card.success-notification.unread {
+  border-left: 4px solid #16a34a;
+  background-color: #f0fdf4;
+}
+
+.notification-card.success-notification:hover {
+  background-color: #ecfdf5;
+}
+
 .notification-content {
   padding: 1rem;
   display: flex;
@@ -272,7 +287,7 @@
   margin-left: 1.5rem;
 }
 
-/* Notification Icons */
+/* Enhanced Notification Icons */
 .notification-icon {
   font-size: 1rem;
   flex-shrink: 0;
@@ -296,6 +311,26 @@
 
 .notification-icon.default {
   color: #64748b;
+}
+
+/* Special icon animations for success notifications */
+.success-notification .notification-icon.success {
+  animation: successPulse 2s ease-in-out;
+}
+
+@keyframes successPulse {
+  0% { 
+    transform: scale(1);
+    color: #16a34a; 
+  }
+  50% { 
+    transform: scale(1.1);
+    color: #22c55e; 
+  }
+  100% { 
+    transform: scale(1);
+    color: #16a34a; 
+  }
 }
 
 /* Notification Actions */
@@ -385,6 +420,23 @@
   background-color: #22c55e;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* Success notification unread indicator */
+.success-notification .unread-indicator {
+  background-color: #16a34a;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
 }
 
 /* No Notifications State */
@@ -573,6 +625,14 @@
   .action-btn:hover {
     transform: none;
   }
+  
+  .success-notification .notification-icon.success {
+    animation: none;
+  }
+  
+  .success-notification .unread-indicator {
+    animation: none;
+  }
 }
 
 /* Print Styles */
@@ -596,5 +656,9 @@
   
   .notification-card.unread {
     border-left: 4px solid #22c55e;
+  }
+  
+  .notification-card.success-notification {
+    border-left: 4px solid #16a34a;
   }
 }

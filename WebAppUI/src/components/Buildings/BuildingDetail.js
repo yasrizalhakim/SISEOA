@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
+import { notifyParentLocationAdded } from '../../services/notificationService';
 import { 
   doc, 
   getDoc, 
@@ -539,11 +540,24 @@ const BuildingDetail = () => {
       
       setNewLocationName('');
       setSuccess('Location added successfully');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Error adding location:', err);
-      setError('Failed to add location: ' + err.message);
-    } finally {
+      try {
+    await notifyParentLocationAdded(
+      userEmail,
+      newLocationName,
+      building.BuildingName || building.id
+    );
+    console.log('📢 Location addition notification sent to parent');
+  } catch (notificationError) {
+    console.error('❌ Failed to send location addition notification:', notificationError);
+    // Don't fail the location creation if notification fails
+  }
+  
+  setTimeout(() => setSuccess(null), 3000);
+  
+} catch (err) {
+  console.error('Error adding location:', err);
+  setError('Failed to add location: ' + err.message);
+} finally {
       setIsAddingLocation(false);
     }
   }, [userRoleInBuilding, newLocationName, buildingId]);
