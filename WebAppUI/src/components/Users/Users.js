@@ -469,9 +469,9 @@ const UsersHeader = ({ currentUserType, isUserSystemAdmin, userCount, filteredCo
     } else if (currentUserType === 'parent') {
       return (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          <span>My Children ({userCount})</span>
+          <span>My Users (Children) ({userCount})</span>
           <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '400' }}>
-            Children in buildings where you are parent
+            Children in buildings owned
           </span>
         </span>
       );
@@ -716,36 +716,15 @@ const UserCard = ({ user, currentUserType, onClick }) => {
             </div>
           )}
           
-          {/* UPDATED: Show building-specific role instead of legacy ParentEmail */}
+          {/* UPDATED: Show building-specific role instead of legacy ParentEmail
           {user.buildingRole && (
             <div className="detail-item">
               <span className="detail-label">Building Role:</span>
               <span className="detail-value">{user.buildingRole}</span>
             </div>
-          )}
+          )} */}
         </div>
-        
-        {/* Building Access Display */}
-        {/* {user.buildingAccess && user.buildingAccess.length > 0 && (
-          <div className="access-level-section">
-            <h4>Building Access</h4>
-            <div className="buildings-access-list">
-              {user.buildingAccess.slice(0, 3).map((building, index) => (
-                <div key={index} className="building-access-item">
-                  <span className="building-name">{building.name}</span>
-                  <span className={`building-role ${building.role}`}>
-                    {building.role}
-                  </span>
-                </div>
-              ))}
-              {user.buildingAccess.length > 3 && (
-                <div className="building-access-item">
-                  <span className="building-name">+{user.buildingAccess.length - 3} more...</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )} */}
+      
       </div>
     </div>
   );

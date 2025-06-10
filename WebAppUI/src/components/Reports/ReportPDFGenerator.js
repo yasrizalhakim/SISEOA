@@ -223,7 +223,7 @@ const createPDFHTML = (data) => {
       </div>
 
       <!-- Environmental Impact -->
-      <div class="section">
+      <!-- <div class="section">
         <h2 class="section-title">🌱 Environmental Impact</h2>
         <div class="environmental-grid">
           <div class="env-item">
@@ -245,7 +245,7 @@ const createPDFHTML = (data) => {
           </div>
           ` : ''}
         </div>
-      </div>
+      </div> -->
 
       <!-- Energy Efficiency -->
       ${savingsPotential ? `
@@ -269,7 +269,7 @@ const createPDFHTML = (data) => {
       ` : ''}
 
       <!-- Recommendations -->
-      <div class="section">
+      <!-- <div class="section">
         <h2 class="section-title">💡 Energy Optimization Recommendations</h2>
         <div class="recommendations">
           ${recommendations.map((rec, index) => `
@@ -279,7 +279,7 @@ const createPDFHTML = (data) => {
             </div>
           `).join('')}
         </div>
-      </div>
+      </div> -->
 
       <!-- Report Footer -->
       <div class="pdf-footer">
@@ -287,8 +287,8 @@ const createPDFHTML = (data) => {
           <p><strong>Report Details:</strong></p>
           <p>• Report generated on ${new Date().toLocaleDateString()} by SISEAO Energy Management System</p>
           <p>• Energy rates based on TNB Malaysia tariff structure for residential/small office consumption</p>
-          <p>• Carbon footprint calculated using Malaysia's grid emission factor (0.708 kg CO₂/kWh)</p>
-          <p>• Recommendations are based on industry best practices and energy efficiency standards</p>
+          <!-- <p>• Carbon footprint calculated using Malaysia's grid emission factor (0.708 kg CO₂/kWh)</p>
+          <p>• Recommendations are based on industry best practices and energy efficiency standards</p> -->
         </div>
         <div class="footer-logo">
           <p><strong>SISEAO</strong> - Smart IoT System for Energy Optimization and Automation</p>

@@ -193,7 +193,8 @@
 }
 
 .user-email,
-.parent-email {
+.parent-email,
+.user-phone {
   font-family: 'Courier New', monospace;
   background-color: #f0f9ff !important;
   color: #0369a1 !important;

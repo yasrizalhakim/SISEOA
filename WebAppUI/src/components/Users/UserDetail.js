@@ -1,4 +1,4 @@
-// src/components/Users/UserDetail.js - Updated with USERBUILDING-based Parent-Child Logic
+// src/components/Users/UserDetail.js - Updated with Parent Delete Child Logic
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
@@ -26,7 +26,8 @@ import {
   MdAssignmentInd,
   MdFamilyRestroom,
   MdRemoveCircle,
-  MdWarning
+  MdWarning,
+  MdPersonRemove // Added for delete child functionality
 } from 'react-icons/md';
 import TabPanel from '../common/TabPanel';
 import UserModal from '../common/UserModal';
@@ -493,6 +494,127 @@ const UserDetail = () => {
     }
   };
 
+  // NEW: Handle completely deleting child from all parent buildings
+  const handleDeleteChild = async () => {
+    try {
+      // First, get the buildings that will be affected for confirmation
+      const parentBuildingsQuery = query(
+        collection(firestore, 'USERBUILDING'),
+        where('User', '==', currentUserEmail),
+        where('Role', '==', 'parent')
+      );
+      const parentBuildingsSnapshot = await getDocs(parentBuildingsQuery);
+      
+      const parentBuildingIds = [];
+      parentBuildingsSnapshot.forEach(doc => {
+        const buildingId = doc.data().Building;
+        if (buildingId !== 'SystemAdmin') {
+          parentBuildingIds.push(buildingId);
+        }
+      });
+      
+      if (parentBuildingIds.length === 0) {
+        setError('No buildings found where you are the parent.');
+        return;
+      }
+      
+      // Get building names for confirmation
+      const buildingNames = [];
+      for (const buildingId of parentBuildingIds) {
+        const childBuildingQuery = query(
+          collection(firestore, 'USERBUILDING'),
+          where('User', '==', userId),
+          where('Building', '==', buildingId),
+          where('Role', '==', 'children')
+        );
+        const childBuildingSnapshot = await getDocs(childBuildingQuery);
+        
+        if (!childBuildingSnapshot.empty) {
+          const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
+          const buildingName = buildingDoc.exists() ? 
+            (buildingDoc.data().BuildingName || buildingId) : buildingId;
+          buildingNames.push(buildingName);
+        }
+      }
+      
+      if (buildingNames.length === 0) {
+        setError('No relationships found to remove. This user may not be your child in any buildings.');
+        return;
+      }
+      
+      const confirmed = window.confirm(
+        `Are you sure you want to completely remove ${user.Name || user.email} from all your buildings?\n\n` +
+        `Buildings affected:\n${buildingNames.map(name => `• ${name}`).join('\n')}\n\n` +
+        `This will:\n` +
+        `• Remove them from all buildings listed above\n` +
+        `• Remove all their location assignments in those buildings\n` +
+        `• Remove access to all devices in those buildings\n` +
+        `• NOT delete their user account\n\n` +
+        `This action cannot be undone.`
+      );
+      
+      if (!confirmed) return;
+      
+      setRemoving(true);
+      setError(null);
+      
+      console.log('🗑️ Removing child from all parent buildings...');
+      
+      // Remove child from all parent buildings
+      let removedCount = 0;
+      const removedBuildings = [];
+      
+      for (const buildingId of parentBuildingIds) {
+        const childBuildingQuery = query(
+          collection(firestore, 'USERBUILDING'),
+          where('User', '==', userId),
+          where('Building', '==', buildingId),
+          where('Role', '==', 'children')
+        );
+        const childBuildingSnapshot = await getDocs(childBuildingQuery);
+        
+        for (const childDoc of childBuildingSnapshot.docs) {
+          await deleteDoc(doc(firestore, 'USERBUILDING', childDoc.id));
+          removedCount++;
+          
+          // Get building name for success message
+          const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
+          const buildingName = buildingDoc.exists() ? 
+            (buildingDoc.data().BuildingName || buildingId) : buildingId;
+          removedBuildings.push(buildingName);
+          
+          console.log(`✅ Removed child from building ${buildingId}`);
+        }
+      }
+      
+      if (removedCount === 0) {
+        setError('No relationships found to remove. This user may not be your child in any buildings.');
+        return;
+      }
+      
+      setSuccess(
+        `Successfully removed ${user.Name || user.email} from ${removedCount} building(s): ${removedBuildings.join(', ')}`
+      );
+      
+      console.log(`✅ Child removed from ${removedCount} buildings successfully`);
+      
+      // Redirect to users page after a short delay
+      setTimeout(() => {
+        navigate('/users', {
+          state: {
+            message: `${user.Name || user.email} has been removed from all your buildings successfully`
+          }
+        });
+      }, 2000);
+      
+    } catch (error) {
+      console.error('❌ Error removing child:', error);
+      setError('Failed to remove child: ' + error.message);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   // Handle location management
   const handleManageLocations = (buildingId) => {
     setSelectedBuildingId(buildingId);
@@ -634,6 +756,7 @@ const UserDetail = () => {
           onEditToggle={handleEditToggle}
           onInputChange={handleInputChange}
           onSave={handleSave}
+          onDeleteChild={handleDeleteChild} // NEW: Pass delete child function
           onRemoveFromBuilding={handleRemoveFromBuilding}
           error={error}
           success={success}
@@ -682,7 +805,7 @@ const UserDetail = () => {
   );
 };
 
-// UPDATED: User Info Tab Component - Shows building access based on USERBUILDING logic
+// UPDATED: User Info Tab Component - Shows delete button for parents viewing children
 const UserInfoTab = ({ 
   user, 
   userBuildings, 
@@ -697,6 +820,7 @@ const UserInfoTab = ({
   onEditToggle, 
   onInputChange, 
   onSave, 
+  onDeleteChild, // NEW: Delete child function
   onRemoveFromBuilding,
   error, 
   success 
@@ -705,46 +829,59 @@ const UserInfoTab = ({
     {error && <div className="error-message">{error}</div>}
     {success && <div className="success-message">{success}</div>}
     
-    {/* Edit Controls */}
+    {/* Edit Controls - UPDATED: Show delete button for parents viewing children */}
     {canManageThisUser && (
       <div className="user-actions">
-        {!isEditing ? (
-          <button className="edit-button" onClick={onEditToggle}>
-            <MdEdit /> Edit User
+        {currentUserRole === 'parent' ? (
+          // Show delete all button for parents viewing children
+          <button 
+            className="delete-button" 
+            onClick={onDeleteChild}
+            disabled={removing}
+          >
+            <MdPersonRemove /> {removing ? 'Removing...' : 'Remove from All Buildings'}
           </button>
         ) : (
-          <div className="edit-actions">
-            <button 
-              className="save-button" 
-              onClick={onSave}
-              disabled={saving || !editData.Name.trim()}
-            >
-              <MdSave /> {saving ? 'Saving...' : 'Save Changes'}
+          // Show edit functionality for other roles (admin, systemadmin, self)
+          !isEditing ? (
+            <button className="edit-button" onClick={onEditToggle}>
+              <MdEdit /> Edit User
             </button>
-            <button 
-              className="cancel-button" 
-              onClick={onEditToggle}
-              disabled={saving}
-            >
-              <MdCancel /> Cancel
-            </button>
-          </div>
+          ) : (
+            <div className="edit-actions">
+              <button 
+                className="save-button" 
+                onClick={onSave}
+                disabled={saving || !editData.Name.trim()}
+              >
+                <MdSave /> {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button 
+                className="cancel-button" 
+                onClick={onEditToggle}
+                disabled={saving}
+              >
+                <MdCancel /> Cancel
+              </button>
+            </div>
+          )
         )}
       </div>
     )}
     
-    {/* User Information Form */}
+    {/* User Information Form - UPDATED: Show read-only for parents viewing children */}
     <div className="user-info-form">
-      <div className="info-group">
+      {/* <div className="info-group">
         <label>User ID</label>
         <p className="user-id">{user.id}</p>
-      </div>
+      </div> */}
       
       <div className="info-group">
         <label>
-          <MdPerson /> Name *
+          <MdPerson /> Name
         </label>
-        {isEditing ? (
+        <p className="user-name">{user.name || user.Name}</p>
+        {/* {isEditing && currentUserRole !== 'parent' ? (
           <input
             type="text"
             name="Name"
@@ -756,7 +893,7 @@ const UserInfoTab = ({
           />
         ) : (
           <p>{user.Name || 'No name provided'}</p>
-        )}
+        )} */}
       </div>
       
       <div className="info-group">
@@ -770,7 +907,8 @@ const UserInfoTab = ({
         <label>
           <MdPhone /> Contact Number
         </label>
-        {isEditing ? (
+        <p className="user-phone">{user.ContactNo}</p>
+        {/* {isEditing && currentUserRole !== 'parent' ? (
           <input
             type="tel"
             name="ContactNo"
@@ -781,17 +919,9 @@ const UserInfoTab = ({
           />
         ) : (
           <p>{user.ContactNo || 'No contact number provided'}</p>
-        )}
+        )} */}
       </div>
       
-      {user.ParentEmail && (
-        <div className="info-group">
-          <label>
-            <MdFamilyRestroom /> Parent Email (Legacy)
-          </label>
-          <p className="parent-email">{user.ParentEmail}</p>
-        </div>
-      )}
       
       {user.LastModifiedBy && (
         <div className="info-group">
@@ -812,7 +942,6 @@ const UserInfoTab = ({
             color: '#6b7280',
             marginLeft: '8px'
           }}>
-            Access based on building roles
           </span>
         </h3>
         
@@ -836,7 +965,7 @@ const UserInfoTab = ({
               </div>
               
               {/* Remove from Building Button - Only if current user has parent role and target has children role */}
-              {canRemoveFromBuildings && building.userRole === 'children' && (
+              {canRemoveFromBuildings && building.userRole === 'children' && currentUserRole === 'parent' && (
                 <button
                   className="remove-child-btn"
                   onClick={() => onRemoveFromBuilding(
@@ -869,14 +998,6 @@ const UserInfoTab = ({
             </div>
           ))}
         </div>
-        
-        {/* Warning for Remove Functionality */}
-        {canRemoveFromBuildings && userBuildings.some(b => b.userRole === 'children') && (
-          <div className="warning-message" style={{ marginTop: '15px' }}>
-            <MdWarning /> You can remove this user from buildings where you have 'parent' role 
-            and they have 'children' role in the same building.
-          </div>
-        )}
       </div>
     )}
     
@@ -921,7 +1042,7 @@ const LocationAccessTab = ({
     </div>
     
     {/* Building-Specific Location Management */}
-    {userBuildings.length > 0 && canManageThisUser && (
+    {userBuildings.length > 0 && canManageThisUser && currentUserRole === 'parent' && (
       <div style={{ marginBottom: '20px' }}>
         <h4 style={{ marginBottom: '15px', color: '#1e293b' }}>Manage by Building:</h4>
         <div className="buildings-list">
@@ -932,7 +1053,7 @@ const LocationAccessTab = ({
                 <span>Role: {building.userRole}</span>
                 <span>Assigned Locations: {building.assignedLocations?.length || 0}</span>
               </div>
-              {building.userRole === 'children' && (currentUserRole === 'parent' || currentUserRole === 'admin') && (
+              {building.userRole === 'children' && (
                 <button 
                   className="manage-devices-btn" 
                   onClick={() => onManageLocations(building.id)}
@@ -988,8 +1109,12 @@ const LocationAccessTab = ({
         <div className="no-data-content">
           <h4>No Location Access</h4>
           <p>
-            {canManageThisUser 
+            {canManageThisUser && currentUserRole === 'parent'
               ? `This user has no location access assigned in buildings where you have management rights. Use the "Manage Locations" button to assign locations.`
+              : currentUserRole === 'admin'
+              ? 'This user has no location access assigned to them in buildings you can view. Only parents can manage location assignments.'
+              : currentUserRole === 'parent'
+              ? 'This user has no location access assigned to them in buildings you can view.'
               : 'This user has no location access assigned to them in buildings you can view.'
             }
           </p>

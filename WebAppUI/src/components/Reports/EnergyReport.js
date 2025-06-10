@@ -238,7 +238,7 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
           </table>
         </div>
 
-        {/* Environmental Impact */}
+        {/* Environmental Impact
         <div className="environmental-section">
           <h3>🌱 Environmental Impact</h3>
           
@@ -275,7 +275,7 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
               </div>
             )}
           </div>
-        </div>
+        </div> */}
 
         {/* Energy Efficiency Assessment */}
         <div className="efficiency-section">
@@ -317,7 +317,7 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
           </div>
         </div>
 
-        {/* Recommendations */}
+        {/* Recommendations
         <div className="recommendations-section">
           <h3>💡 Energy Optimization Recommendations</h3>
           
@@ -326,7 +326,7 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
               <li key={index}>{recommendation}</li>
             ))}
           </ul>
-        </div>
+        </div> */}
 
         {/* Report Footer */}
         <div className="report-footer">
@@ -340,7 +340,8 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
           }}>
             Report generated on {new Date().toLocaleDateString()} by SISEAO Energy Management System
             <br />
-            Energy rates based on TNB Malaysia tariff structure. Carbon footprint calculated using Malaysia's grid emission factor (0.708 kg CO₂/kWh).
+            Energy rates based on TNB Malaysia tariff structure. 
+            {/* Carbon footprint calculated using Malaysia's grid emission factor (0.708 kg CO₂/kWh). */}
           </p>
         </div>
       </div>
