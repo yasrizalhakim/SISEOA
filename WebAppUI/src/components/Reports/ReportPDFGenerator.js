@@ -223,7 +223,7 @@ const createPDFHTML = (data) => {
       </div>
 
       <!-- Environmental Impact -->
-      <!-- <div class="section">
+      <div class="section">
         <h2 class="section-title">🌱 Environmental Impact</h2>
         <div class="environmental-grid">
           <div class="env-item">
@@ -245,7 +245,7 @@ const createPDFHTML = (data) => {
           </div>
           ` : ''}
         </div>
-      </div> -->
+      </div>
 
       <!-- Energy Efficiency -->
       ${savingsPotential ? `
@@ -269,7 +269,7 @@ const createPDFHTML = (data) => {
       ` : ''}
 
       <!-- Recommendations -->
-      <!-- <div class="section">
+      <div class="section">
         <h2 class="section-title">💡 Energy Optimization Recommendations</h2>
         <div class="recommendations">
           ${recommendations.map((rec, index) => `
@@ -279,7 +279,7 @@ const createPDFHTML = (data) => {
             </div>
           `).join('')}
         </div>
-      </div> -->
+      </div>
 
       <!-- Report Footer -->
       <div class="pdf-footer">

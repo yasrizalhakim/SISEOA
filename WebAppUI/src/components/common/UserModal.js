@@ -1,5 +1,6 @@
-// src/components/common/UserModal.js - Updated for Location-Based Device Management with Auto-Assignment
-import React, { useState, useEffect } from 'react';
+// src/components/common/UserModal.js - Refactored with component consolidation
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { firestore } from '../../services/firebase';
 import { notifyLocationAssigned } from '../../services/notificationService';
 import { doc, getDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
@@ -26,7 +27,7 @@ const UserModal = ({
   const [userRoleInBuilding, setUserRoleInBuilding] = useState('user');
 
   // Get the current user's role in the specific building
-  const getCurrentUserRoleInBuilding = async () => {
+  const getCurrentUserRoleInBuilding = useCallback(async () => {
     const globalUserRole = localStorage.getItem('userRole') || 'user';
     
     if (globalUserRole === 'admin') {
@@ -56,16 +57,10 @@ const UserModal = ({
       console.error('Error getting current user role in building:', error);
       return 'user';
     }
-  };
-
-  useEffect(() => {
-    if (isOpen && userId) {
-      fetchUserData();
-    }
-  }, [isOpen, userId, buildingId]);
+  }, [userEmail, buildingId]);
 
   // Check if current user is a parent of the viewed user in the specific building
-  const checkParentChildRelationship = async (childUserId, parentUserEmail) => {
+  const checkParentChildRelationship = useCallback(async (childUserId, parentUserEmail) => {
     try {
       // Check direct parent relationship via ParentEmail field
       const childUserDoc = await getDoc(doc(firestore, 'USER', childUserId));
@@ -98,9 +93,9 @@ const UserModal = ({
       console.error('Error checking parent-child relationship:', error);
       return false;
     }
-  };
+  }, [buildingId, getCurrentUserRoleInBuilding]);
 
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -156,10 +151,10 @@ const UserModal = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, buildingId, getCurrentUserRoleInBuilding, checkParentChildRelationship, userEmail, viewOnly]);
 
   // Fetch all locations in the building and their devices
-  const fetchBuildingLocationsAndDevices = async () => {
+  const fetchBuildingLocationsAndDevices = useCallback(async () => {
     try {
       console.log('📍 Fetching locations and devices for building:', buildingId);
       
@@ -195,10 +190,10 @@ const UserModal = ({
     } catch (error) {
       console.error('Error fetching building locations and devices:', error);
     }
-  };
+  }, [buildingId]);
 
   // Fetch user's current location assignments
-  const fetchUserLocationAssignments = async () => {
+  const fetchUserLocationAssignments = useCallback(async () => {
     try {
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
@@ -248,10 +243,10 @@ const UserModal = ({
     } catch (error) {
       console.error('Error fetching user location assignments:', error);
     }
-  };
+  }, [userId, buildingId]);
 
-  // NEW: Auto-assign user to all devices in a location
-  const autoAssignUserToLocationDevices = async (locationId, userId) => {
+  // Auto-assign user to all devices in a location
+  const autoAssignUserToLocationDevices = useCallback(async (locationId, userId) => {
     try {
       console.log('🔄 Auto-assigning user to all devices in location:', locationId);
       
@@ -277,10 +272,10 @@ const UserModal = ({
     } catch (error) {
       console.error('❌ Error auto-assigning user to location devices:', error);
     }
-  };
+  }, [locationDevices]);
 
-  // NEW: Auto-unassign user from all devices in a location
-  const autoUnassignUserFromLocationDevices = async (locationId, userId) => {
+  // Auto-unassign user from all devices in a location
+  const autoUnassignUserFromLocationDevices = useCallback(async (locationId, userId) => {
     try {
       console.log('🔄 Auto-unassigning user from all devices in location:', locationId);
       
@@ -306,10 +301,10 @@ const UserModal = ({
     } catch (error) {
       console.error('❌ Error auto-unassigning user from location devices:', error);
     }
-  };
+  }, [locationDevices]);
 
   // Handle assigning location to user
-  const handleAssignLocation = async (locationId) => {
+  const handleAssignLocation = useCallback(async (locationId) => {
     try {
       setError(null);
       
@@ -343,7 +338,7 @@ const UserModal = ({
         AssignedLocations: updatedAssignedLocations
       });
       
-      // NEW: Auto-assign user to all devices in this location
+      // Auto-assign user to all devices in this location
       await autoAssignUserToLocationDevices(locationId, userId);
       
       // Update local state
@@ -379,10 +374,10 @@ const UserModal = ({
     } catch (notificationError) {
       console.error('❌ Failed to send notification:', notificationError);
     }
-  };
+  }, [userId, buildingId, availableLocations, autoAssignUserToLocationDevices, onUserUpdate]);
 
   // Handle unassigning location from user
-  const handleUnassignLocation = async (locationId) => {
+  const handleUnassignLocation = useCallback(async (locationId) => {
     try {
       setError(null);
       
@@ -411,7 +406,7 @@ const UserModal = ({
         AssignedLocations: updatedAssignedLocations
       });
       
-      // NEW: Auto-unassign user from all devices in this location
+      // Auto-unassign user from all devices in this location
       await autoUnassignUserFromLocationDevices(locationId, userId);
       
       // Update local state
@@ -434,23 +429,24 @@ const UserModal = ({
       console.error('❌ Error unassigning location:', error);
       setError('Failed to unassign location');
     }
-  };
+  }, [userId, buildingId, assignedLocations, autoUnassignUserFromLocationDevices, onUserUpdate]);
+
+  useEffect(() => {
+    if (isOpen && userId) {
+      fetchUserData();
+    }
+  }, [isOpen, userId, buildingId, fetchUserData]);
 
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>
-            <MdPerson /> 
-            {user?.Name || user?.email || 'User Details'}
-            {viewOnly && <span className="view-only-badge">View Only</span>}
-          </h3>
-          <button className="close-button" onClick={onClose}>
-            <MdClose />
-          </button>
-        </div>
+        <ModalHeader 
+          user={user}
+          viewOnly={viewOnly}
+          onClose={onClose}
+        />
 
         <div className="modal-body">
           {loading && <div className="loading">Loading user data...</div>}
@@ -459,123 +455,24 @@ const UserModal = ({
 
           {user && !loading && (
             <>
-              {/* User Info Section */}
-              <div className="user-info-section">
-                <h4><MdInfo /> User Information</h4>
-                <div className="user-details-grid">
-                  <div className="detail-item">
-                    <label>Name:</label>
-                    <span>{user.Name || 'N/A'}</span>
-                  </div>
-                  <div className="detail-item">
-                    <label>Email:</label>
-                    <span>{user.email}</span>
-                  </div>
-                  {user.ContactNo && (
-                    <div className="detail-item">
-                      <label>Contact:</label>
-                      <span>{user.ContactNo}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <UserInfoSection user={user} />
 
-              {/* Location Management Section - Only show if not view only and user has permission */}
               {!viewOnly && userRoleInBuilding === 'parent' && buildingId && (
-                <div className="device-management-section">
-                  <h4><MdLocationOn /> Location Access Management (Building Specific)</h4>
-                  
-                  {/* Assigned Locations */}
-                  <div className="devices-subsection">
-                    <h5>Assigned Locations ({assignedLocations.length})</h5>
-                    {assignedLocations.length > 0 ? (
-                      <div className="devices-grid">
-                        {assignedLocations.map(location => (
-                          <div key={location.id} className="device-card assigned">
-                            <div className="device-info">
-                              <div className="device-name">{location.name}</div>
-                              <div className="device-details">
-                                <span>ID: {location.id}</span>
-                                <span>Building: {buildingId}</span>
-                                <span>Devices: {locationDevices[location.id]?.length || 0} device(s)</span>
-                                {locationDevices[location.id]?.length > 0 && (
-                                  <span style={{ fontSize: '11px', color: '#059669', fontStyle: 'italic' }}>
-                                    Auto-assigned to: {locationDevices[location.id].map(d => d.DeviceName || d.id).join(', ')}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              className="device-action-btn unassign"
-                              onClick={() => handleUnassignLocation(location.id)}
-                              title="Remove access to this location and all its devices"
-                            >
-                              <MdRemove />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="no-devices">No locations assigned to this user in this building</div>
-                    )}
-                  </div>
-
-                  {/* Available Locations */}
-                  <div className="devices-subsection">
-                    <h5>Available Locations ({availableLocations.length})</h5>
-                    {availableLocations.length > 0 ? (
-                      <div className="devices-grid">
-                        {availableLocations.map(location => (
-                          <div key={location.id} className="device-card available">
-                            <div className="device-info">
-                              <div className="device-name">{location.name}</div>
-                              <div className="device-details">
-                                <span>ID: {location.id}</span>
-                                <span>Building: {buildingId}</span>
-                                <span>Devices: {locationDevices[location.id]?.length || 0} device(s)</span>
-                                {locationDevices[location.id]?.length > 0 && (
-                                  <span style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic' }}>
-                                    Will auto-assign to: {locationDevices[location.id].map(d => d.DeviceName || d.id).join(', ')}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              className="device-action-btn assign"
-                              onClick={() => handleAssignLocation(location.id)}
-                              title="Give access to this location and auto-assign to all its devices"
-                            >
-                              <MdCheck />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="no-devices">No available locations to assign in this building</div>
-                    )}
-                  </div>
-                </div>
+                <LocationManagementSection
+                  assignedLocations={assignedLocations}
+                  availableLocations={availableLocations}
+                  locationDevices={locationDevices}
+                  onAssignLocation={handleAssignLocation}
+                  onUnassignLocation={handleUnassignLocation}
+                />
               )}
 
-              {/* Show assigned locations in view-only mode */}
               {viewOnly && assignedLocations.length > 0 && (
-                <div className="device-management-section">
-                  <h4><MdLocationOn /> Assigned Locations ({assignedLocations.length})</h4>
-                  <div className="devices-grid">
-                    {assignedLocations.map(location => (
-                      <div key={location.id} className="device-card assigned view-only">
-                        <div className="device-info">
-                          <div className="device-name">{location.name}</div>
-                          <div className="device-details">
-                            <span>ID: {location.id}</span>
-                            <span>Building: {buildingId}</span>
-                            <span>Devices: {locationDevices[location.id]?.length || 0} device(s)</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <ViewOnlyLocationsSection
+                  assignedLocations={assignedLocations}
+                  locationDevices={locationDevices}
+                  buildingId={buildingId}
+                />
               )}
             </>
           )}
@@ -584,5 +481,158 @@ const UserModal = ({
     </div>
   );
 };
+
+// Modal Header Component
+const ModalHeader = ({ user, viewOnly, onClose }) => (
+  <div className="modal-header">
+    <h3>
+      <MdPerson /> 
+      {user?.Name || user?.email || 'User Details'}
+      {viewOnly && <span className="view-only-badge">View Only</span>}
+    </h3>
+    <button className="close-button" onClick={onClose}>
+      <MdClose />
+    </button>
+  </div>
+);
+
+// User Info Section Component
+const UserInfoSection = ({ user }) => (
+  <div className="user-info-section">
+    <h4><MdInfo /> User Information</h4>
+    <div className="user-details-grid">
+      <div className="detail-item">
+        <label>Name:</label>
+        <span>{user.Name || 'N/A'}</span>
+      </div>
+      <div className="detail-item">
+        <label>Email:</label>
+        <span>{user.email}</span>
+      </div>
+      {user.ContactNo && (
+        <div className="detail-item">
+          <label>Contact:</label>
+          <span>{user.ContactNo}</span>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// Location Management Section Component
+const LocationManagementSection = ({ 
+  assignedLocations, 
+  availableLocations, 
+  locationDevices, 
+  onAssignLocation, 
+  onUnassignLocation 
+}) => (
+  <div className="device-management-section">
+    <h4><MdLocationOn /> Location Access Management (Building Specific)</h4>
+    
+    <LocationSubsection
+      title={`Assigned Locations (${assignedLocations.length})`}
+      locations={assignedLocations}
+      locationDevices={locationDevices}
+      actionType="unassign"
+      onAction={onUnassignLocation}
+      emptyMessage="No locations assigned to this user in this building"
+    />
+
+    <LocationSubsection
+      title={`Available Locations (${availableLocations.length})`}
+      locations={availableLocations}
+      locationDevices={locationDevices}
+      actionType="assign"
+      onAction={onAssignLocation}
+      emptyMessage="No available locations to assign in this building"
+    />
+  </div>
+);
+
+// Location Subsection Component
+const LocationSubsection = ({ 
+  title, 
+  locations, 
+  locationDevices, 
+  actionType, 
+  onAction, 
+  emptyMessage 
+}) => (
+  <div className="devices-subsection">
+    <h5>{title}</h5>
+    {locations.length > 0 ? (
+      <div className="devices-grid">
+        {locations.map(location => (
+          <LocationCard
+            key={location.id}
+            location={location}
+            locationDevices={locationDevices}
+            actionType={actionType}
+            onAction={onAction}
+          />
+        ))}
+      </div>
+    ) : (
+      <div className="no-devices">{emptyMessage}</div>
+    )}
+  </div>
+);
+
+// Location Card Component
+const LocationCard = ({ location, locationDevices, actionType, onAction }) => {
+  const devices = locationDevices[location.id] || [];
+  const isAssigned = actionType === 'unassign';
+
+  return (
+    <div className={`device-card ${isAssigned ? 'assigned' : 'available'}`}>
+      <div className="device-info">
+        <div className="device-name">{location.name}</div>
+        <div className="device-details">
+          <span>ID: {location.id}</span>
+          <span>Building: {location.Building}</span>
+          <span>Devices: {devices.length} device(s)</span>
+          {devices.length > 0 && (
+            <span style={{ fontSize: '11px', color: isAssigned ? '#059669' : '#6b7280', fontStyle: 'italic' }}>
+              {isAssigned ? 'Auto-assigned to: ' : 'Will auto-assign to: '}
+              {devices.map(d => d.DeviceName || d.id).join(', ')}
+            </span>
+          )}
+        </div>
+      </div>
+      <button
+        className={`device-action-btn ${actionType}`}
+        onClick={() => onAction(location.id)}
+        title={isAssigned ? 
+          "Remove access to this location and all its devices" : 
+          "Give access to this location and auto-assign to all its devices"
+        }
+      >
+        {isAssigned ? <MdRemove /> : <MdCheck />}
+      </button>
+    </div>
+  );
+};
+
+// View Only Locations Section Component
+const ViewOnlyLocationsSection = ({ assignedLocations, locationDevices, buildingId }) => (
+  <div className="device-management-section">
+    <h4><MdLocationOn /> Assigned Locations ({assignedLocations.length})</h4>
+    <div className="devices-grid">
+      {assignedLocations.map(location => (
+        <div key={location.id} className="device-card assigned view-only">
+          <div className="device-info">
+            <div className="device-name">{location.name}</div>
+            <div className="device-details">
+              <span>ID: {location.id}</span>
+              <span>Building: {buildingId}</span>
+              <span>Devices: {locationDevices[location.id]?.length || 0} device(s)</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
 export default UserModal;

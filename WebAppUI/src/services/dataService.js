@@ -1,4 +1,4 @@
-// src/services/dataService.js - Enhanced with Location-Based Assignment Support
+// src/services/dataService.js - Enhanced with Device Runtime Warning System and Location-Based Assignment Support
 
 import { firestore, database } from './firebase';
 import { 
@@ -11,9 +11,181 @@ import {
   collection, 
   query, 
   where,
-  serverTimestamp 
+  serverTimestamp, 
+  Timestamp
 } from 'firebase/firestore';
 import { ref, get, set, update, remove } from 'firebase/database';
+import { sendDeviceRuntimeWarning } from './notificationService'; // NEW: Import runtime warning function
+
+// ================================
+// DEVICE RUNTIME WARNING SYSTEM
+// ================================
+
+/**
+ * NEW: Check and send device runtime warnings
+ * @param {string} deviceId - Device ID
+ * @param {Object} deviceData - Device data from Firestore
+ * @param {Object} rtdbData - Real-time database data
+ * @returns {Promise<boolean>} True if warning was sent
+ */
+const checkDeviceRuntimeWarning = async (deviceId, deviceData, rtdbData) => {
+  try {
+    // Only check devices that are currently ON and have location
+    if (!rtdbData || rtdbData.status !== 'ON' || !deviceData.Location) {
+      return false;
+    }
+
+    const now = new Date();
+    const onSince = rtdbData.onSince ? new Date(rtdbData.onSince) : null;
+    const lastWarningAt = rtdbData.lastWarningAt ? new Date(rtdbData.lastWarningAt) : null;
+    const warningCount = rtdbData.warningCount || 0;
+
+    // If no onSince timestamp, set it now (device just turned on)
+    if (!onSince) {
+      await update(ref(database, `Devices/${deviceId}`), {
+        onSince: serverTimestamp(),
+        lastWarningAt: null,
+        warningCount: 0
+      });
+      console.log(`📝 Set onSince timestamp for device ${deviceId}`);
+      return false;
+    }
+
+    // Calculate hours the device has been on
+    const hoursOn = Math.floor((now - onSince) / (1000 * 60 * 60));
+    
+    // Determine if we should send a warning
+    let shouldWarn = false;
+    let nextWarningHour = 5; // First warning at 5 hours
+
+    if (warningCount === 0 && hoursOn >= 5) {
+      // First warning at 5 hours
+      shouldWarn = true;
+      nextWarningHour = 5;
+    } else if (warningCount > 0) {
+      // Subsequent warnings every 2 hours: 7h, 9h, 11h, etc.
+      nextWarningHour = 5 + (warningCount * 2);
+      if (hoursOn >= nextWarningHour) {
+        // Check if enough time has passed since last warning (at least 1.5 hours to avoid spam)
+        const hoursSinceLastWarning = lastWarningAt ? 
+          Math.floor((now - lastWarningAt) / (1000 * 60 * 60)) : 999;
+        
+        if (hoursSinceLastWarning >= 1.5) {
+          shouldWarn = true;
+        }
+      }
+    }
+
+    if (!shouldWarn) {
+      return false;
+    }
+
+    console.log(`⚠️ Device ${deviceId} runtime warning trigger:`, {
+      hoursOn,
+      warningCount,
+      nextWarningHour,
+      shouldWarn
+    });
+
+    // Get location and building details
+    const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
+    if (!locationDoc.exists()) {
+      console.error(`❌ Location ${deviceData.Location} not found for device ${deviceId}`);
+      return false;
+    }
+
+    const locationData = locationDoc.data();
+    const buildingId = locationData.Building;
+    
+    // Get building name
+    const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
+    const buildingName = buildingDoc.exists() ? 
+      (buildingDoc.data().BuildingName || buildingId) : buildingId;
+
+    const locationName = locationData.LocationName || deviceData.Location;
+    const deviceName = deviceData.DeviceName || deviceId;
+
+    // Send warning notifications
+    await sendDeviceRuntimeWarning(
+      deviceId,
+      deviceName,
+      locationName,
+      buildingId,
+      buildingName,
+      hoursOn,
+      warningCount + 1
+    );
+
+    // Update warning tracking in RTDB
+    await update(ref(database, `Devices/${deviceId}`), {
+      lastWarningAt: now.toISOString(),
+      warningCount: warningCount + 1
+    });
+
+    console.log(`✅ Runtime warning sent for device ${deviceId} (${hoursOn}h on, warning #${warningCount + 1})`);
+    return true;
+
+  } catch (error) {
+    console.error(`❌ Error checking runtime warning for device ${deviceId}:`, error);
+    return false;
+  }
+};
+
+/**
+ * NEW: Reset device runtime tracking when device turns OFF
+ * @param {string} deviceId - Device ID
+ */
+const resetDeviceRuntimeTracking = async (deviceId) => {
+  try {
+    await update(ref(database, `Devices/${deviceId}`), {
+      onSince: null,
+      lastWarningAt: null,
+      warningCount: 0
+    });
+    console.log(`🔄 Reset runtime tracking for device ${deviceId}`);
+  } catch (error) {
+    console.error(`❌ Error resetting runtime tracking for device ${deviceId}:`, error);
+  }
+};
+
+/**
+ * NEW: Bulk check runtime warnings for multiple devices
+ * Useful for periodic system-wide checks
+ */
+const bulkCheckRuntimeWarnings = async (deviceIds = []) => {
+  try {
+    console.log(`⚠️ Bulk checking runtime warnings for ${deviceIds.length} devices...`);
+    
+    let checkedCount = 0;
+    let warningsSent = 0;
+    
+    for (const deviceId of deviceIds) {
+      try {
+        // Get device data
+        const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
+        if (!deviceDoc.exists()) continue;
+        
+        const deviceData = deviceDoc.data();
+        const rtdbData = await getDeviceStatus(deviceId);
+        
+        const warningSent = await checkDeviceRuntimeWarning(deviceId, deviceData, rtdbData);
+        
+        checkedCount++;
+        if (warningSent) warningsSent++;
+        
+      } catch (error) {
+        console.error(`❌ Error checking device ${deviceId}:`, error);
+      }
+    }
+    
+    console.log(`✅ Bulk runtime check completed: ${checkedCount} devices checked, ${warningsSent} warnings sent`);
+    return { checkedCount, warningsSent };
+    
+  } catch (error) {
+    console.error('❌ Error in bulk runtime warning check:', error);
+    return { checkedCount: 0, warningsSent: 0 };
+  }
+};
 
 // ==============================================================================
 // USER DATA OPERATIONS
@@ -93,14 +265,12 @@ export const getBuilding = async (buildingId) => {
 export const createBuilding = async (buildingId, buildingData) => {
   try {
     const now = new Date();
-    const dateCreated = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
     
     await setDoc(doc(firestore, 'BUILDING', buildingId), {
       BuildingName: buildingData.name,
       Address: buildingData.address || '',
       Description: buildingData.description || '',
       CreatedAt: serverTimestamp(),
-      DateCreated: dateCreated,
       CreatedBy: buildingData.createdBy
     });
     
@@ -217,12 +387,11 @@ export const getAllLocations = async () => {
 export const createLocation = async (locationId, locationData) => {
   try {
     const now = new Date();
-    const dateCreated = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
     
     await setDoc(doc(firestore, 'LOCATION', locationId), {
       Building: locationData.buildingId,
       LocationName: locationData.name,
-      DateCreated: dateCreated
+      CreatedAt: serverTimestamp(),
     });
     
     return { id: locationId, ...locationData };
@@ -419,8 +588,27 @@ export const getUserAssignedLocations = async (userEmail, buildingId) => {
 };
 
 // ==============================================================================
-// SIMPLIFIED DEVICE OPERATIONS (6 fields only)
+// ENHANCED DEVICE OPERATIONS (with Runtime Warning Integration)
 // ==============================================================================
+
+/**
+ * ENHANCED: Get device status from Real-time Database with runtime warning check
+ */
+const getDeviceStatus = async (deviceId) => {
+  try {
+    const deviceRef = ref(database, `Devices/${deviceId}`);
+    const snapshot = await get(deviceRef);
+    
+    if (snapshot.exists()) {
+      return snapshot.val();
+    } else {
+      return { status: 'OFF' };
+    }
+  } catch (error) {
+    console.error(`Error getting device status for ${deviceId}:`, error);
+    return { status: 'OFF' };
+  }
+};
 
 export const getAllDevices = async () => {
   try {
@@ -430,22 +618,22 @@ export const getAllDevices = async () => {
       ...doc.data()
     }));
     
-    // Get RTDB status for each device
+    // ENHANCED: Get RTDB status for each device with runtime warning checks
     const devicesWithStatus = await Promise.all(
       devices.map(async (device) => {
         try {
-          const rtdbRef = ref(database, `Devices/${device.id}`);
-          const rtdbSnapshot = await get(rtdbRef);
+          const rtdbData = await getDeviceStatus(device.id);
           
-          if (rtdbSnapshot.exists()) {
-            return {
-              ...device,
-              status: rtdbSnapshot.val().status || 'OFF',
-              lastSeen: rtdbSnapshot.val().lastSeen
-            };
-          }
+          // NEW: Check for runtime warnings
+          await checkDeviceRuntimeWarning(device.id, device, rtdbData);
           
-          return { ...device, status: 'OFF' };
+          return {
+            ...device,
+            status: rtdbData.status || 'OFF',
+            lastSeen: rtdbData.lastSeen,
+            onSince: rtdbData.onSince, // NEW
+            warningCount: rtdbData.warningCount || 0 // NEW
+          };
         } catch (err) {
           console.error(`Error getting RTDB status for device ${device.id}:`, err);
           return { ...device, status: 'OFF' };
@@ -468,17 +656,17 @@ export const getDevice = async (deviceId) => {
     
     const deviceData = { id: deviceId, ...deviceDoc.data() };
     
-    // Get RTDB status
+    // ENHANCED: Get RTDB status with runtime warning check
     try {
-      const rtdbRef = ref(database, `Devices/${deviceId}`);
-      const rtdbSnapshot = await get(rtdbRef);
+      const rtdbData = await getDeviceStatus(deviceId);
       
-      if (rtdbSnapshot.exists()) {
-        deviceData.status = rtdbSnapshot.val().status || 'OFF';
-        deviceData.lastSeen = rtdbSnapshot.val().lastSeen;
-      } else {
-        deviceData.status = 'OFF';
-      }
+      // NEW: Check for runtime warnings
+      await checkDeviceRuntimeWarning(deviceId, deviceData, rtdbData);
+      
+      deviceData.status = rtdbData.status || 'OFF';
+      deviceData.lastSeen = rtdbData.lastSeen;
+      deviceData.onSince = rtdbData.onSince; // NEW
+      deviceData.warningCount = rtdbData.warningCount || 0; // NEW
     } catch (err) {
       console.error(`Error getting RTDB status for device ${deviceId}:`, err);
       deviceData.status = 'OFF';
@@ -504,13 +692,17 @@ export const createDevice = async (deviceId, deviceData) => {
     
     await setDoc(doc(firestore, 'DEVICE', deviceId), firestoreData);
     
-    // Create device in RTDB
+    // ENHANCED: Create device in RTDB with runtime tracking fields
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     await set(rtdbRef, {
       status: 'OFF',
       locationId: deviceData.location || '',
-      lastSeen: new Date().toISOString(),
-      createdAt: new Date().toISOString()
+      lastSeen: serverTimestamp,
+      createdAt: serverTimestamp(),
+      // NEW: Runtime tracking fields
+      onSince: null,
+      lastWarningAt: null,
+      warningCount: 0
     });
     
     return { id: deviceId, ...firestoreData };
@@ -557,7 +749,7 @@ export const deleteDevice = async (deviceId) => {
     // Delete from Firestore
     await deleteDoc(doc(firestore, 'DEVICE', deviceId));
     
-    // Delete from RTDB
+    // ENHANCED: Delete from RTDB (includes runtime tracking data)
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     await remove(rtdbRef);
     
@@ -568,26 +760,48 @@ export const deleteDevice = async (deviceId) => {
   }
 };
 
+/**
+ * ENHANCED: Toggle device status with runtime tracking
+ */
 export const toggleDeviceStatus = async (deviceId) => {
   try {
+    console.log(`🔄 Toggling device ${deviceId}...`);
+    
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     const snapshot = await get(rtdbRef);
     
+    let currentStatus = 'OFF';
     if (snapshot.exists()) {
-      const currentStatus = snapshot.val().status;
-      const newStatus = currentStatus === 'ON' ? 'OFF' : 'ON';
-      
-      await update(rtdbRef, {
-        status: newStatus,
-        lastSeen: new Date().toISOString()
-      });
-      
-      return newStatus;
+      currentStatus = snapshot.val().status || 'OFF';
     }
     
-    throw new Error('Device not found in RTDB');
+    const newStatus = currentStatus === 'ON' ? 'OFF' : 'ON';
+    const now = new Date().toISOString();
+    
+    const updateData = {
+      status: newStatus,
+      lastSeen: now
+    };
+
+    // NEW: Handle runtime tracking
+    if (newStatus === 'ON') {
+      // Device turning ON - start tracking
+      updateData.onSince = now;
+      updateData.lastWarningAt = null;
+      updateData.warningCount = 0;
+    } else {
+      // Device turning OFF - reset tracking
+      updateData.onSince = null;
+      updateData.lastWarningAt = null;
+      updateData.warningCount = 0;
+    }
+    
+    await update(rtdbRef, updateData);
+    
+    console.log(`✅ Device ${deviceId} toggled to ${newStatus}`);
+    return newStatus;
   } catch (error) {
-    console.error('Error toggling device status:', error);
+    console.error(`❌ Error toggling device ${deviceId}:`, error);
     throw error;
   }
 };
@@ -653,11 +867,15 @@ export const unclaimDevice = async (deviceId) => {
       AssignedTo: [] // Clear legacy assignments when unclaiming
     });
     
-    // Update RTDB
+    // ENHANCED: Update RTDB and reset runtime tracking
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     await update(rtdbRef, {
       locationId: '',
-      lastSeen: new Date().toISOString()
+      lastSeen: new Date().toISOString(),
+      // NEW: Reset runtime tracking when unclaiming
+      onSince: null,
+      lastWarningAt: null,
+      warningCount: 0
     });
     
     console.log('✅ Device unclaimed successfully');
@@ -690,18 +908,15 @@ export const getUnclaimedDevices = async () => {
     const devicesWithStatus = await Promise.all(
       devices.map(async (device) => {
         try {
-          const rtdbRef = ref(database, `Devices/${device.id}`);
-          const rtdbSnapshot = await get(rtdbRef);
+          const rtdbData = await getDeviceStatus(device.id);
           
-          if (rtdbSnapshot.exists()) {
-            return {
-              ...device,
-              status: rtdbSnapshot.val().status || 'OFF',
-              lastSeen: rtdbSnapshot.val().lastSeen
-            };
-          }
-          
-          return { ...device, status: 'OFF' };
+          return {
+            ...device,
+            status: rtdbData.status || 'OFF',
+            lastSeen: rtdbData.lastSeen,
+            onSince: rtdbData.onSince,
+            warningCount: rtdbData.warningCount || 0
+          };
         } catch (err) {
           console.error(`Error getting RTDB status for device ${device.id}:`, err);
           return { ...device, status: 'OFF' };
@@ -717,7 +932,7 @@ export const getUnclaimedDevices = async () => {
 };
 
 /**
- * Get devices in a specific location
+ * ENHANCED: Get devices in a specific location with runtime warning checks
  * @param {string} locationId - Location ID
  * @returns {Promise<Array>} Array of devices in the location
  */
@@ -735,22 +950,22 @@ export const getDevicesByLocation = async (locationId) => {
       ...doc.data()
     }));
     
-    // Get RTDB status for each device
+    // ENHANCED: Get RTDB status for each device with runtime warning checks
     const devicesWithStatus = await Promise.all(
       devices.map(async (device) => {
         try {
-          const rtdbRef = ref(database, `Devices/${device.id}`);
-          const rtdbSnapshot = await get(rtdbRef);
+          const rtdbData = await getDeviceStatus(device.id);
           
-          if (rtdbSnapshot.exists()) {
-            return {
-              ...device,
-              status: rtdbSnapshot.val().status || 'OFF',
-              lastSeen: rtdbSnapshot.val().lastSeen
-            };
-          }
+          // NEW: Check for runtime warnings
+          await checkDeviceRuntimeWarning(device.id, device, rtdbData);
           
-          return { ...device, status: 'OFF' };
+          return {
+            ...device,
+            status: rtdbData.status || 'OFF',
+            lastSeen: rtdbData.lastSeen,
+            onSince: rtdbData.onSince,
+            warningCount: rtdbData.warningCount || 0
+          };
         } catch (err) {
           console.error(`Error getting RTDB status for device ${device.id}:`, err);
           return { ...device, status: 'OFF' };
@@ -780,12 +995,21 @@ export const moveDeviceToLocation = async (deviceId, newLocationId) => {
       Location: newLocationId
     });
     
-    // Update location in RTDB
+    // ENHANCED: Update location in RTDB and reset runtime tracking if moving
     const rtdbRef = ref(database, `Devices/${deviceId}`);
-    await update(rtdbRef, {
+    const updateData = {
       locationId: newLocationId || '',
       lastSeen: new Date().toISOString()
-    });
+    };
+    
+    // NEW: Reset runtime tracking when moving device
+    if (newLocationId) {
+      updateData.onSince = null;
+      updateData.lastWarningAt = null;
+      updateData.warningCount = 0;
+    }
+    
+    await update(rtdbRef, updateData);
     
     console.log('✅ Device moved successfully');
     return true;
@@ -920,11 +1144,16 @@ export const unassignDeviceFromUser = async (deviceId, userEmail) => {
 };
 
 // ==============================================================================
-// BULK OPERATIONS (Enhanced for Location-Based Access)
+// ENHANCED BULK OPERATIONS (with Runtime Warning Integration)
 // ==============================================================================
 
+/**
+ * ENHANCED: Get user devices and locations with runtime warning checks
+ */
 export const getUserDevicesAndLocations = async (userEmail) => {
   try {
+    console.log('🔍 Fetching devices and locations for user:', userEmail);
+
     // Get user's building roles
     const userBuildingsQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -977,8 +1206,10 @@ export const getUserDevicesAndLocations = async (userEmail) => {
       }
     }
     
-    // Get all devices
-    const devices = await getAllDevices();
+    // ENHANCED: Get all devices with runtime warning checks
+    const devices = await getAllDevices(); // This now includes runtime warning checks
+    
+    console.log(`📱 Found ${devices.length} devices and ${locations.length} locations`);
     
     return { devices, locations, buildingIds, userLocationAssignments };
   } catch (error) {
@@ -1193,19 +1424,20 @@ export default {
   createLocation,
   deleteLocation,
   
-  // Location-based user assignments (NEW)
+  // Location-based user assignments
   assignUserToLocations,
   addLocationToUser,
   removeLocationFromUser,
   getUserAssignedLocations,
   
-  // Device operations (simplified)
+  // ENHANCED: Device operations (with runtime warning integration)
   getAllDevices,
   getDevice,
   createDevice,
   updateDevice,
   deleteDevice,
   toggleDeviceStatus,
+  getDeviceStatus, // NEW: Exposed for external use
   
   // Device claiming operations
   claimDevice,
@@ -1223,7 +1455,7 @@ export default {
   assignDeviceToUser,
   unassignDeviceFromUser,
   
-  // Bulk operations
+  // ENHANCED: Bulk operations (with runtime warning integration)
   getUserDevicesAndLocations,
   
   // Validation
@@ -1235,5 +1467,10 @@ export default {
   validateUserHasLocationAccess,
   
   // Migration utilities
-  migrateLegacyDeviceAssignments
+  migrateLegacyDeviceAssignments,
+  
+  // NEW: Runtime warning operations
+  checkDeviceRuntimeWarning,
+  resetDeviceRuntimeTracking,
+  bulkCheckRuntimeWarnings
 };

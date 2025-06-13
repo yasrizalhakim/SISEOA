@@ -17,7 +17,8 @@ import {
   where, 
   getDoc,
   updateDoc,
-  deleteDoc 
+  deleteDoc, 
+  serverTimestamp
 } from 'firebase/firestore';
 import { ref, set, update, remove } from 'firebase/database';
 import { 
@@ -451,8 +452,8 @@ const registerDevice = useCallback(async (deviceId) => {
   const rtdbRef = ref(database, `Devices/${deviceId}`);
   await set(rtdbRef, {
     status: 'OFF',
-    lastSeen: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
+    lastSeen: serverTimestamp(),
+    createdAt: serverTimestamp(),
     locationId: formData.location || ''
   });
 

@@ -1,4 +1,4 @@
-// src/components/Reports/reportUtils.js - Energy Report Calculations and Utilities
+// src/components/Reports/reportUtils.js - Updated Energy Report Calculations and Utilities
 
 // Malaysia TNB Tariff Rates for Residential/Small Office (RM per kWh)
 export const MALAYSIA_ENERGY_RATES = {
@@ -223,48 +223,45 @@ export const formatPercentage = (value) => {
 };
 
 /**
- * Generate date range string for report period
- * @param {string} period - Period type ('week', 'month', 'year')
- * @param {Date} baseDate - Base date for calculation
+ * Generate date range string for report period from custom dates
+ * @param {Date} startDate - Start date
+ * @param {Date} endDate - End date
  * @returns {Object} Start and end dates with formatted string
  */
-export const getReportDateRange = (period, baseDate = new Date()) => {
-  const date = new Date(baseDate);
-  let startDate, endDate, periodText;
-
-  switch (period) {
-    case 'week':
-      startDate = new Date(date);
-      startDate.setDate(date.getDate() - date.getDay() - 6); // Last week
-      endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 6);
-      periodText = `Week of ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`;
-      break;
-
-    case 'month':
-      startDate = new Date(date.getFullYear(), date.getMonth() - 1, 1); // Last month
-      endDate = new Date(date.getFullYear(), date.getMonth(), 0);
-      periodText = `${startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
-      break;
-
-    case 'year':
-      startDate = new Date(date.getFullYear() - 1, 0, 1); // Last year
-      endDate = new Date(date.getFullYear() - 1, 11, 31);
-      periodText = `Year ${startDate.getFullYear()}`;
-      break;
-
-    default:
-      startDate = new Date(date);
-      startDate.setDate(date.getDate() - 7);
-      endDate = new Date(date);
-      periodText = `Last 7 days`;
+export const getReportDateRange = (startDate, endDate) => {
+  if (!startDate || !endDate) {
+    // Fallback to default range if dates not provided
+    const defaultEnd = new Date();
+    const defaultStart = new Date();
+    defaultStart.setDate(defaultStart.getDate() - 6);
+    
+    return {
+      startDate: defaultStart,
+      endDate: defaultEnd,
+      periodText: `${defaultStart.toLocaleDateString()} - ${defaultEnd.toLocaleDateString()}`,
+      formatted: `${defaultStart.toLocaleDateString()} to ${defaultEnd.toLocaleDateString()}`
+    };
+  }
+  
+  const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+  let periodText;
+  
+  if (totalDays === 1) {
+    periodText = `${startDate.toLocaleDateString()}`;
+  } else if (totalDays <= 7) {
+    periodText = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()} (${totalDays} days)`;
+  } else if (totalDays <= 31) {
+    periodText = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()} (${totalDays} days)`;
+  } else {
+    periodText = `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()} (${Math.floor(totalDays / 30)} months)`;
   }
 
   return {
     startDate,
     endDate,
     periodText,
-    formatted: `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`
+    formatted: `${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`,
+    totalDays
   };
 };
 
@@ -272,15 +269,21 @@ export const getReportDateRange = (period, baseDate = new Date()) => {
  * Calculate energy efficiency rating
  * @param {number} totalUsage - Total energy usage in kWh
  * @param {number} totalDevices - Number of devices
- * @param {string} period - Time period
+ * @param {number} totalDays - Number of days in period
  * @returns {Object} Efficiency rating information
  */
-export const calculateEfficiencyRating = (totalUsage, totalDevices, period) => {
-  if (totalDevices === 0) return { rating: 'N/A', score: 0, description: 'No devices to analyze' };
+export const calculateEfficiencyRating = (totalUsage, totalDevices, totalDays) => {
+  if (totalDevices === 0 || totalDays === 0) {
+    return { 
+      rating: 'N/A', 
+      score: 0, 
+      description: 'No devices to analyze',
+      usagePerDevicePerDay: 0
+    };
+  }
 
   // Calculate usage per device per day
-  const periodDays = period === 'week' ? 7 : period === 'month' ? 30 : 365;
-  const usagePerDevicePerDay = totalUsage / (totalDevices * periodDays);
+  const usagePerDevicePerDay = totalUsage / (totalDevices * totalDays);
 
   let rating, score, description;
 
@@ -306,7 +309,12 @@ export const calculateEfficiencyRating = (totalUsage, totalDevices, period) => {
     description = 'Inefficient energy usage';
   }
 
-  return { rating, score, description, usagePerDevicePerDay };
+  return { 
+    rating, 
+    score, 
+    description, 
+    usagePerDevicePerDay: Number(usagePerDevicePerDay.toFixed(6))
+  };
 };
 
 /**
@@ -336,10 +344,10 @@ export const calculateSavingsPotential = (reportData) => {
   const potentialCarbonSavings = potentialSavings * MALAYSIA_CARBON_FACTOR;
   
   return {
-    energySavings: potentialSavings,
-    costSavings: potentialCostSavings,
-    carbonSavings: potentialCarbonSavings,
-    percentage: summary.totalUsage > 0 ? (potentialSavings / summary.totalUsage * 100) : 0
+    energySavings: Number(potentialSavings.toFixed(6)),
+    costSavings: Number(potentialCostSavings.toFixed(2)),
+    carbonSavings: Number(potentialCarbonSavings.toFixed(2)),
+    percentage: summary.totalUsage > 0 ? Number(((potentialSavings / summary.totalUsage) * 100).toFixed(1)) : 0
   };
 };
 

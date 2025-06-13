@@ -1,4 +1,4 @@
-// src/components/dashboard/EnergyOverview.js - Simple Dashboard Energy Overview
+// src/components/dashboard/EnergyOverview.js - Simple Dashboard Energy Overview (Updated to work with new service)
 
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
@@ -20,6 +20,9 @@ const EnergyOverview = ({
     try {
       setLoading(true);
       
+      // Get default 7-day date range
+      const { startDate, endDate } = energyUsageService.getDefaultDateRange();
+      
       let data = [];
       let summaryData = null;
 
@@ -27,12 +30,12 @@ const EnergyOverview = ({
         // Building energy data
         const buildingDeviceIds = await energyUsageService.getBuildingDeviceIds(buildingId);
         if (buildingDeviceIds.length > 0) {
-          data = await energyUsageService.getBuildingEnergyUsage(buildingId, buildingDeviceIds, 'week');
-          summaryData = await energyUsageService.getBuildingEnergyUsageSummary(buildingId, 'week');
+          data = await energyUsageService.getBuildingEnergyUsage(buildingId, buildingDeviceIds, startDate, endDate);
+          summaryData = await energyUsageService.getBuildingEnergyUsageSummary(buildingId, startDate, endDate);
         }
       } else if (deviceIds && Array.isArray(deviceIds) && deviceIds.length > 0) {
         // Custom device list
-        data = await energyUsageService.getBuildingEnergyUsage('custom', deviceIds, 'week');
+        data = await energyUsageService.getBuildingEnergyUsage('custom', deviceIds, startDate, endDate);
         
         if (data.length > 0) {
           const totalUsage = data.reduce((sum, item) => sum + item.usage, 0);
@@ -47,17 +50,12 @@ const EnergyOverview = ({
           };
         }
       } else {
-        // Fallback - use sample data for demo
-        console.log('📊 Using sample data for energy overview');
-        data = energyUsageService.getSampleEnergyData('week');
-        
-        const totalUsage = data.reduce((sum, item) => sum + item.usage, 0);
-        summaryData = {
-          totalUsage: Number(totalUsage.toFixed(6)),
-          peakUsage: Math.max(...data.map(item => item.usage)),
-          activeDevices: 3,
-          daysWithData: 7
-        };
+        // No data available - show empty state
+        console.log('📊 No building or device IDs provided for energy overview');
+        setEnergyData([]);
+        setSummary(null);
+        setLoading(false);
+        return;
       }
 
       // Format data for simple chart (last 7 days)
@@ -73,21 +71,9 @@ const EnergyOverview = ({
     } catch (error) {
       console.error('Error fetching energy overview:', error);
       
-      // Fallback to sample data
-      const sampleData = energyUsageService.getSampleEnergyData('week');
-      const chartData = sampleData.slice(-7).map(item => ({
-        day: item.date.toLocaleDateString('en-US', { weekday: 'short' }),
-        usage: Number(item.usage.toFixed(6)),
-        fullDate: item.date.toLocaleDateString()
-      }));
-      
-      setEnergyData(chartData);
-      setSummary({
-        totalUsage: Number(chartData.reduce((sum, item) => sum + item.usage, 0).toFixed(6)),
-        peakUsage: Math.max(...chartData.map(item => item.usage)),
-        activeDevices: 3,
-        daysWithData: 7
-      });
+      // Show empty state on error
+      setEnergyData([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }

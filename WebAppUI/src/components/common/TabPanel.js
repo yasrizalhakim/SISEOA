@@ -1,5 +1,5 @@
-// src/components/common/TabPanel.js
-import React, { useState } from 'react';
+// src/components/common/TabPanel.js - Refactored (minimal changes needed)
+import React, { useState, useCallback } from 'react';
 import './TabPanel.css';
 
 /**
@@ -11,9 +11,9 @@ import './TabPanel.css';
 const TabPanel = ({ tabs, defaultTab = 0 }) => {
   const [activeTab, setActiveTab] = useState(defaultTab);
 
-  const handleTabClick = (index) => {
+  const handleTabClick = useCallback((index) => {
     setActiveTab(index);
-  };
+  }, []);
 
   return (
     <div className="tab-panel">

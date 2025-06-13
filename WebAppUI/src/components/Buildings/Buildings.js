@@ -1,4 +1,5 @@
-// src/components/Buildings/Buildings.js - Cross-Platform Compatible
+// src/components/Buildings/Buildings.js - Refactored with component consolidation
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MdEdit, MdAdd, MdRefresh, MdSearch, MdAdminPanelSettings } from 'react-icons/md';
@@ -8,7 +9,6 @@ import { isSystemAdmin } from '../../utils/helpers';
 import './Buildings.css';
 
 const Buildings = () => {
-  // State Management
   const [buildings, setBuildings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -18,7 +18,6 @@ const Buildings = () => {
   
   const navigate = useNavigate();
   
-  // User Context
   const userEmail = useMemo(() => 
     localStorage.getItem('userEmail') || '', 
     []
@@ -65,12 +64,6 @@ const Buildings = () => {
         }));
         
         console.log('🏢 SystemAdmin found', buildingsData.length, 'total buildings in system');
-        
-        buildingsData.sort((a, b) => {
-          const nameA = a.BuildingName || a.id;
-          const nameB = b.BuildingName || b.id;
-          return nameA.localeCompare(nameB);
-        });
         
       } else {
         console.log('👨‍👩‍👧‍👦 Regular user - fetching user-specific buildings');
@@ -123,12 +116,14 @@ const Buildings = () => {
         );
 
         buildingsData = buildingsData.filter(building => building !== null);
-        buildingsData.sort((a, b) => {
-          const nameA = a.BuildingName || a.id;
-          const nameB = b.BuildingName || b.id;
-          return nameA.localeCompare(nameB);
-        });
       }
+
+      // Sort buildings alphabetically
+      buildingsData.sort((a, b) => {
+        const nameA = a.BuildingName || a.id;
+        const nameB = b.BuildingName || b.id;
+        return nameA.localeCompare(nameB);
+      });
 
       console.log('🏢 Valid buildings loaded:', buildingsData.length);
       setBuildings(buildingsData);
@@ -141,16 +136,6 @@ const Buildings = () => {
       setLoading(false);
     }
   }, [userEmail, checkSystemAdmin]);
-
-  // Initial load
-  useEffect(() => {
-    fetchBuildings();
-  }, [fetchBuildings]);
-
-  // Manual refresh handler
-  const handleRefresh = useCallback(() => {
-    fetchBuildings();
-  }, [fetchBuildings]);
 
   // Filter buildings by search term
   const filteredBuildings = useMemo(() => {
@@ -173,11 +158,21 @@ const Buildings = () => {
     navigate(`/buildings/detail/${buildingId}`);
   }, [navigate]);
 
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
+
   // Permission checks
   const canAddBuildings = useMemo(() => 
     isUserSystemAdmin || buildings.length >= 0, 
     [isUserSystemAdmin, buildings.length]
   );
+
+  // Initial load
+  useEffect(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
 
   // Loading state
   if (loading) {
@@ -196,7 +191,6 @@ const Buildings = () => {
         refreshing={refreshing}
         isSystemAdmin={isUserSystemAdmin}
         buildingsCount={buildings.length}
-        filteredCount={filteredBuildings.length}
       />
 
       {error && (
@@ -252,13 +246,6 @@ const BuildingsHeader = ({
         alignItems: 'flex-start' 
       }}>
         <span>My Buildings ({buildingsCount})</span>
-        <span style={{ 
-          fontSize: '0.75rem', 
-          color: '#6b7280', 
-          fontWeight: '400' 
-        }}>
-          Different roles across buildings
-        </span>
       </span>
     );
   }, [isSystemAdmin, buildingsCount]);
@@ -398,10 +385,13 @@ const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
         </div>
         
         <div className="building-details">
-          <div className="detail-item">
-            <span className="detail-label">ID:</span>
-            <span className="detail-value">{building.id}</span>
-          </div>
+          {/* Completely hide Building ID for children role */}
+          {building.userRoleInBuilding !== 'children' || isSystemAdmin && (
+            <div className="detail-item">
+              <span className="detail-label">ID:</span>
+              <span className="detail-value">{building.id}</span>
+            </div>
+          )}
           
           {building.Address && (
             <div className="detail-item">
@@ -415,12 +405,10 @@ const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
             <span className="detail-value">{formatDate(building.DateCreated || building.CreatedAt)}</span>
           </div>
 
-          {building.CreatedBy && building.userRoleInBuilding !== 'parent' && (
-            <div className="detail-item">
-              <span className="detail-label">Created by:</span>
-              <span className="detail-value">{building.CreatedBy}</span>
-            </div>
-          )}
+          <div className="detail-item">
+            <span className="detail-label">Created by:</span>
+            <span className="detail-value">{building.CreatedBy}</span>
+          </div>
           
           {building.Description && (
             <div className="detail-item">

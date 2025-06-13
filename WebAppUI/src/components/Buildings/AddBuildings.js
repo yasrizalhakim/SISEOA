@@ -1,4 +1,5 @@
-// src/components/Buildings/AddBuilding.js - Cross-Platform Compatible
+// src/components/Buildings/AddBuilding.js - Refactored with component consolidation
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdClose } from 'react-icons/md';
@@ -295,25 +296,24 @@ const AddBuilding = () => {
       setSuccess(true);
 
       try {
-    await notifyParentBuildingCreated(
-      userEmail,
-      formData.buildingName,
-      formData.buildingId
-    );
-    console.log('📢 Building creation notification sent to parent');
-  } catch (notificationError) {
-    console.error('❌ Failed to send building creation notification:', notificationError);
-    // Don't fail the building creation if notification fails
-  }
-  
-  setTimeout(() => {
-    navigate('/buildings');
-  }, 1500);
-  
-} catch (err) {
-  console.error('Error adding building:', err);
-  setError('Failed to add building: ' + err.message);
-} finally {
+        await notifyParentBuildingCreated(
+          userEmail,
+          formData.buildingName,
+          formData.buildingId
+        );
+        console.log('📢 Building creation notification sent to parent');
+      } catch (notificationError) {
+        console.error('❌ Failed to send building creation notification:', notificationError);
+      }
+      
+      setTimeout(() => {
+        navigate('/buildings');
+      }, 1500);
+      
+    } catch (err) {
+      console.error('Error adding building:', err);
+      setError('Failed to add building: ' + err.message);
+    } finally {
       setLoading(false);
     }
   }, [
@@ -331,202 +331,340 @@ const AddBuilding = () => {
     navigate('/buildings');
   }, [navigate]);
   
-  // Device Status Indicator
-  const DeviceStatusIndicator = ({ deviceId, isChecking, exists, available }) => {
-    if (isChecking) {
-      return <span className="checking-message">Checking...</span>;
-    }
-    
-    if (!deviceId) return null;
-    
-    if (!exists) {
-      return <span className="device-invalid">Device unavailable</span>;
-    }
-    
-    if (exists && available) {
-      return <span className="device-valid">Device available</span>;
-    }
-    
-    if (exists && !available) {
-      return <span className="device-invalid">Device unavailable</span>;
-    }
-    
-    return null;
-  };
-  
-  // Location Input Row Component
-  const LocationInputRow = ({ location, index, onChange, onRemove, disabled, canRemove }) => (
-    <div className="location-input-row">
-      <input
-        type="text"
-        value={location.name}
-        onChange={(e) => onChange(index, e.target.value)}
-        placeholder="Enter location name"
-        disabled={disabled}
-        className={location.name ? 'input-valid' : ''}
-      />
-      <button 
-        type="button"
-        className="remove-location-btn"
-        onClick={() => onRemove(index)}
-        disabled={!canRemove}
-        aria-label="Remove location"
-      >
-        <MdClose />
-      </button>
-    </div>
-  );
-  
   return (
     <div className="add-building">
-      <div className="building-header">
-        <button className="back-button" onClick={handleBack} type="button">
-          <MdArrowBack /> Back
-        </button>
-        <h2>Add New Building</h2>
-      </div>
+      <BuildingHeader onBack={handleBack} />
       
-      {error && <div className="error-message">{error}</div>}
-      {success && <div className="success-message">Building added successfully</div>}
+      <MessageSection error={error} success={success} />
       
-      <form className="building-form" onSubmit={(e) => e.preventDefault()}>
-        <div className="device-requirement-banner">
-          <h4>📱 Device ID Required</h4>
-          <p>
-            A valid device ID is required to create a building. This device will be assigned to your new building. 
-            By creating a building, you become a parent/owner of that building.
-          </p>
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="deviceId">Device ID *</label>
-          <div className="device-input-container">
-            <input 
-              id="deviceId"
-              type="text" 
-              name="deviceId" 
-              value={formData.deviceId} 
-              onChange={handleChange}
-              placeholder="Enter device ID"
-              disabled={loading}
-              className={deviceExists && deviceAvailable ? 'input-valid' : ''}
-              autoComplete="off"
-            />
-            <DeviceStatusIndicator
-              deviceId={formData.deviceId}
-              isChecking={isCheckingDevice}
-              exists={deviceExists}
-              available={deviceAvailable}
-            />
-          </div>
-          <small>This device will be assigned to the first location in your building</small>
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="buildingId">Building ID *</label>
-          <input 
-            id="buildingId"
-            type="text" 
-            name="buildingId" 
-            value={formData.buildingId} 
-            onChange={handleChange}
-            placeholder="Enter building ID"
-            disabled={loading}
-            className={formData.buildingId && !buildingExists ? 'input-valid' : ''}
-            autoComplete="off"
-          />
-          <small>Building ID must be unique and cannot be changed later</small>
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="buildingName">Building Name *</label>
-          <input 
-            id="buildingName"
-            type="text" 
-            name="buildingName" 
-            value={formData.buildingName} 
-            onChange={handleChange}
-            placeholder="Enter building name"
-            disabled={loading}
-            className={formData.buildingName ? 'input-valid' : ''}
-            autoComplete="off"
-          />
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="buildingAddress">Address</label>
-          <input 
-            id="buildingAddress"
-            type="text" 
-            name="buildingAddress" 
-            value={formData.buildingAddress} 
-            onChange={handleChange}
-            placeholder="Enter building address (optional)"
-            disabled={loading}
-            autoComplete="street-address"
-          />
-        </div>
-        
-        <div className="form-group">
-          <label htmlFor="buildingDescription">Description</label>
-          <textarea 
-            id="buildingDescription"
-            name="buildingDescription" 
-            value={formData.buildingDescription} 
-            onChange={handleChange}
-            placeholder="Enter building description (optional)"
-            disabled={loading}
-            rows="3"
-          />
-        </div>
-        
-        <div className="locations-section">
-          <div className="section-header">
-            <h3>Locations *</h3>
-            <small>At least one location is required. Your device will be assigned to the first location.</small>
-          </div>
-          
-          {locations.map((location, index) => (
-            <LocationInputRow
-              key={index}
-              location={location}
-              index={index}
-              onChange={handleLocationChange}
-              onRemove={removeLocationField}
-              disabled={loading}
-              canRemove={locations.length > 1}
-            />
-          ))}
-          
-          <button 
-            type="button"
-            className="add-location-btn"
-            onClick={addLocationField}
-            disabled={loading}
-          >
-            <MdAdd /> Add Another Location
-          </button>
-        </div>
-        
-        <div className="user-access-section">
-          <h3>Building Access</h3>
-          <div className="user-access-info">
-            <p>You will automatically become the parent/owner of this building.</p>
-            <p>As a parent, you can add children users to access this building and its devices.</p>
-          </div>
-        </div>
-        
-        <button 
-          type="button"
-          className="save-button"
-          onClick={handleSave}
-          disabled={loading || !isFormValid}
-        >
-          <MdAdd /> {loading ? 'Adding...' : 'Add Building'}
-        </button>
-      </form>
+      <BuildingForm
+        formData={formData}
+        locations={locations}
+        deviceExists={deviceExists}
+        deviceAvailable={deviceAvailable}
+        isCheckingDevice={isCheckingDevice}
+        buildingExists={buildingExists}
+        loading={loading}
+        isFormValid={isFormValid}
+        onChange={handleChange}
+        onLocationChange={handleLocationChange}
+        onAddLocation={addLocationField}
+        onRemoveLocation={removeLocationField}
+        onSave={handleSave}
+      />
     </div>
   );
 };
+
+// Header Component
+const BuildingHeader = ({ onBack }) => (
+  <div className="building-header">
+    <button className="back-button" onClick={onBack} type="button">
+      <MdArrowBack /> Back
+    </button>
+    <h2>Add New Building</h2>
+  </div>
+);
+
+// Message Section Component
+const MessageSection = ({ error, success }) => (
+  <>
+    {error && <div className="error-message">{error}</div>}
+    {success && <div className="success-message">Building added successfully</div>}
+  </>
+);
+
+// Main Form Component
+const BuildingForm = ({
+  formData,
+  locations,
+  deviceExists,
+  deviceAvailable,
+  isCheckingDevice,
+  buildingExists,
+  loading,
+  isFormValid,
+  onChange,
+  onLocationChange,
+  onAddLocation,
+  onRemoveLocation,
+  onSave
+}) => (
+  <form className="building-form" onSubmit={(e) => e.preventDefault()}>
+    <DeviceRequirementBanner />
+    
+    <DeviceIdInput
+      value={formData.deviceId}
+      deviceExists={deviceExists}
+      deviceAvailable={deviceAvailable}
+      isCheckingDevice={isCheckingDevice}
+      loading={loading}
+      onChange={onChange}
+    />
+    
+    <BuildingIdInput
+      value={formData.buildingId}
+      buildingExists={buildingExists}
+      loading={loading}
+      onChange={onChange}
+    />
+    
+    <FormField
+      id="buildingName"
+      name="buildingName"
+      label="Building Name *"
+      value={formData.buildingName}
+      placeholder="Enter building name"
+      disabled={loading}
+      onChange={onChange}
+      isValid={!!formData.buildingName}
+    />
+    
+    <FormField
+      id="buildingAddress"
+      name="buildingAddress"
+      label="Address"
+      value={formData.buildingAddress}
+      placeholder="Enter building address (optional)"
+      disabled={loading}
+      onChange={onChange}
+      autoComplete="street-address"
+    />
+    
+    <FormField
+      id="buildingDescription"
+      name="buildingDescription"
+      label="Description"
+      type="textarea"
+      value={formData.buildingDescription}
+      placeholder="Enter building description (optional)"
+      disabled={loading}
+      onChange={onChange}
+      rows={3}
+    />
+    
+    <LocationsSection
+      locations={locations}
+      loading={loading}
+      onChange={onLocationChange}
+      onAdd={onAddLocation}
+      onRemove={onRemoveLocation}
+    />
+    
+    <UserAccessSection />
+    
+    <SubmitButton
+      loading={loading}
+      isFormValid={isFormValid}
+      onSave={onSave}
+    />
+  </form>
+);
+
+// Device Requirement Banner
+const DeviceRequirementBanner = () => (
+  <div className="device-requirement-banner">
+    <h4>📱 Device ID Required</h4>
+    <p>
+      A valid device ID is required to create a building. This device will be assigned to your new building. 
+      By creating a building, you become a parent/owner of that building.
+    </p>
+  </div>
+);
+
+// Device ID Input Component
+const DeviceIdInput = ({ 
+  value, 
+  deviceExists, 
+  deviceAvailable, 
+  isCheckingDevice, 
+  loading, 
+  onChange 
+}) => (
+  <div className="form-group">
+    <label htmlFor="deviceId">Device ID *</label>
+    <div className="device-input-container">
+      <input 
+        id="deviceId"
+        type="text" 
+        name="deviceId" 
+        value={value} 
+        onChange={onChange}
+        placeholder="Enter device ID"
+        disabled={loading}
+        className={deviceExists && deviceAvailable ? 'input-valid' : ''}
+        autoComplete="off"
+      />
+      <DeviceStatusIndicator
+        deviceId={value}
+        isChecking={isCheckingDevice}
+        exists={deviceExists}
+        available={deviceAvailable}
+      />
+    </div>
+    <small>This device will be assigned to the first location in your building</small>
+  </div>
+);
+
+// Device Status Indicator
+const DeviceStatusIndicator = ({ deviceId, isChecking, exists, available }) => {
+  if (isChecking) {
+    return <span className="checking-message">Checking...</span>;
+  }
+  
+  if (!deviceId) return null;
+  
+  if (!exists) {
+    return <span className="device-invalid">Device unavailable</span>;
+  }
+  
+  if (exists && available) {
+    return <span className="device-valid">Device available</span>;
+  }
+  
+  if (exists && !available) {
+    return <span className="device-invalid">Device unavailable</span>;
+  }
+  
+  return null;
+};
+
+// Building ID Input Component
+const BuildingIdInput = ({ value, buildingExists, loading, onChange }) => (
+  <div className="form-group">
+    <label htmlFor="buildingId">Building ID *</label>
+    <input 
+      id="buildingId"
+      type="text" 
+      name="buildingId" 
+      value={value} 
+      onChange={onChange}
+      placeholder="Enter building ID"
+      disabled={loading}
+      className={value && !buildingExists ? 'input-valid' : ''}
+      autoComplete="off"
+    />
+    <small>Building ID must be unique and cannot be changed later</small>
+  </div>
+);
+
+// Generic Form Field Component
+const FormField = ({ 
+  id, 
+  name, 
+  label, 
+  type = "text", 
+  value, 
+  placeholder, 
+  disabled, 
+  onChange, 
+  isValid, 
+  rows, 
+  autoComplete 
+}) => (
+  <div className="form-group">
+    <label htmlFor={id}>{label}</label>
+    {type === 'textarea' ? (
+      <textarea 
+        id={id}
+        name={name} 
+        value={value} 
+        onChange={onChange}
+        placeholder={placeholder}
+        disabled={disabled}
+        rows={rows}
+      />
+    ) : (
+      <input 
+        id={id}
+        type={type} 
+        name={name} 
+        value={value} 
+        onChange={onChange}
+        placeholder={placeholder}
+        disabled={disabled}
+        className={isValid ? 'input-valid' : ''}
+        autoComplete={autoComplete}
+      />
+    )}
+  </div>
+);
+
+// Locations Section Component
+const LocationsSection = ({ locations, loading, onChange, onAdd, onRemove }) => (
+  <div className="locations-section">
+    <div className="section-header">
+      <h3>Locations *</h3>
+      <small>At least one location is required. Your device will be assigned to the first location.</small>
+    </div>
+    
+    {locations.map((location, index) => (
+      <LocationInputRow
+        key={index}
+        location={location}
+        index={index}
+        disabled={loading}
+        canRemove={locations.length > 1}
+        onChange={onChange}
+        onRemove={onRemove}
+      />
+    ))}
+    
+    <button 
+      type="button"
+      className="add-location-btn"
+      onClick={onAdd}
+      disabled={loading}
+    >
+      <MdAdd /> Add Another Location
+    </button>
+  </div>
+);
+
+// Location Input Row Component
+const LocationInputRow = ({ location, index, disabled, canRemove, onChange, onRemove }) => (
+  <div className="location-input-row">
+    <input
+      type="text"
+      value={location.name}
+      onChange={(e) => onChange(index, e.target.value)}
+      placeholder="Enter location name"
+      disabled={disabled}
+      className={location.name ? 'input-valid' : ''}
+    />
+    <button 
+      type="button"
+      className="remove-location-btn"
+      onClick={() => onRemove(index)}
+      disabled={!canRemove}
+      aria-label="Remove location"
+    >
+      <MdClose />
+    </button>
+  </div>
+);
+
+// User Access Section Component
+const UserAccessSection = () => (
+  <div className="user-access-section">
+    <h3>Building Access</h3>
+    <div className="user-access-info">
+      <p>You will automatically become the parent/owner of this building.</p>
+      <p>As a parent, you can add children users to access this building and its devices.</p>
+    </div>
+  </div>
+);
+
+// Submit Button Component
+const SubmitButton = ({ loading, isFormValid, onSave }) => (
+  <button 
+    type="button"
+    className="save-button"
+    onClick={onSave}
+    disabled={loading || !isFormValid}
+  >
+    <MdAdd /> {loading ? 'Adding...' : 'Add Building'}
+  </button>
+);
 
 export default AddBuilding;

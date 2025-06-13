@@ -1,464 +1,402 @@
-// src/components/common/EnergyChart.js - Fixed Energy Usage Chart Component
+// src/components/common/EnergyChart.js - Simplified with date range controls and bar chart only
 
-import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { MdRefresh, MdInfo, MdBolt, MdTrendingUp } from 'react-icons/md';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { MdDateRange, MdBarChart, MdRefresh} from 'react-icons/md';
+import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
 import energyUsageService from '../../services/energyUsageService';
 import './EnergyChart.css';
 
 const EnergyChart = ({ 
   deviceId = null, 
-  buildingId = null, 
-  deviceIds = null,
-  title = "Energy Consumption",
+  deviceIds = null, 
+  buildingId = null,
+  title = 'Energy Usage', 
   showControls = true,
-  defaultFilter = 'day',
-  height = 300 
+  height = 300
 }) => {
-  const [activeView, setActiveView] = useState(defaultFilter);
-  // Removed chartType state - using only bar charts now
+  // State management
   const [energyData, setEnergyData] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastUpdateTime, setLastUpdateTime] = useState(null);
+  
+  // Date range controls - default to last 7 days
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6); // 7 days ago
+    return energyUsageService.formatDateForInput(date);
+  });
+  
+  const [endDate, setEndDate] = useState(() => {
+    const date = new Date();
+    return energyUsageService.formatDateForInput(date);
+  });
+  
+  // Determine chart mode
+  const chartMode = useMemo(() => {
+    if (deviceId) return 'device';
+    if (deviceIds || buildingId) return 'building';
+    return 'unknown';
+  }, [deviceId, deviceIds, buildingId]);
+
+  // Get formatted date range for title
+  const dateRangeTitle = useMemo(() => {
+    if (!startDate || !endDate) return title;
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    const formatDate = (date) => {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: start.getFullYear() !== end.getFullYear() ? 'numeric' : undefined
+      });
+    };
+    
+    return `${title} (${formatDate(start)} - ${formatDate(end)})`;
+  }, [title, startDate, endDate]);
+
+  // Calculate date range
+  const getDateRange = useCallback(() => {
+    const start = energyUsageService.parseDateFromInput(startDate);
+    const end = energyUsageService.parseDateFromInput(endDate);
+    
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    
+    return { startDate: start, endDate: end };
+  }, [startDate, endDate]);
 
   // Fetch energy data
-  const fetchEnergyData = async () => {
-    if (!deviceId && !buildingId && !deviceIds) {
-      console.log('❌ No device or building ID provided');
-      return;
-    }
-
+  const fetchEnergyData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-
+      
+      const { startDate: start, endDate: end } = getDateRange();
+      
+      console.log('📊 Fetching energy data:', {
+        mode: chartMode,
+        deviceId,
+        deviceIds,
+        buildingId,
+        startDate: start.toISOString(),
+        endDate: end.toISOString()
+      });
+      
       let data = [];
       let summaryData = null;
-
-      if (deviceId) {
-        // Single device data
-        console.log(`📊 Fetching energy data for device: ${deviceId}`);
-        data = await energyUsageService.getDeviceEnergyUsage(deviceId, activeView);
-        summaryData = await energyUsageService.getDeviceEnergyUsageSummary(deviceId, activeView);
-      } else if (buildingId) {
-        // Building aggregated data
-        console.log(`🏢 Fetching energy data for building: ${buildingId}`);
-        const buildingDeviceIds = await energyUsageService.getBuildingDeviceIds(buildingId);
-        
-        if (buildingDeviceIds.length === 0) {
-          console.log('🏢 No devices found in building');
-          setEnergyData([]);
-          setSummary({
-            totalUsage: 0,
-            averageUsage: 0,
-            peakUsage: 0,
-            daysWithData: 0,
-            totalDays: 0,
-            deviceCount: 0,
-            activeDevices: 0
-          });
-          setLoading(false);
-          return;
-        }
-        
-        data = await energyUsageService.getBuildingEnergyUsage(buildingId, buildingDeviceIds, activeView);
-        summaryData = await energyUsageService.getBuildingEnergyUsageSummary(buildingId, activeView);
-      } else if (deviceIds && Array.isArray(deviceIds)) {
-        // Custom device list data (aggregated)
-        console.log(`📱 Fetching energy data for ${deviceIds.length} devices`);
-        
-        if (deviceIds.length === 0) {
-          console.log('📱 No devices provided in list');
-          setEnergyData([]);
-          setSummary({
-            totalUsage: 0,
-            averageUsage: 0,
-            peakUsage: 0,
-            daysWithData: 0,
-            totalDays: 0,
-            deviceCount: 0
-          });
-          setLoading(false);
-          return;
-        }
-        
-        data = await energyUsageService.getBuildingEnergyUsage('custom', deviceIds, activeView);
-        
-        // Calculate summary for custom device list
-        if (data.length > 0) {
-          const totalUsage = data.reduce((sum, item) => sum + item.usage, 0);
-          const daysWithData = data.filter(item => item.usage > 0).length;
-          const peakUsage = Math.max(...data.map(item => item.usage));
-          const averageUsage = daysWithData > 0 ? totalUsage / daysWithData : 0;
-          
-          summaryData = {
-            totalUsage: Number(totalUsage.toFixed(6)),
-            averageUsage: Number(averageUsage.toFixed(6)),
-            peakUsage: Number(peakUsage.toFixed(6)),
-            daysWithData: daysWithData,
-            totalDays: data.length,
-            deviceCount: deviceIds.length
-          };
-        }
-      }
-
-      // Format data for chart with proper date display
-      const chartData = data.map(item => {
-        let displayDate;
-        switch (activeView) {
-          case 'week':
-            displayDate = item.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-            break;
-          case 'month':
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            break;
-          case 'day':
-          default:
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            break;
-        }
-        
-        return {
-          name: displayDate,
-          usage: Number(item.usage.toFixed(6)), // Increased precision for small values
-          usageDisplay: Number(item.usage.toFixed(6)), // For display
-          date: item.date,
-          fullDate: item.date.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          }),
-          devicesWithData: item.devicesWithData || null,
-          totalDevices: item.totalDevices || null
-        };
-      });
-
-      setEnergyData(chartData);
-      setSummary(summaryData);
-      setLastUpdateTime(new Date());
-
-      console.log(`📊 Energy chart data loaded: ${chartData.length} points`);
-      console.log(`📊 Summary:`, summaryData);
       
-      // Show detailed data in console for debugging
-      if (chartData.length > 0) {
-        console.log(`📊 Sample data points:`, chartData.slice(0, 3));
-        console.log(`📊 Total usage in dataset: ${chartData.reduce((sum, item) => sum + item.usage, 0).toFixed(6)} kWh`);
+      if (chartMode === 'device' && deviceId) {
+        // Single device energy usage
+        data = await energyUsageService.getDeviceEnergyUsage(deviceId, start, end);
+        summaryData = await energyUsageService.getDeviceEnergyUsageSummary(deviceId, start, end);
+      } else if (chartMode === 'building') {
+        // Building energy usage (multiple devices)
+        const buildingDeviceIds = deviceIds || 
+          (buildingId ? await energyUsageService.getBuildingDeviceIds(buildingId) : []);
+        
+        if (buildingDeviceIds.length > 0) {
+          data = await energyUsageService.getBuildingEnergyUsage(
+            buildingId || 'multi-device', 
+            buildingDeviceIds, 
+            start, 
+            end
+          );
+          summaryData = await energyUsageService.getBuildingEnergyUsageSummary(
+            buildingId || 'multi-device', 
+            start, 
+            end
+          );
+        }
       }
+      
+      setEnergyData(data);
+      setSummary(summaryData);
+      
+      console.log('📊 Energy data loaded:', {
+        dataPoints: data.length,
+        summary: summaryData
+      });
       
     } catch (error) {
-      console.error('Error fetching energy data:', error);
-      setError('Failed to load energy data. Using sample data for demonstration.');
-      
-      // Use sample data for demonstration with proper date formatting
-      console.log('📊 Using sample data for demonstration');
-      const sampleData = energyUsageService.getSampleEnergyData(activeView);
-      const chartData = sampleData.map(item => {
-        let displayDate;
-        switch (activeView) {
-          case 'week':
-            displayDate = item.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-            break;
-          case 'month':
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            break;
-          case 'day':
-          default:
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            break;
-        }
-        
-        return {
-          name: displayDate,
-          usage: Number(item.usage.toFixed(6)),
-          usageDisplay: Number(item.usage.toFixed(6)),
-          date: item.date,
-          fullDate: item.date.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })
-        };
-      });
-      
-      setEnergyData(chartData);
-      
-      // Sample summary
-      const totalUsage = chartData.reduce((sum, item) => sum + item.usage, 0);
-      const averageUsage = chartData.length > 0 ? totalUsage / chartData.length : 0;
-      const peakUsage = Math.max(...chartData.map(item => item.usage));
-      
-      setSummary({
-        totalUsage: Number(totalUsage.toFixed(6)),
-        averageUsage: Number(averageUsage.toFixed(6)),
-        peakUsage: Number(peakUsage.toFixed(6)),
-        daysWithData: chartData.length,
-        totalDays: chartData.length,
-        deviceCount: deviceIds ? deviceIds.length : 1
-      });
+      console.error('❌ Error fetching energy data:', error);
+      setError('Failed to load energy data');
     } finally {
       setLoading(false);
     }
+  }, [chartMode, deviceId, deviceIds, buildingId, getDateRange]);
+
+  // Handle date changes with validation
+  const handleStartDateChange = useCallback((value) => {
+    setStartDate(value);
+    
+    // If start date is after end date, adjust end date
+    if (value && endDate && new Date(value) > new Date(endDate)) {
+      setEndDate(value);
+    }
+  }, [endDate]);
+
+  const handleEndDateChange = useCallback((value) => {
+    setEndDate(value);
+    
+    // If end date is before start date, adjust start date
+    if (value && startDate && new Date(value) < new Date(startDate)) {
+      setStartDate(value);
+    }
+  }, [startDate]);
+
+
+  // Refresh data
+  const handleRefresh = useCallback(() => {
+    fetchEnergyData();
+  }, [fetchEnergyData]);
+
+  // Format data for chart display
+  const chartData = useMemo(() => {
+    if (energyData.length === 0) return [];
+    
+    return energyData.map(item => ({
+      date: item.dateStr || item.date.toISOString().split('T')[0],
+      dateDisplay: energyUsageService.formatDateForDisplay(item.date, energyData.length),
+      usage: Number((item.usage || 0).toFixed(2)),
+      devices: item.devicesWithData || (item.usage > 0 ? 1 : 0)
+    }));
+  }, [energyData]);
+
+  // Format usage value for display
+  const formatUsageValue = (value) => {
+    if (value >= 1000) {
+      return `${(value / 1000).toFixed(2)} kWh`;
+    } else if (value >= 1) {
+      return `${value.toFixed(2)} Wh`;
+    } else {
+      return `${(value * 1000).toFixed(2)} W`;
+    }
   };
 
-  // Load data when component mounts or filter changes
+  // Initial load and date changes
   useEffect(() => {
-    fetchEnergyData();
-  }, [deviceId, buildingId, deviceIds, activeView]);
+    if (startDate && endDate) {
+      fetchEnergyData();
+    }
+  }, [fetchEnergyData, startDate, endDate]);
 
+  return (
+    <div className="energy-chart">
+      {showControls && (
+        <ChartControls
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={handleStartDateChange}
+          onEndDateChange={handleEndDateChange}
+          onRefresh={handleRefresh}
+          loading={loading}
+          hasData={energyData.length > 0}
+        />
+      )}
+
+      <div className="chart-wrapper">
+        <div className="chart-container" style={{ height: `${height}px` }}>
+          <ChartHeader title={dateRangeTitle} summary={summary} />
+          
+          {loading && (
+            <div className="chart-loading">
+              <div className="loading-spinner"></div>
+              <span>Loading energy data...</span>
+            </div>
+          )}
+          
+          {error && (
+            <div className="chart-error">
+              <p>{error}</p>
+              <button onClick={handleRefresh} className="retry-btn">
+                <MdRefresh /> Retry
+              </button>
+            </div>
+          )}
+          
+          {!loading && !error && chartData.length === 0 && (
+            <div className="chart-no-data">
+              <p>No energy data available for the selected period.</p>
+              <span>Try selecting a different date range or check if devices are reporting usage.</span>
+            </div>
+          )}
+          
+          {!loading && !error && chartData.length > 0 && (
+            <div className="chart-content">
+              <EnergyBarChart data={chartData} formatUsageValue={formatUsageValue} />
+            </div>
+          )}
+        </div>
+        
+        {summary && (
+          <ChartSummary summary={summary} />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Simplified Chart Controls with date range inputs
+const ChartControls = ({ 
+  startDate, 
+  endDate,
+  onStartDateChange, 
+  onEndDateChange,
+  onRefresh, 
+  onExport, 
+  loading,
+  hasData 
+}) => (
+  <div className="chart-controls">
+    <div className="date-range-controls">
+      <div className="date-input-group">
+        <MdDateRange className="control-icon" />
+        <div className="date-inputs">
+          <div className="date-input-wrapper">
+            <label htmlFor="start-date">Start Date</label>
+            <input
+              id="start-date"
+              type="date"
+              value={startDate}
+              max={endDate} // Prevent selecting date after end date
+              onChange={(e) => onStartDateChange(e.target.value)}
+              className="date-input"
+            />
+          </div>
+          <span className="date-separator">to</span>
+          <div className="date-input-wrapper">
+            <label htmlFor="end-date">End Date</label>
+            <input
+              id="end-date"
+              type="date"
+              value={endDate}
+              min={startDate} // Prevent selecting date before start date
+              max={new Date().toISOString().split('T')[0]} // Prevent future dates
+              onChange={(e) => onEndDateChange(e.target.value)}
+              className="date-input"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div className="action-controls">
+      <button
+        onClick={onRefresh}
+        className="action-btn"
+        disabled={loading}
+        title="Refresh data"
+      >
+        <MdRefresh className={loading ? 'spinning' : ''} />
+      </button>
+
+    </div>
+  </div>
+);
+
+// Chart Header with dynamic title
+const ChartHeader = ({ title, summary }) => (
+  <div className="chart-header">
+    <h3 className="chart-title">
+      <MdBarChart className="chart-icon" />
+      {title}
+    </h3>
+  </div>
+);
+
+// Energy Bar Chart Component using Recharts
+const EnergyBarChart = ({ data, formatUsageValue }) => {
   // Custom tooltip component
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="energy-tooltip">
-          <p className="tooltip-label">{data.fullDate}</p>
-          <p className="tooltip-value">
-            <span className="tooltip-indicator" />
-            {`Energy: ${payload[0].value} kWh`}
+        <div style={{
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          color: 'white',
+          padding: '8px 12px',
+          borderRadius: '4px',
+          fontSize: '12px',
+          border: 'none',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+        }}>
+          <p style={{ margin: 0, fontWeight: 'bold' }}>{data.dateDisplay}</p>
+          <p style={{ margin: '4px 0 0 0', color: '#22c55e' }}>
+            <span style={{ 
+              display: 'inline-block', 
+              width: '8px', 
+              height: '8px', 
+              backgroundColor: '#22c55e', 
+              borderRadius: '50%', 
+              marginRight: '6px' 
+            }}></span>
+            {formatUsageValue(data.usage)}
           </p>
-          {data.devicesWithData !== null && (
-            <p className="tooltip-devices">
-              {`Active: ${data.devicesWithData}/${data.totalDevices} devices`}
-            </p>
-          )}
         </div>
       );
     }
     return null;
   };
 
-  // Format usage value for display
-  const formatUsageValue = (value) => {
-    if (value === 0) return '0';
-    if (value < 0.001) return `${(value * 1000).toFixed(2)}W`; // Show in watts for very small values
-    if (value < 1) return `${(value * 1000).toFixed(0)}Wh`; // Show in watt-hours
-    return `${value.toFixed(3)} kWh`; // Show in kilowatt-hours
-  };
-
-  // Get chart color based on data source
-  const getChartColor = () => {
-    if (deviceId) return '#22c55e'; // Green for single device
-    if (buildingId) return '#3b82f6'; // Blue for building
-    return '#8b5cf6'; // Purple for custom device list
-  };
-
-  // Get Y-axis domain for better visualization of small values
-  const getYAxisDomain = () => {
-    if (energyData.length === 0) return [0, 1];
-    
-    const maxUsage = Math.max(...energyData.map(item => item.usage));
-    const minUsage = Math.min(...energyData.map(item => item.usage));
-    
-    // If all values are very small, adjust the scale
-    if (maxUsage < 0.001) {
-      return [0, maxUsage * 1.1];
-    }
-    
-    return [0, maxUsage * 1.1];
-  };
-
-  // Render bar chart only
-  const renderChart = () => {
-    const commonProps = {
-      data: energyData,
-      margin: { top: 20, right: 30, left: 20, bottom: 5 }
-    };
-
-    const xAxisProps = {
-      dataKey: "name",
-      stroke: "#64748b",
-      fontSize: 12,
-      tick: { fill: '#64748b' },
-      angle: activeView === 'month' ? -45 : 0,
-      textAnchor: activeView === 'month' ? 'end' : 'middle',
-      height: activeView === 'month' ? 60 : 30
-    };
-
-    const yAxisProps = {
-      stroke: "#64748b",
-      fontSize: 12,
-      tick: { fill: '#64748b' },
-      label: { 
-        value: 'Energy (kWh)', 
-        angle: -90, 
-        position: 'insideLeft', 
-        style: { textAnchor: 'middle' } 
-      },
-      domain: getYAxisDomain(),
-      tickFormatter: (value) => {
-        if (value < 0.001 && value > 0) return `${(value * 1000).toFixed(1)}W`;
-        if (value < 1 && value > 0) return `${(value * 1000).toFixed(0)}Wh`;
-        return `${value.toFixed(3)}`;
-      }
-    };
-
-    return (
-      <BarChart {...commonProps}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-        <XAxis {...xAxisProps} />
-        <YAxis {...yAxisProps} />
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <RechartsBarChart
+        data={data}
+        margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis 
+          dataKey="dateDisplay"
+          tick={{ fontSize: 12 }}
+          angle={data.length > 7 ? -45 : 0}
+          textAnchor={data.length > 7 ? 'end' : 'middle'}
+          height={data.length > 7 ? 60 : 30}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis 
+          tick={{ fontSize: 12 }}
+          axisLine={false}
+          tickLine={false}
+        />
         <Tooltip content={<CustomTooltip />} />
-        <Legend />
         <Bar 
           dataKey="usage" 
-          fill={getChartColor()}
-          name="Energy (kWh)"
+          fill="#22c55e" 
           radius={[4, 4, 0, 0]}
         />
-      </BarChart>
-    );
-  };
+      </RechartsBarChart>
+    </ResponsiveContainer>
+  );
+};
 
-  return (
-    <div className="energy-chart-container">
-      {/* Header with controls */}
-      <div className="chart-header">
-        <h3 className="chart-title">
-          <MdBolt className="chart-icon" />
-          {title}
-        </h3>
-        <div className="chart-controls">
-          {showControls && (
-            <>
-              <div className="view-controls">
-                <button 
-                  className={`control-btn ${activeView === 'day' ? 'active' : ''}`}
-                  onClick={() => setActiveView('day')}
-                >
-                  Day
-                </button>
-                <button 
-                  className={`control-btn ${activeView === 'week' ? 'active' : ''}`}
-                  onClick={() => setActiveView('week')}
-                >
-                  Week
-                </button>
-                <button 
-                  className={`control-btn ${activeView === 'month' ? 'active' : ''}`}
-                  onClick={() => setActiveView('month')}
-                >
-                  Month
-                </button>
-              </div>
-              
-              <button 
-                className="refresh-btn"
-                onClick={fetchEnergyData}
-                disabled={loading}
-                title="Refresh data"
-              >
-                <MdRefresh className={loading ? 'spinning' : ''} />
-              </button>
-            </>
-          )}
-        </div>
+// Chart Summary
+const ChartSummary = ({ summary }) => (
+  <div className="chart-summary">
+    <div className="summary-grid">
+      <div className="summary-item">
+        <label>Total Usage</label>
+        <span>{summary.totalUsage.toFixed(2)} kWh</span>
       </div>
-
-      {/* Info banner for devices */}
-      {summary && summary.deviceCount > 1 && (
-        <div className="chart-info-banner">
-          <MdInfo className="info-icon" />
-          <span>
-            Showing aggregated data from {summary.deviceCount} devices
-            {summary.activeDevices !== undefined && 
-              ` (${summary.activeDevices} have reported usage)`
-            }
-          </span>
-        </div>
-      )}
-
-      {/* Error message */}
-      {error && (
-        <div className="error-banner">
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Loading state */}
-      {loading && (
-        <div className="chart-loading">
-          <div className="loading-spinner"></div>
-          <span>Loading energy data...</span>
-        </div>
-      )}
-
-      {/* Chart area */}
-      {!loading && (
-        <div className="chart-area" style={{ height: height }}>
-          <ResponsiveContainer width="100%" height="100%">
-            {renderChart()}
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Summary section */}
-      {summary && !loading && (
-        <div className="energy-summary">
-          <div className="summary-item">
-            <span className="summary-label">Total Usage</span>
-            <span className="summary-value">{formatUsageValue(summary.totalUsage)}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Average</span>
-            <span className="summary-value">{formatUsageValue(summary.averageUsage)}</span>
-          </div>
-          <div className="summary-item">
-            <span className="summary-label">Peak Usage</span>
-            <span className="summary-value">{formatUsageValue(summary.peakUsage)}</span>
-          </div>
-          {summary.deviceCount && summary.deviceCount > 1 && (
-            <div className="summary-item">
-              <span className="summary-label">Devices</span>
-              <span className="summary-value">
-                {summary.activeDevices !== undefined 
-                  ? `${summary.activeDevices}/${summary.deviceCount}` 
-                  : summary.deviceCount
-                }
-              </span>
-            </div>
-          )}
-          {summary.daysWithData !== undefined && (
-            <div className="summary-item">
-              <span className="summary-label">Data Coverage</span>
-              <span className="summary-value">
-                {summary.daysWithData}/{summary.totalDays} days
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Last update time */}
-      {lastUpdateTime && !loading && (
-        <div className="chart-footer">
-          <span className="last-update">
-            Last updated: {lastUpdateTime.toLocaleTimeString()}
-          </span>
-        </div>
-      )}
-
-      {/* No data state */}
-      {!loading && energyData.length === 0 && !error && (
-        <div className="no-data-state">
-          <MdTrendingUp className="no-data-icon" />
-          <p>No energy usage data available</p>
-          <span>
-            {deviceId && "This device hasn't reported any energy usage yet."}
-            {buildingId && "No devices in this building have reported energy usage yet."}
-            {deviceIds && "None of the selected devices have reported energy usage yet."}
-          </span>
-          <span className="help-text">
-            Energy data will appear here once devices start reporting usage.
-          </span>
+      <div className="summary-item">
+        <label>Average Usage</label>
+        <span>{summary.averageUsage.toFixed(2)} kWh</span>
+      </div>
+      <div className="summary-item">
+        <label>Peak Usage</label>
+        <span>{summary.peakUsage.toFixed(2)} kWh</span>
+      </div>
+      {summary.deviceCount !== undefined && (
+        <div className="summary-item">
+          <label>Active Devices</label>
+          <span>{summary.activeDevices} / {summary.deviceCount}</span>
         </div>
       )}
     </div>
-  );
-};
+  </div>
+);
 
 export default EnergyChart;

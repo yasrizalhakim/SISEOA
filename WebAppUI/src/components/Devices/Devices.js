@@ -1,4 +1,5 @@
-// src/components/Devices/Devices.js - Enhanced Security and Role-Based Access
+// src/components/Devices/Devices.js - Refactored with component consolidation
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { MdAdd, MdRefresh, MdSearch, MdDevices } from 'react-icons/md';
@@ -44,9 +45,8 @@ const Devices = () => {
   const [userRole, setUserRole] = useState('none');
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
   const [canManage, setCanManage] = useState(false);
-  const [userBuildingRoles, setUserBuildingRoles] = useState(new Map());
 
-  // NEW: Enhanced device filtering with strict security
+  // Enhanced device filtering with strict security
   const filterAccessibleDevices = useCallback(async (allDevices) => {
     const accessibleDevices = [];
     
@@ -137,7 +137,7 @@ const Devices = () => {
     return location ? (location.buildingName || location.Building || 'Unknown Building') : 'Unknown Building';
   }, [locations]);
 
-  // NEW: Get user's role in device's building
+  // Get user's role in device's building
   const getUserRoleInDeviceBuilding = useCallback(async (device) => {
     if (!device.Location) return 'none';
     
@@ -164,7 +164,7 @@ const Devices = () => {
       if (locationDoc.exists()) {
         const locationData = locationDoc.data();
         
-        // NEW: Fetch building name
+        // Fetch building name
         let buildingName = 'Unknown Building';
         if (locationData.Building) {
           try {
@@ -198,7 +198,7 @@ const Devices = () => {
     };
   }, []);
 
-  // Fetch devices and user permissions
+  // Fetch devices with runtime warning checks
   const fetchDevices = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -221,6 +221,7 @@ const Devices = () => {
         canManageDevices: canManageDevs 
       });
 
+      // Now includes automatic runtime warning checks
       const { devices: allDevices, locations: allLocations } = await dataService.getUserDevicesAndLocations(userEmail);
       
       const locationsWithBuildingNames = allLocations.map(location => ({
@@ -231,7 +232,7 @@ const Devices = () => {
       
       setLocations(locationsWithBuildingNames);
 
-      // NEW: Use enhanced filtering with strict security
+      // Use enhanced filtering with strict security
       const accessibleDevices = await filterAccessibleDevices(allDevices);
       
       console.log('📍 Fetching location details for accessible devices...');
@@ -242,6 +243,12 @@ const Devices = () => {
       setDevices(devicesWithLocationDetails);
 
       console.log('📱 Accessible devices with location details:', devicesWithLocationDetails.length);
+
+      // Check for any devices that may need runtime warnings
+      const onDevices = devicesWithLocationDetails.filter(device => device.status === 'ON');
+      if (onDevices.length > 0) {
+        console.log(`⚠️ Found ${onDevices.length} devices currently ON - runtime warnings checked automatically`);
+      }
 
     } catch (error) {
       console.error('❌ Error fetching devices:', error);
@@ -257,7 +264,7 @@ const Devices = () => {
     navigate(`/devices/detail/${deviceId}`);
   }, [navigate]);
 
-  // Device toggle handler
+  // Device toggle handler with runtime tracking
   const handleDeviceToggle = useCallback(async (device, e) => {
     e.stopPropagation();
     
@@ -273,13 +280,22 @@ const Devices = () => {
         return;
       }
 
+      // Use the enhanced toggle function with runtime tracking
       const newStatus = await dataService.toggleDeviceStatus(device.id);
       
       setDevices(prevDevices => 
         prevDevices.map(d => 
-          d.id === device.id ? { ...d, status: newStatus } : d
+          d.id === device.id ? { 
+            ...d, 
+            status: newStatus,
+            // Reset runtime tracking info when toggled
+            onSince: newStatus === 'ON' ? new Date().toISOString() : null,
+            warningCount: 0
+          } : d
         )
       );
+
+      console.log(`🔄 Device ${device.id} toggled to ${newStatus} with runtime tracking updated`);
 
     } catch (error) {
       console.error('Error toggling device:', error);
@@ -365,7 +381,7 @@ const Devices = () => {
   );
 };
 
-// Devices Header Component
+// Component definitions
 const DevicesHeader = ({ 
   canManage, 
   onRefresh, 
@@ -388,37 +404,23 @@ const DevicesHeader = ({
       )}
     </h2>
     <div className="header-actions">
-      <RefreshButton 
-        onRefresh={onRefresh}
-        refreshing={refreshing}
-      />
+      <button 
+        onClick={onRefresh}
+        className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
+        disabled={refreshing}
+        title="Refresh devices"
+      >
+        <MdRefresh />
+      </button>
       {canManage && (
-        <AddDeviceButton isSystemAdmin={isSystemAdmin} />
+        <Link to="/devices/add" className="add-device-btn">
+          <MdAdd /> {isSystemAdmin ? 'Register New Device' : 'Claim Device'}
+        </Link>
       )}
     </div>
   </div>
 );
 
-// Refresh Button Component
-const RefreshButton = ({ onRefresh, refreshing }) => (
-  <button 
-    onClick={onRefresh}
-    className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
-    disabled={refreshing}
-    title="Refresh devices"
-  >
-    <MdRefresh />
-  </button>
-);
-
-// Add Device Button Component
-const AddDeviceButton = ({ isSystemAdmin }) => (
-  <Link to="/devices/add" className="add-device-btn">
-    <MdAdd /> {isSystemAdmin ? 'Register New Device' : 'Claim Device'}
-  </Link>
-);
-
-// Error Message Component
 const ErrorMessage = ({ message, onRetry }) => (
   <div className="error-message">
     {message}
@@ -428,7 +430,6 @@ const ErrorMessage = ({ message, onRetry }) => (
   </div>
 );
 
-// Device Filters Component
 const DeviceFilters = ({ 
   searchTerm, 
   onSearchChange, 
@@ -440,73 +441,46 @@ const DeviceFilters = ({
   isSystemAdmin 
 }) => (
   <div className="filters-section">
-    <SearchInput 
-      searchTerm={searchTerm}
-      onSearchChange={onSearchChange}
-      isSystemAdmin={isSystemAdmin}
-    />
+    <div className="search-container">
+      <MdSearch className="search-icon" />
+      <input 
+        type="text" 
+        placeholder={isSystemAdmin ? "Search all devices..." : "Search devices..."} 
+        value={searchTerm}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="search-input"
+      />
+    </div>
     
     <div className="filter-controls">
-      <StatusFilters 
-        statusFilter={statusFilter}
-        onStatusFilterChange={onStatusFilterChange}
-      />
+      <div className="status-filters">
+        {STATUS_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => onStatusFilterChange(value)}
+            className={`filter-btn ${statusFilter === value ? 'active' : ''}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       
-      <LocationFilter
-        locationFilter={locationFilter}
-        onLocationFilterChange={onLocationFilterChange}
-        locations={locations}
-      />
+      <select 
+        value={locationFilter} 
+        onChange={(e) => onLocationFilterChange(e.target.value)}
+        className="location-select"
+      >
+        <option value="all">All Locations</option>
+        {locations.map(location => (
+          <option key={location.id} value={location.id}>
+            {location.locationName || location.id}
+          </option>
+        ))}
+      </select>
     </div>
   </div>
 );
 
-// Search Input Component
-const SearchInput = ({ searchTerm, onSearchChange, isSystemAdmin }) => (
-  <div className="search-container">
-    <MdSearch className="search-icon" />
-    <input 
-      type="text" 
-      placeholder={isSystemAdmin ? "Search all devices..." : "Search devices..."} 
-      value={searchTerm}
-      onChange={(e) => onSearchChange(e.target.value)}
-      className="search-input"
-    />
-  </div>
-);
-
-// Status Filters Component
-const StatusFilters = ({ statusFilter, onStatusFilterChange }) => (
-  <div className="status-filters">
-    {STATUS_FILTERS.map(({ value, label }) => (
-      <button
-        key={value}
-        onClick={() => onStatusFilterChange(value)}
-        className={`filter-btn ${statusFilter === value ? 'active' : ''}`}
-      >
-        {label}
-      </button>
-    ))}
-  </div>
-);
-
-// Location Filter Component
-const LocationFilter = ({ locationFilter, onLocationFilterChange, locations }) => (
-  <select 
-    value={locationFilter} 
-    onChange={(e) => onLocationFilterChange(e.target.value)}
-    className="location-select"
-  >
-    <option value="all">All Locations</option>
-    {locations.map(location => (
-      <option key={location.id} value={location.id}>
-        {location.locationName || location.id}
-      </option>
-    ))}
-  </select>
-);
-
-// Devices Grid Component
 const DevicesGrid = ({ 
   devices, 
   userEmail, 
@@ -548,7 +522,6 @@ const DevicesGrid = ({
   );
 };
 
-// No Devices Message Component
 const NoDevicesMessage = ({ searchTerm, userRole, isSystemAdmin }) => {
   const getMessage = () => {
     if (searchTerm) {
@@ -578,7 +551,7 @@ const NoDevicesMessage = ({ searchTerm, userRole, isSystemAdmin }) => {
   );
 };
 
-// Device Card Component
+// Device Card Component with runtime warning indicators
 const DeviceCard = ({ 
   device, 
   userEmail, 
@@ -605,6 +578,19 @@ const DeviceCard = ({
   const isClaimed = !!device.Location;
   const canViewSensitiveInfo = isSystemAdmin || userRoleInBuilding === 'parent';
 
+  // Runtime warning indicators
+  const isLongRunning = useMemo(() => {
+    if (deviceStatus !== 'ON' || !device.onSince) return false;
+    
+    const onSince = new Date(device.onSince);
+    const now = new Date();
+    const hoursOn = Math.floor((now - onSince) / (1000 * 60 * 60));
+    
+    return hoursOn >= 5; // Show warning indicator if device has been on for 5+ hours
+  }, [deviceStatus, device.onSince]);
+
+  const warningCount = device.warningCount || 0;
+
   return (
     <div className="device-card" onClick={onClick}>
       <div className="device-content">
@@ -614,6 +600,8 @@ const DeviceCard = ({
           isClaimed={isClaimed}
           isSystemAdmin={isSystemAdmin}
           canViewSensitiveInfo={canViewSensitiveInfo}
+          isLongRunning={isLongRunning}
+          warningCount={warningCount}
         />
         
         <DeviceCardDetails 
@@ -621,6 +609,7 @@ const DeviceCard = ({
           canViewSensitiveInfo={canViewSensitiveInfo}
           getLocationName={getLocationName}
           getBuildingName={getBuildingName}
+          isLongRunning={isLongRunning}
         />
         
         <DeviceCardActions 
@@ -634,8 +623,16 @@ const DeviceCard = ({
   );
 };
 
-// Device Card Header Component
-const DeviceCardHeader = ({ device, isAssigned, isClaimed, isSystemAdmin, canViewSensitiveInfo }) => (
+// Device Card Header Component with runtime warning indicators
+const DeviceCardHeader = ({ 
+  device, 
+  isAssigned, 
+  isClaimed, 
+  isSystemAdmin, 
+  canViewSensitiveInfo, 
+  isLongRunning, 
+  warningCount 
+}) => (
   <div className="device-header">
     <h3 className="device-name">
       {device.DeviceName || device.id}
@@ -651,25 +648,48 @@ const DeviceCardHeader = ({ device, isAssigned, isClaimed, isSystemAdmin, canVie
           Assigned
         </span>
       )}
-      {isSystemAdmin && (
-        <span className="admin-badge" title="SystemAdmin access">
-          Admin
+      {/* Runtime warning indicator */}
+      {isLongRunning && (
+        <span 
+          className="status-badge" 
+          style={{ 
+            backgroundColor: '#f59e0b', 
+            color: 'white' 
+          }}
+          title={`Device has been ON for 5+ hours${warningCount > 0 ? ` (${warningCount} warnings sent)` : ''}`}
+        >
+          ⚠️ Long Run
         </span>
       )}
     </div>
   </div>
 );
 
-// Device Card Details Component
-const DeviceCardDetails = ({ device, canViewSensitiveInfo, getLocationName, getBuildingName }) => (
+// Device Card Details Component with runtime info
+const DeviceCardDetails = ({ 
+  device, 
+  canViewSensitiveInfo, 
+  getLocationName, 
+  getBuildingName, 
+  isLongRunning 
+}) => (
   <div className="device-details">
     {/* Only show Device ID to users who can view sensitive info */}
     {canViewSensitiveInfo && (
       <DeviceDetailItem label="ID:" value={device.id} />
     )}
     <DeviceDetailItem label="Type:" value={device.DeviceType || 'Unknown'} />
-    <DeviceDetailItem label="Location:" value={getLocationName(device)} />
     <DeviceDetailItem label="Building:" value={getBuildingName(device)} />
+    <DeviceDetailItem label="Location:" value={getLocationName(device)} />
+    
+    {/* Show runtime info for long-running devices */}
+    {isLongRunning && device.onSince && (
+      <DeviceDetailItem 
+        label="On Since:" 
+        value={new Date(device.onSince).toLocaleString()}
+        style={{ color: '#f59e0b', fontSize: '0.75rem' }}
+      />
+    )}
     
     {/* Only show assigned count to users who can view sensitive info */}
     {canViewSensitiveInfo && device.AssignedTo && device.AssignedTo.length > 0 && (
@@ -681,9 +701,9 @@ const DeviceCardDetails = ({ device, canViewSensitiveInfo, getLocationName, getB
   </div>
 );
 
-// Device Detail Item Component
-const DeviceDetailItem = ({ label, value }) => (
-  <div className="detail-item">
+// Device Detail Item Component with optional styling
+const DeviceDetailItem = ({ label, value, style = {} }) => (
+  <div className="detail-item" style={style}>
     <span className="detail-label">{label}</span>
     <span className="detail-value">{value}</span>
   </div>

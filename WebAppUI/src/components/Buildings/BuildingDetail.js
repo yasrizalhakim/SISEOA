@@ -1,9 +1,9 @@
-// src/components/Buildings/BuildingDetail.js - Updated with Invitation-Based Child Addition
+// src/components/Buildings/BuildingDetail.js - Complete Updated with Building Deletion Notification
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
-import { notifyParentLocationAdded } from '../../services/notificationService';
+import { notifyParentLocationAdded, notifyBuildingDeleted } from '../../services/notificationService'; // NEW: Added notifyBuildingDeleted
 import { 
   doc, 
   getDoc, 
@@ -66,6 +66,7 @@ const BuildingDetail = () => {
   // User Role State
   const [userRoleInBuilding, setUserRoleInBuilding] = useState('user');
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
+  const [userAssignedLocations, setUserAssignedLocations] = useState([]);
   
   // Location Management State
   const [newLocationName, setNewLocationName] = useState('');
@@ -191,12 +192,16 @@ const BuildingDetail = () => {
       
       if (!userBuildingSnapshot.empty) {
         const userBuildingData = userBuildingSnapshot.docs[0].data();
-        return userBuildingData.AssignedLocations || [];
+        const assignedLocs = userBuildingData.AssignedLocations || [];
+        setUserAssignedLocations(assignedLocs); // Set state for UI filtering
+        return assignedLocs;
       }
       
+      setUserAssignedLocations([]);
       return [];
     } catch (err) {
       console.error('Error getting user assigned locations:', err);
+      setUserAssignedLocations([]);
       return [];
     }
   }, [userRoleInBuilding, userEmail, buildingId]);
@@ -403,7 +408,7 @@ const BuildingDetail = () => {
     }
   }, [editData, userEmail, buildingId]);
 
-  // Delete handler
+  // ENHANCED: Delete handler with building deletion notification
   const handleDelete = useCallback(async () => {
     const confirmDelete = window.confirm(
       `Are you sure you want to delete building "${building.BuildingName || building.id}"?\n\n` +
@@ -428,6 +433,19 @@ const BuildingDetail = () => {
       setError(null);
       
       console.log('🗑️ Deleting building...');
+      
+      // NEW: Send notification to building parents before deletion
+      try {
+        await notifyBuildingDeleted(
+          buildingId, 
+          building.BuildingName || building.id, 
+          userEmail
+        );
+        console.log('📢 Building deletion notifications sent to parents');
+      } catch (notificationError) {
+        console.error('❌ Failed to send building deletion notifications:', notificationError);
+        // Continue with deletion even if notifications fail
+      }
       
       // Delete all locations
       for (const location of locations) {
@@ -469,7 +487,7 @@ const BuildingDetail = () => {
     } finally {
       setDeleting(false);
     }
-  }, [building, locations, devices, buildingId, navigate]);
+  }, [building, locations, devices, buildingId, navigate, userEmail]); // NEW: Added userEmail dependency
   
   // Modal handlers
   const handleChildClick = useCallback((childId) => {
@@ -540,27 +558,28 @@ const BuildingDetail = () => {
       
       setNewLocationName('');
       setSuccess('Location added successfully');
+      
       try {
-    await notifyParentLocationAdded(
-      userEmail,
-      newLocationName,
-      building.BuildingName || building.id
-    );
-    console.log('📢 Location addition notification sent to parent');
-  } catch (notificationError) {
-    console.error('❌ Failed to send location addition notification:', notificationError);
-    // Don't fail the location creation if notification fails
-  }
-  
-  setTimeout(() => setSuccess(null), 3000);
-  
-} catch (err) {
-  console.error('Error adding location:', err);
-  setError('Failed to add location: ' + err.message);
-} finally {
+        await notifyParentLocationAdded(
+          userEmail,
+          newLocationName,
+          building.BuildingName || building.id
+        );
+        console.log('📢 Location addition notification sent to parent');
+      } catch (notificationError) {
+        console.error('❌ Failed to send location addition notification:', notificationError);
+        // Don't fail the location creation if notification fails
+      }
+      
+      setTimeout(() => setSuccess(null), 3000);
+      
+    } catch (err) {
+      console.error('Error adding location:', err);
+      setError('Failed to add location: ' + err.message);
+    } finally {
       setIsAddingLocation(false);
     }
-  }, [userRoleInBuilding, newLocationName, buildingId]);
+  }, [userRoleInBuilding, newLocationName, buildingId, userEmail, building]);
   
   const handleRemoveLocation = useCallback(async (locationId) => {
     if (userRoleInBuilding !== 'parent') {
@@ -825,202 +844,236 @@ const BuildingDetail = () => {
   }
   
   // Tab content components
-  const BuildingInfoTab = () => (
-    <div className="building-info-tab">
-      {(permissions.canEditBuilding || permissions.canDeleteBuilding) && (
-        <div className="building-actions">
-          {permissions.canEditBuilding && (
-            <>
-              {!isEditing ? (
-                <button className="edit-button" onClick={handleEditToggle} type="button">
-                  <MdEdit /> Edit Building
-                </button>
-              ) : (
-                <div className="edit-actions">
-                  <button 
-                    type="button"
-                    className="save-button" 
-                    onClick={handleSave}
-                    disabled={saving || !editData.BuildingName.trim()}
-                  >
-                    <MdSave /> {saving ? 'Saving...' : 'Save Changes'}
+  const BuildingInfoTab = () => {
+    // Filter locations for children - ONLY show locations they are assigned to
+    const displayedLocations = useMemo(() => {
+      if (userRoleInBuilding === 'children') {
+        // Only show locations that the child user is specifically assigned to
+        return locations.filter(location => userAssignedLocations.includes(location.id));
+      }
+      // For all other roles (admin, parent), show all locations
+      return locations;
+    }, [locations, userRoleInBuilding, userAssignedLocations]);
+
+    return (
+      <div className="building-info-tab">
+        {(permissions.canEditBuilding || permissions.canDeleteBuilding) && (
+          <div className="building-actions">
+            {permissions.canEditBuilding && (
+              <>
+                {!isEditing ? (
+                  <button className="edit-button" onClick={handleEditToggle} type="button">
+                    <MdEdit /> Edit Building
                   </button>
-                  <button 
-                    type="button"
-                    className="cancel-button" 
-                    onClick={handleEditToggle}
-                    disabled={saving}
-                  >
-                    <MdCancel /> Cancel
-                  </button>
-                </div>
-              )}
-            </>
+                ) : (
+                  <div className="edit-actions">
+                    <button 
+                      type="button"
+                      className="save-button" 
+                      onClick={handleSave}
+                      disabled={saving || !editData.BuildingName.trim()}
+                    >
+                      <MdSave /> {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button 
+                      type="button"
+                      className="cancel-button" 
+                      onClick={handleEditToggle}
+                      disabled={saving}
+                    >
+                      <MdCancel /> Cancel
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            
+            {permissions.canDeleteBuilding && !isEditing && (
+              <button 
+                type="button"
+                className="delete-button" 
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                <MdDelete /> {deleting ? 'Deleting...' : 'Delete Building'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {success && <div className="success-message">{success}</div>}
+        {error && <div className="error-message">{error}</div>}
+
+        <div className="building-info-form">
+          {userRoleInBuilding !== 'children' && (
+            <div className="info-group">
+              <label>Building ID</label>
+              <p className="building-id">{building.id}</p>
+            </div>
           )}
           
-          {permissions.canDeleteBuilding && !isEditing && (
-            <button 
-              type="button"
-              className="delete-button" 
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              <MdDelete /> {deleting ? 'Deleting...' : 'Delete Building'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {success && <div className="success-message">{success}</div>}
-      {error && <div className="error-message">{error}</div>}
-
-      <div className="building-info-form">
-        <div className="info-group">
-          <label>Building ID</label>
-          <p className="building-id">{building.id}</p>
-        </div>
-        
-        <div className="info-group">
-          <label>
-            <MdBusiness /> Building Name *
-          </label>
-          {isEditing ? (
-            <input
-              type="text"
-              name="BuildingName"
-              value={editData.BuildingName}
-              onChange={handleInputChange}
-              placeholder="Enter building name"
-              disabled={saving}
-              className={editData.BuildingName.trim() ? 'input-valid' : ''}
-            />
-          ) : (
-            <p>{building.BuildingName || 'Unnamed Building'}</p>
-          )}
-        </div>
-        
-        <div className="info-group">
-          <label>
-            <MdLocationOn /> Address
-          </label>
-          {isEditing ? (
-            <input
-              type="text"
-              name="Address"
-              value={editData.Address}
-              onChange={handleInputChange}
-              placeholder="Enter building address (optional)"
-              disabled={saving}
-            />
-          ) : (
-            <p>{building.Address || 'No address specified'}</p>
-          )}
-        </div>
-        
-        <div className="info-group">
-          <label>
-            <MdDescription /> Description
-          </label>
-          {isEditing ? (
-            <textarea
-              name="Description"
-              value={editData.Description}
-              onChange={handleInputChange}
-              placeholder="Enter building description (optional)"
-              disabled={saving}
-              rows="4"
-            />
-          ) : (
-            <p>{building.Description || 'No description'}</p>
-          )}
-        </div>
-        
-        {userRoleInBuilding !== 'parent' && (
           <div className="info-group">
-            <label>Created By</label>
-            <p>{building.CreatedBy || 'Unknown'}</p>
+            <label>
+              <MdBusiness /> Building Name
+            </label>
+            {isEditing ? (
+              <input
+                type="text"
+                name="BuildingName"
+                value={editData.BuildingName}
+                onChange={handleInputChange}
+                placeholder="Enter building name"
+                disabled={saving}
+                className={editData.BuildingName.trim() ? 'input-valid' : ''}
+              />
+            ) : (
+              <p>{building.BuildingName || 'Unnamed Building'}</p>
+            )}
           </div>
-        )}
-        
-        {building.CreatedAt && userRoleInBuilding !== 'children' && (
+          
           <div className="info-group">
-            <label>Created At</label>
-            <p>{typeof building.CreatedAt === 'string' 
-                ? building.CreatedAt 
-                : building.CreatedAt.toDate().toLocaleString()}</p>
+            <label>
+              <MdLocationOn /> Address
+            </label>
+            {isEditing ? (
+              <input
+                type="text"
+                name="Address"
+                value={editData.Address}
+                onChange={handleInputChange}
+                placeholder="Enter building address (optional)"
+                disabled={saving}
+              />
+            ) : (
+              <p>{building.Address || 'No address specified'}</p>
+            )}
           </div>
-        )}
-
-        {building.LastModifiedBy && (
+          
           <div className="info-group">
-            <label>Last Modified By</label>
-            <p>{building.LastModifiedBy}</p>
+            <label>
+              <MdDescription /> Description
+            </label>
+            {isEditing ? (
+              <textarea
+                name="Description"
+                value={editData.Description}
+                onChange={handleInputChange}
+                placeholder="Enter building description (optional)"
+                disabled={saving}
+                rows="4"
+              />
+            ) : (
+              <p>{building.Description || 'No description'}</p>
+            )}
+          </div>
+          
+          {userRoleInBuilding !== 'parent' && userRoleInBuilding !== 'children' && (
+            <div className="info-group">
+              <label>Created By</label>
+              <p>{building.CreatedBy || 'Unknown'}</p>
+            </div>
+          )}
+          
+          {building.CreatedAt && userRoleInBuilding !== 'children' && (
+            <div className="info-group">
+              <label>Created At</label>
+              <p>{typeof building.CreatedAt === 'string' 
+                  ? building.CreatedAt 
+                  : building.CreatedAt.toDate().toLocaleString()}</p>
+            </div>
+          )}
+
+          {building.LastModifiedBy && userRoleInBuilding !== 'children' && (
+            <div className="info-group">
+              <label>Last Modified By</label>
+              <p>{building.LastModifiedBy}</p>
+            </div>
+          )}
+        </div>
+        
+        {permissions.canViewLocations && (
+          <div className="locations-section">
+            <div className="locations-header">
+              <h3>
+                <MdLocationOn /> 
+                {userRoleInBuilding === 'children' 
+                  ? `My Assigned Locations (${displayedLocations.length})` 
+                  : `Locations (${displayedLocations.length})`
+                }
+              </h3>
+            </div>
+            
+            {/* Add location form - only for parents */}
+            {permissions.canManageLocations && (
+              <div className="add-location-form">
+                <input
+                  id="new-location-input"
+                  type="text"
+                  value={newLocationName}
+                  onChange={(e) => setNewLocationName(e.target.value)}
+                  placeholder="Enter new location name"
+                  disabled={isAddingLocation}
+                />
+                <button
+                  type="button"
+                  className="confirm-add-btn"
+                  onClick={handleAddLocation}
+                  disabled={isAddingLocation || !newLocationName.trim()}
+                >
+                  {isAddingLocation ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+            )}
+            
+            {displayedLocations.length > 0 ? (
+              <div className="locations-list">
+                {displayedLocations.map(location => (
+                  <div key={location.id} className="location-item">
+                    <div className="location-name">{location.LocationName || location.id}</div>
+                    <div className="location-details">
+                      {/* Completely hide location ID for children - they don't need to see technical IDs */}
+                      {userRoleInBuilding !== 'children' && (
+                        <span className="location-id">ID: {location.id}</span>
+                      )}
+                      {location.DateCreated && userRoleInBuilding !== 'children' && (
+                        <span className="location-date">Created: {location.DateCreated}</span>
+                      )}
+                      <span className="location-devices">
+                        Devices: {devices.filter(d => d.Location === location.id).length}
+                      </span>
+                      {userRoleInBuilding === 'children' && (
+                        <span style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic' }}>
+                          ✓ You have access to this location
+                        </span>
+                      )}
+                    </div>
+                    {permissions.canManageLocations && (
+                      <button
+                        type="button"
+                        className="remove-location-btn"
+                        onClick={() => handleRemoveLocation(location.id)}
+                        disabled={isRemovingLocation}
+                        aria-label="Remove location"
+                      >
+                        <MdDelete />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="no-data-message">
+                {userRoleInBuilding === 'children' 
+                  ? "You have not been assigned to any locations yet. Ask a parent to assign you to locations."
+                  : "No locations found for this building"
+                }
+              </p>
+            )}
           </div>
         )}
       </div>
-      
-      {permissions.canViewLocations && (
-        <div className="locations-section">
-          <div className="locations-header">
-            <h3><MdLocationOn /> Locations ({locations.length})</h3>
-          </div>
-          
-          {permissions.canManageLocations && (
-            <div className="add-location-form">
-              <input
-                id="new-location-input"
-                type="text"
-                value={newLocationName}
-                onChange={(e) => setNewLocationName(e.target.value)}
-                placeholder="Enter new location name"
-                disabled={isAddingLocation}
-              />
-              <button
-                type="button"
-                className="confirm-add-btn"
-                onClick={handleAddLocation}
-                disabled={isAddingLocation || !newLocationName.trim()}
-              >
-                {isAddingLocation ? 'Adding...' : 'Add'}
-              </button>
-            </div>
-          )}
-          
-          {locations.length > 0 ? (
-            <div className="locations-list">
-              {locations.map(location => (
-                <div key={location.id} className="location-item">
-                  <div className="location-name">{location.LocationName || location.id}</div>
-                  <div className="location-details">
-                    <span className="location-id">ID: {location.id}</span>
-                    {location.DateCreated && (
-                      <span className="location-date">Created: {location.DateCreated}</span>
-                    )}
-                    <span className="location-devices">
-                      Devices: {devices.filter(d => d.Location === location.id).length}
-                    </span>
-                  </div>
-                  {permissions.canManageLocations && (
-                    <button
-                      type="button"
-                      className="remove-location-btn"
-                      onClick={() => handleRemoveLocation(location.id)}
-                      disabled={isRemovingLocation}
-                      aria-label="Remove location"
-                    >
-                      <MdDelete />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="no-data-message">No locations found for this building</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
+    );
+  };
 
   const DevicesTab = () => (
     <div className="devices-tab">
@@ -1028,21 +1081,6 @@ const BuildingDetail = () => {
         <MdDevices /> 
         {userRoleInBuilding === 'children' ? 'My Accessible Devices' : 'Devices'} ({devices.length})
       </h3>
-      
-      {userRoleInBuilding === 'children' && (
-        <div className="children-device-info" style={{
-          backgroundColor: '#f0f9ff',
-          padding: '12px',
-          borderRadius: '6px',
-          marginBottom: '16px',
-          border: '1px solid #bae6fd'
-        }}>
-          <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
-            📍 You can only see devices in locations you're assigned to. 
-            Currently showing devices from your {devices.length > 0 ? 'assigned locations' : 'assigned locations (none found)'}.
-          </p>
-        </div>
-      )}
       
       {devices.length > 0 ? (
         <div className="devices-list">
@@ -1061,7 +1099,9 @@ const BuildingDetail = () => {
             >
               <div className="device-name">{device.DeviceName || device.id}</div>
               <div className="device-details">
-                <span>ID: {device.id}</span>
+                {userRoleInBuilding !== 'children' && (
+                  <span>ID: {device.id}</span>
+                )}
                 <span>Location: {device.locationName}</span>
                 <span>Type: {device.DeviceType || 'N/A'}</span>
                 {userRoleInBuilding === 'children' && (
@@ -1201,22 +1241,6 @@ const BuildingDetail = () => {
           </button>
         </div>
       )}
-
-      {/* Info about invitation system */}
-      {permissions.canManageChildren && (
-        <div style={{
-          backgroundColor: '#f0f9ff',
-          padding: '12px',
-          borderRadius: '6px',
-          marginBottom: '16px',
-          border: '1px solid #bae6fd'
-        }}>
-          <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
-            📨 When you send an invitation, the user will receive a notification to join this building. 
-            They can accept or decline the invitation.
-          </p>
-        </div>
-      )}
       
       {children.length > 0 ? (
         <div className="children-list">
@@ -1265,7 +1289,7 @@ const BuildingDetail = () => {
           ))}
         </div>
       ) : (
-        <p className="no-data-message">No children found for this building</p>
+        <p className="no-data-message">No children found for this building. Invite users into your building.</p>
       )}
     </div>
   );

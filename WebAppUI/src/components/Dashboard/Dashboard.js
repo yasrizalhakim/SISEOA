@@ -464,18 +464,6 @@ const DeviceOverviewPanel = ({
       <div className="panel-header">
         <h3>
           {isSystemAdmin ? 'System Devices Overview' : 'My Devices Overview'}
-          {isSystemAdmin && (
-            <span style={{ 
-              marginLeft: '8px', 
-              fontSize: '12px', 
-              backgroundColor: '#10b981', 
-              color: 'white', 
-              padding: '2px 6px', 
-              borderRadius: '12px' 
-            }}>
-              Admin
-            </span>
-          )}
         </h3>
         <div className="panel-actions">
           <button 
@@ -585,18 +573,6 @@ const EnergyPanel = ({ deviceIds, isSystemAdmin, devicesCount }) => (
       <h3>
         <MdBolt style={{ color: '#22c55e', marginRight: '0.5rem' }} />
         Energy Overview
-        {isSystemAdmin && (
-          <span style={{ 
-            marginLeft: '8px', 
-            fontSize: '12px', 
-            backgroundColor: '#10b981', 
-            color: 'white', 
-            padding: '2px 6px', 
-            borderRadius: '12px' 
-          }}>
-            Admin
-          </span>
-        )}
       </h3>
     </div>
     
@@ -622,10 +598,8 @@ const EnergyPanel = ({ deviceIds, isSystemAdmin, devicesCount }) => (
             Energy tracking will show:
           </p>
           <ul style={{ margin: '8px 0 0 20px', fontSize: '13px' }}>
-            <li>Real-time energy consumption</li>
             <li>7-day usage trends</li>
             <li>Peak usage analytics</li>
-            <li>Device activity overview</li>
           </ul>
         </div>
       </div>

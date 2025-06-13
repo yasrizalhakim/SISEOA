@@ -1,14 +1,14 @@
-// src/utils/helpers.js - Enhanced with Location-Based Device Access Support
+// src/utils/helpers.js - Refactored with duplicate removal and cleanup
 
 import { firestore } from '../services/firebase';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
 // ==============================================================================
-// ROLE CHECKING UTILITIES - Enhanced for better SystemAdmin support
+// ROLE CHECKING UTILITIES
 // ==============================================================================
 
 /**
- * Check if user is SystemAdmin - Enhanced with better error handling
+ * Check if user is SystemAdmin
  * @param {string} userEmail - User's email
  * @returns {Promise<boolean>} True if user is SystemAdmin
  */
@@ -45,7 +45,7 @@ export const isSystemAdmin = async (userEmail) => {
 };
 
 /**
- * Get user's building roles - Enhanced with SystemAdmin detection
+ * Get user's building roles
  * @param {string} userEmail - User's email
  * @returns {Promise<Map>} Map of building ID to role
  */
@@ -83,7 +83,7 @@ export const getUserBuildingRoles = async (userEmail) => {
 };
 
 /**
- * Get user's effective role (highest permission) - Enhanced SystemAdmin support
+ * Get user's effective role (highest permission)
  * @param {string} userEmail - User's email
  * @returns {Promise<string>} 'admin', 'parent', 'children', or 'none'
  */
@@ -114,7 +114,7 @@ export const getUserRole = async (userEmail) => {
 };
 
 /**
- * Get user's role in a specific building - Enhanced for SystemAdmin
+ * Get user's role in a specific building
  * @param {string} userEmail - User's email
  * @param {string} buildingId - Building ID
  * @returns {Promise<string>} Role in the specific building
@@ -182,11 +182,11 @@ export const getUserAssignedLocations = async (userEmail, buildingId) => {
 };
 
 // ==============================================================================
-// PERMISSION CHECKING UTILITIES - Enhanced for SystemAdmin and Location-Based Access
+// PERMISSION CHECKING UTILITIES
 // ==============================================================================
 
 /**
- * Check if user can manage devices - Enhanced SystemAdmin support and multi-role
+ * Check if user can manage devices
  * @param {string} userEmail - User's email
  * @returns {Promise<boolean>} True if user can manage devices
  */
@@ -221,7 +221,7 @@ export const canManageDevices = async (userEmail) => {
 };
 
 /**
- * Check if user can manage buildings - Enhanced SystemAdmin support and multi-role
+ * Check if user can manage buildings
  * @param {string} userEmail - User's email
  * @returns {Promise<boolean>} True if user can manage buildings
  */
@@ -257,7 +257,7 @@ export const canManageBuildings = async (userEmail) => {
 };
 
 /**
- * Check if user can manage other users - Enhanced SystemAdmin support and multi-role
+ * Check if user can manage other users
  * @param {string} userEmail - User's email
  * @returns {Promise<boolean>} True if user can manage users
  */
@@ -290,7 +290,7 @@ export const canManageUsers = async (userEmail) => {
 };
 
 /**
- * Check if user can control a specific device - Enhanced for Location-Based Access
+ * Check if user can control a specific device
  * @param {Object} device - Device object
  * @param {string} userEmail - User's email
  * @param {Array} locations - Array of location objects
@@ -325,7 +325,7 @@ export const canControlDevice = async (device, userEmail, locations) => {
       console.log(`✅ User can control device (role: ${userRoleInBuilding})`);
       return true;
     } else if (userRoleInBuilding === 'children') {
-      // NEW: Children can control devices if they have access to the device's location
+      // Children can control devices if they have access to the device's location
       const assignedLocations = await getUserAssignedLocations(userEmail, location.Building);
       const hasLocationAccess = assignedLocations.includes(device.Location);
       
@@ -400,11 +400,11 @@ export const hasDeviceAccess = async (device, userEmail, locations) => {
 };
 
 // ==============================================================================
-// DATA FILTERING UTILITIES - Enhanced for Location-Based Access
+// DATA FILTERING UTILITIES
 // ==============================================================================
 
 /**
- * Filter devices based on user permissions - Enhanced for Location-Based Access
+ * Filter devices based on user permissions
  * @param {Array} devices - Array of device objects
  * @param {string} userEmail - User's email
  * @param {Array} locations - Array of location objects
@@ -459,7 +459,7 @@ export const filterUserDevices = async (devices, userEmail, locations) => {
 };
 
 /**
- * Get buildings accessible to user - Enhanced SystemAdmin support
+ * Get buildings accessible to user
  * @param {string} userEmail - User's email
  * @returns {Promise<Array>} Array of building objects with user role
  */
@@ -638,7 +638,7 @@ export const getRoleBadgeClass = (role) => {
 };
 
 // ==============================================================================
-// DEVICE UTILITIES - Enhanced for Location-Based Access
+// DEVICE UTILITIES
 // ==============================================================================
 
 export const getDeviceDisplayName = (device) => {
@@ -732,7 +732,7 @@ export const handleError = (error, defaultMessage = 'An error occurred') => {
 };
 
 // ==============================================================================
-// CURRENT USER UTILITIES - Enhanced for SystemAdmin
+// CURRENT USER UTILITIES
 // ==============================================================================
 
 export const getCurrentUser = () => ({

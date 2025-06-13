@@ -1,4 +1,4 @@
-// src/services/energyUsageService.js - Fixed Energy Usage Data Management
+// src/services/energyUsageService.js - Updated with Date Range Support
 
 import { firestore } from './firebase';
 import { 
@@ -20,15 +20,14 @@ import {
 /**
  * Get energy usage data for a specific device and date range
  * @param {string} deviceId - Device ID
- * @param {string} filter - 'day', 'week', or 'month'
- * @param {Date} date - Base date for filtering (default: today)
+ * @param {Date} startDate - Start date for filtering
+ * @param {Date} endDate - End date for filtering
  * @returns {Promise<Array>} Array of energy usage data
  */
-export const getDeviceEnergyUsage = async (deviceId, filter = 'day', date = new Date()) => {
+export const getDeviceEnergyUsage = async (deviceId, startDate, endDate) => {
   try {
-    console.log(`📊 Fetching energy usage for device ${deviceId}, filter: ${filter}`);
+    console.log(`📊 Fetching energy usage for device ${deviceId}, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
-    const { startDate, endDate } = getDateRange(filter, date);
     const usageData = [];
     
     // Get data for each day in the range
@@ -86,20 +85,19 @@ export const getDeviceEnergyUsage = async (deviceId, filter = 'day', date = new 
  * Get aggregated energy usage for all devices in a building
  * @param {string} buildingId - Building ID
  * @param {Array} deviceIds - Array of device IDs in the building
- * @param {string} filter - 'day', 'week', or 'month'
- * @param {Date} date - Base date for filtering (default: today)
+ * @param {Date} startDate - Start date for filtering
+ * @param {Date} endDate - End date for filtering
  * @returns {Promise<Array>} Array of aggregated energy usage data
  */
-export const getBuildingEnergyUsage = async (buildingId, deviceIds, filter = 'day', date = new Date()) => {
+export const getBuildingEnergyUsage = async (buildingId, deviceIds, startDate, endDate) => {
   try {
-    console.log(`🏢 Fetching building energy usage for ${deviceIds.length} devices, filter: ${filter}`);
+    console.log(`🏢 Fetching building energy usage for ${deviceIds.length} devices, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
     if (!deviceIds || deviceIds.length === 0) {
       console.log('No devices found for building');
       return [];
     }
     
-    const { startDate, endDate } = getDateRange(filter, date);
     const aggregatedData = [];
     
     // Get data for each day in the range
@@ -224,12 +222,13 @@ export const getBuildingDeviceIds = async (buildingId) => {
 /**
  * Get energy usage summary for a device
  * @param {string} deviceId - Device ID
- * @param {string} filter - 'day', 'week', or 'month'
+ * @param {Date} startDate - Start date for filtering
+ * @param {Date} endDate - End date for filtering
  * @returns {Promise<Object>} Energy usage summary
  */
-export const getDeviceEnergyUsageSummary = async (deviceId, filter = 'day') => {
+export const getDeviceEnergyUsageSummary = async (deviceId, startDate, endDate) => {
   try {
-    const usageData = await getDeviceEnergyUsage(deviceId, filter);
+    const usageData = await getDeviceEnergyUsage(deviceId, startDate, endDate);
     
     if (usageData.length === 0) {
       return {
@@ -274,10 +273,11 @@ export const getDeviceEnergyUsageSummary = async (deviceId, filter = 'day') => {
 /**
  * Get energy usage summary for a building
  * @param {string} buildingId - Building ID
- * @param {string} filter - 'day', 'week', or 'month'
+ * @param {Date} startDate - Start date for filtering
+ * @param {Date} endDate - End date for filtering
  * @returns {Promise<Object>} Building energy usage summary
  */
-export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') => {
+export const getBuildingEnergyUsageSummary = async (buildingId, startDate, endDate) => {
   try {
     const deviceIds = await getBuildingDeviceIds(buildingId);
     
@@ -293,7 +293,7 @@ export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') 
       };
     }
     
-    const usageData = await getBuildingEnergyUsage(buildingId, deviceIds, filter);
+    const usageData = await getBuildingEnergyUsage(buildingId, deviceIds, startDate, endDate);
     
     if (usageData.length === 0) {
       return {
@@ -348,15 +348,13 @@ export const getBuildingEnergyUsageSummary = async (buildingId, filter = 'day') 
 /**
  * Get energy status history for a device (individual on/off events)
  * @param {string} deviceId - Device ID
- * @param {string} filter - 'day', 'week', or 'month'
- * @param {Date} date - Base date for filtering (default: today)
+ * @param {Date} startDate - Start date for filtering
+ * @param {Date} endDate - End date for filtering
  * @returns {Promise<Array>} Array of energy status events
  */
-export const getDeviceEnergyStatusHistory = async (deviceId, filter = 'day', date = new Date()) => {
+export const getDeviceEnergyStatusHistory = async (deviceId, startDate, endDate) => {
   try {
-    console.log(`📊 Fetching energy status history for device ${deviceId}, filter: ${filter}`);
-    
-    const { startDate, endDate } = getDateRange(filter, date);
+    console.log(`📊 Fetching energy status history for device ${deviceId}, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
     // Get all energy status documents in the date range
     // Path: ENERGYUSAGE/{deviceId}/DeviceEnergyStatus/{timestamp}
@@ -398,15 +396,13 @@ export const getDeviceEnergyStatusHistory = async (deviceId, filter = 'day', dat
 /**
  * Get device status history (ON/OFF events)
  * @param {string} deviceId - Device ID
- * @param {string} filter - 'day', 'week', or 'month'
- * @param {Date} date - Base date for filtering (default: today)
+ * @param {Date} startDate - Start date for filtering
+ * @param {Date} endDate - End date for filtering
  * @returns {Promise<Array>} Array of device status events
  */
-export const getDeviceStatusHistory = async (deviceId, filter = 'day', date = new Date()) => {
+export const getDeviceStatusHistory = async (deviceId, startDate, endDate) => {
   try {
-    console.log(`📊 Fetching device status history for device ${deviceId}, filter: ${filter}`);
-    
-    const { startDate, endDate } = getDateRange(filter, date);
+    console.log(`📊 Fetching device status history for device ${deviceId}, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
     
     // Get all device status documents in the date range
     // Path: ENERGYUSAGE/{deviceId}/DeviceStatusUsage/{timestamp}
@@ -449,12 +445,162 @@ export const getDeviceStatusHistory = async (deviceId, filter = 'day', date = ne
 // ==============================================================================
 
 /**
- * Get date range based on filter type
+ * Get default date range (last 7 days)
+ * @returns {Object} Object with startDate and endDate
+ */
+export const getDefaultDateRange = () => {
+  const endDate = new Date();
+  endDate.setHours(23, 59, 59, 999);
+  
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 6); // Last 7 days (including today)
+  startDate.setHours(0, 0, 0, 0);
+  
+  return { startDate, endDate };
+};
+
+/**
+ * Format date for Firestore document ID
+ * @param {Date} date - Date to format
+ * @returns {string} Formatted date string (yyyy-mm-dd)
+ */
+const formatDateForFirestore = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Format date for HTML input
+ * @param {Date} date - Date to format
+ * @returns {string} Formatted date string (yyyy-mm-dd)
+ */
+export const formatDateForInput = (date) => {
+  if (!date) return '';
+  
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Parse date from HTML input
+ * @param {string} dateString - Date string from input (yyyy-mm-dd)
+ * @returns {Date} Parsed date object
+ */
+export const parseDateFromInput = (dateString) => {
+  if (!dateString) return null;
+  
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/**
+ * Format date for display in charts
+ * @param {Date} date - Date to format
+ * @param {number} totalDays - Total days in range for formatting context
+ * @returns {string} Formatted date string for display
+ */
+export const formatDateForDisplay = (date, totalDays) => {
+  if (!date) return '';
+  
+  if (totalDays <= 7) {
+    // For week or less, show day and date
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  } else if (totalDays <= 31) {
+    // For month or less, show month and day
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  } else {
+    // For longer periods, show month and year
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      year: 'numeric' 
+    });
+  }
+};
+
+/**
+ * Validate date range
+ * @param {Date} startDate - Start date
+ * @param {Date} endDate - End date
+ * @returns {Object} Validation result with isValid and error message
+ */
+export const validateDateRange = (startDate, endDate) => {
+  if (!startDate || !endDate) {
+    return {
+      isValid: false,
+      error: 'Both start and end dates are required'
+    };
+  }
+  
+  if (startDate > endDate) {
+    return {
+      isValid: false,
+      error: 'Start date must be before or equal to end date'
+    };
+  }
+  
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
+  if (startDate > today || endDate > today) {
+    return {
+      isValid: false,
+      error: 'Dates cannot be in the future'
+    };
+  }
+  
+  return {
+    isValid: true,
+    error: null
+  };
+};
+
+// ==============================================================================
+// BACKWARD COMPATIBILITY FUNCTIONS (DEPRECATED)
+// ==============================================================================
+
+/**
+ * @deprecated Use getDeviceEnergyUsage with startDate and endDate instead
+ * Get energy usage data for a specific device and date range
+ * @param {string} deviceId - Device ID
+ * @param {string} filter - 'day', 'week', or 'month'
+ * @param {Date} date - Base date for filtering (default: today)
+ * @returns {Promise<Array>} Array of energy usage data
+ */
+export const getDeviceEnergyUsageOld = async (deviceId, filter = 'day', date = new Date()) => {
+  console.warn('getDeviceEnergyUsageOld is deprecated. Use getDeviceEnergyUsage with startDate and endDate instead.');
+  
+  const { startDate, endDate } = getDateRangeFromFilter(filter, date);
+  return getDeviceEnergyUsage(deviceId, startDate, endDate);
+};
+
+/**
+ * @deprecated Use getBuildingEnergyUsage with startDate and endDate instead
+ */
+export const getBuildingEnergyUsageOld = async (buildingId, deviceIds, filter = 'day', date = new Date()) => {
+  console.warn('getBuildingEnergyUsageOld is deprecated. Use getBuildingEnergyUsage with startDate and endDate instead.');
+  
+  const { startDate, endDate } = getDateRangeFromFilter(filter, date);
+  return getBuildingEnergyUsage(buildingId, deviceIds, startDate, endDate);
+};
+
+/**
+ * Get date range based on filter type (for backward compatibility)
  * @param {string} filter - 'day', 'week', or 'month'
  * @param {Date} baseDate - Base date for calculation
  * @returns {Object} Object with startDate and endDate
  */
-const getDateRange = (filter, baseDate) => {
+const getDateRangeFromFilter = (filter, baseDate) => {
   const date = new Date(baseDate);
   let startDate, endDate;
   
@@ -495,67 +641,6 @@ const getDateRange = (filter, baseDate) => {
   return { startDate, endDate };
 };
 
-/**
- * Format date for Firestore document ID
- * @param {Date} date - Date to format
- * @returns {string} Formatted date string (yyyy-mm-dd)
- */
-const formatDateForFirestore = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-/**
- * Format date for display
- * @param {Date} date - Date to format
- * @param {string} filter - Filter type for appropriate formatting
- * @returns {string} Formatted date string for display
- */
-export const formatDateForDisplay = (date, filter) => {
-  if (!date) return '';
-  
-  switch (filter) {
-    case 'week':
-      // Show week start date
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay());
-      return weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      
-    case 'month':
-      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      
-    case 'day':
-    default:
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-};
-
-/**
- * Get sample energy data for testing (remove in production)
- * @param {string} filter - Filter type
- * @returns {Array} Sample data array
- */
-export const getSampleEnergyData = (filter = 'day') => {
-  const data = [];
-  const { startDate, endDate } = getDateRange(filter, new Date());
-  
-  const currentDate = new Date(startDate);
-  while (currentDate <= endDate) {
-    data.push({
-      date: new Date(currentDate),
-      dateStr: formatDateForFirestore(currentDate),
-      usage: Number((Math.random() * 0.05 + 0.01).toFixed(6)), // Small realistic values (0.01-0.06 kWh)
-      lastUpdated: new Date().toISOString()
-    });
-    
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-  
-  return data;
-};
-
 // ==============================================================================
 // EXPORTS
 // ==============================================================================
@@ -568,6 +653,12 @@ export default {
   getBuildingEnergyUsageSummary,
   getDeviceEnergyStatusHistory,
   getDeviceStatusHistory,
+  getDefaultDateRange,
   formatDateForDisplay,
-  getSampleEnergyData
+  formatDateForInput,
+  parseDateFromInput,
+  validateDateRange,
+  // Deprecated functions for backward compatibility
+  getDeviceEnergyUsageOld,
+  getBuildingEnergyUsageOld
 };

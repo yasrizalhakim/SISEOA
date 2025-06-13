@@ -950,11 +950,15 @@ const UserInfoTab = ({
             <div key={building.id} className="building-item">
               <div className="building-name">{building.BuildingName || building.id}</div>
               <div className="building-details">
+                <span className="building-address">ID: {building.id}</span>
                 {building.Address && (
                   <span className="building-address">
                     <MdLocationOn /> {building.Address}
                   </span>
                 )}
+                <span className="building-role-info">
+                  Role: {building.userRole}
+                </span>
                 <span className="building-role-info">
                   Locations: {building.assignedLocations?.length || 0} assigned
                 </span>
@@ -1046,6 +1050,7 @@ const LocationAccessTab = ({
             <div key={building.id} className="building-item" style={{ position: 'relative' }}>
               <div className="building-name">{building.BuildingName || building.id}</div>
               <div className="building-details">
+                <span>Role: {building.userRole}</span>
                 <span>Assigned Locations: {building.assignedLocations?.length || 0}</span>
               </div>
               {building.userRole === 'children' && (
@@ -1068,16 +1073,17 @@ const LocationAccessTab = ({
       </div>
     )}
     
-
     {/* Current Location Access Display */}
-    <h4 style={{ marginBottom: '15px', color: '#1e293b' }}>Location Access:</h4>
     {assignedLocations.length > 0 ? (
       <div className="devices-list">
         {assignedLocations.map(location => (
-          <div key={location.id} className="device-item" style={{ position: 'relative' }}>
-            {/* <div className="device-name">{location.buildingName}</div> */}
+          <div key={location.id} className="device-item">
             <div className="device-name">{location.name}</div>
             <div className="device-details">
+              <div className="detail-item">
+                <span className="detail-label">Location ID:</span>
+                <span className="detail-value">{location.id}</span>
+              </div>
               <div className="detail-item">
                 <span className="detail-label">Building:</span>
                 <span className="detail-value">{location.buildingName}</span>

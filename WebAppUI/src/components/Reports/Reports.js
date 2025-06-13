@@ -1,7 +1,7 @@
-// src/components/Reports/Reports.js - Main Reports Component
+// src/components/Reports/Reports.js - Updated with Date Range Support
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { MdAssessment, MdRefresh, MdDownload, MdBarChart, MdAdminPanelSettings } from 'react-icons/md';
+import { MdAssessment, MdRefresh, MdDownload, MdBarChart, MdAdminPanelSettings, MdCalendarToday } from 'react-icons/md';
 import EnergyReport from './EnergyReport';
 import { generateEnergyReportPDF } from './ReportPDFGenerator';
 import energyUsageService from '../../services/energyUsageService';
@@ -15,7 +15,6 @@ import {
   calculateCarbonFootprint,
   analyzeDeviceTypes,
   generateRecommendations,
-  getReportDateRange,
   calculateSavingsPotential
 } from './reportUtils';
 import './Reports.css';
@@ -34,13 +33,26 @@ const Reports = () => {
   
   // Report controls
   const [selectedBuilding, setSelectedBuilding] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [startDateObj, setStartDateObj] = useState(null);
+  const [endDateObj, setEndDateObj] = useState(null);
   const [reportData, setReportData] = useState(null);
   
   const userEmail = useMemo(() => 
     localStorage.getItem('userEmail') || '', 
     []
   );
+
+  // Initialize default date range (last 7 days)
+  useEffect(() => {
+    const { startDate: defaultStart, endDate: defaultEnd } = energyUsageService.getDefaultDateRange();
+    
+    setStartDateObj(defaultStart);
+    setEndDateObj(defaultEnd);
+    setStartDate(energyUsageService.formatDateForInput(defaultStart));
+    setEndDate(energyUsageService.formatDateForInput(defaultEnd));
+  }, []);
 
   // Check if user is SystemAdmin and load initial data
   useEffect(() => {
@@ -178,10 +190,68 @@ const Reports = () => {
     }
   };
 
+  // Handle date changes
+  const handleStartDateChange = useCallback((e) => {
+    const dateValue = e.target.value;
+    setStartDate(dateValue);
+    
+    if (dateValue) {
+      const dateObj = energyUsageService.parseDateFromInput(dateValue);
+      dateObj.setHours(0, 0, 0, 0);
+      setStartDateObj(dateObj);
+    } else {
+      setStartDateObj(null);
+    }
+  }, []);
+
+  const handleEndDateChange = useCallback((e) => {
+    const dateValue = e.target.value;
+    setEndDate(dateValue);
+    
+    if (dateValue) {
+      const dateObj = energyUsageService.parseDateFromInput(dateValue);
+      dateObj.setHours(23, 59, 59, 999);
+      setEndDateObj(dateObj);
+    } else {
+      setEndDateObj(null);
+    }
+  }, []);
+
+  // Calculate min and max dates for inputs
+  const { minStartDate, maxStartDate, minEndDate, maxEndDate } = useMemo(() => {
+    const today = new Date();
+    const todayStr = energyUsageService.formatDateForInput(today);
+    
+    return {
+      minStartDate: null, // No minimum restriction
+      maxStartDate: endDate || todayStr, // Can't be after end date or today
+      minEndDate: startDate, // Can't be before start date
+      maxEndDate: todayStr // Can't be in the future
+    };
+  }, [startDate, endDate]);
+
+  // Validate date range
+  const dateValidation = useMemo(() => {
+    if (startDateObj && endDateObj) {
+      return energyUsageService.validateDateRange(startDateObj, endDateObj);
+    }
+    return { isValid: true, error: null };
+  }, [startDateObj, endDateObj]);
+
   // Generate energy report
   const generateReport = useCallback(async () => {
-    if (!selectedBuilding || !selectedPeriod) {
-      setError('Please select a building and time period');
+    if (!selectedBuilding) {
+      setError('Please select a building');
+      return;
+    }
+
+    if (!dateValidation.isValid) {
+      setError(dateValidation.error);
+      return;
+    }
+
+    if (!startDateObj || !endDateObj) {
+      setError('Please select both start and end dates');
       return;
     }
 
@@ -189,9 +259,16 @@ const Reports = () => {
       setGenerating(true);
       setError(null);
       
-      console.log(`📊 Generating ${selectedPeriod} report for:`, selectedBuilding);
+      console.log(`📊 Generating report for ${selectedBuilding} from ${startDate} to ${endDate}`);
 
-      const dateRange = getReportDateRange(selectedPeriod);
+      // Create date range object for report
+      const dateRange = {
+        startDate: startDateObj,
+        endDate: endDateObj,
+        periodText: `${startDateObj.toLocaleDateString()} - ${endDateObj.toLocaleDateString()}`,
+        formatted: `${startDateObj.toLocaleDateString()} to ${endDateObj.toLocaleDateString()}`
+      };
+
       let buildingName = '';
       let deviceIds = [];
       let energyData = [];
@@ -207,8 +284,8 @@ const Reports = () => {
         
         // Get aggregated energy data
         if (deviceIds.length > 0) {
-          energyData = await energyUsageService.getBuildingEnergyUsage('system', deviceIds, selectedPeriod);
-          reportSummary = await energyUsageService.getBuildingEnergyUsageSummary('system', selectedPeriod);
+          energyData = await energyUsageService.getBuildingEnergyUsage('system', deviceIds, startDateObj, endDateObj);
+          reportSummary = await energyUsageService.getBuildingEnergyUsageSummary('system', startDateObj, endDateObj);
         }
         
         // Add system stats
@@ -226,27 +303,16 @@ const Reports = () => {
         deviceIds = await energyUsageService.getBuildingDeviceIds(selectedBuilding);
         
         if (deviceIds.length > 0) {
-          energyData = await energyUsageService.getBuildingEnergyUsage(selectedBuilding, deviceIds, selectedPeriod);
-          reportSummary = await energyUsageService.getBuildingEnergyUsageSummary(selectedBuilding, selectedPeriod);
+          energyData = await energyUsageService.getBuildingEnergyUsage(selectedBuilding, deviceIds, startDateObj, endDateObj);
+          reportSummary = await energyUsageService.getBuildingEnergyUsageSummary(selectedBuilding, startDateObj, endDateObj);
         }
       }
 
-      // If no real data, use sample data for demonstration
+      // If no data found, return early with error
       if (energyData.length === 0) {
-        console.log('📊 No energy data found, using sample data');
-        energyData = energyUsageService.getSampleEnergyData(selectedPeriod);
-        
-        const totalUsage = energyData.reduce((sum, item) => sum + item.usage, 0);
-        reportSummary = {
-          totalUsage: totalUsage,
-          averageUsage: energyData.length > 0 ? totalUsage / energyData.length : 0,
-          peakUsage: Math.max(...energyData.map(item => item.usage)),
-          daysWithData: energyData.length,
-          totalDays: energyData.length,
-          deviceCount: deviceIds.length || 3,
-          activeDevices: deviceIds.length || 3,
-          ...systemStats
-        };
+        setError('No energy data found for the selected building and date range');
+        setGenerating(false);
+        return;
       }
 
       // Calculate cost breakdown
@@ -267,7 +333,7 @@ const Reports = () => {
         });
       }
 
-      // Add sample energy usage to devices for analysis
+      // Add energy usage to devices for analysis (distribute total usage)
       devicesForAnalysis = devicesForAnalysis.map(device => ({
         ...device,
         energyUsage: Math.random() * (reportSummary.totalUsage / Math.max(devicesForAnalysis.length, 1))
@@ -286,29 +352,12 @@ const Reports = () => {
       });
 
       // Format energy data for charts
-      const chartData = energyData.map(item => {
-        let displayDate;
-        switch (selectedPeriod) {
-          case 'week':
-            displayDate = item.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-            break;
-          case 'month':
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            break;
-          case 'year':
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short' });
-            break;
-          default:
-            displayDate = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            break;
-        }
-        
-        return {
-          name: displayDate,
-          usage: Number(item.usage.toFixed(6)),
-          date: item.date
-        };
-      });
+      const totalDays = Math.ceil((endDateObj - startDateObj) / (1000 * 60 * 60 * 24)) + 1;
+      const chartData = energyData.map(item => ({
+        name: energyUsageService.formatDateForDisplay(item.date, totalDays),
+        usage: Number(item.usage.toFixed(6)),
+        date: item.date
+      }));
 
       // Generate recommendations
       const recommendations = generateRecommendations({
@@ -326,8 +375,7 @@ const Reports = () => {
         savingsPotential,
         recommendations,
         dateRange,
-        buildingId: selectedBuilding,
-        period: selectedPeriod
+        buildingId: selectedBuilding
       };
 
       setReportData(completeReportData);
@@ -339,7 +387,7 @@ const Reports = () => {
     } finally {
       setGenerating(false);
     }
-  }, [selectedBuilding, selectedPeriod, isUserSystemAdmin, userBuildings, systemStats, userEmail]);
+  }, [selectedBuilding, startDateObj, endDateObj, dateValidation, isUserSystemAdmin, userBuildings, systemStats, userEmail, startDate, endDate]);
 
   // Download PDF report
   const downloadPDF = useCallback(async () => {
@@ -355,7 +403,7 @@ const Reports = () => {
       const building = userBuildings.find(b => b.id === selectedBuilding);
       const buildingName = building?.buildingName || building?.BuildingName || selectedBuilding;
 
-      await generateEnergyReportPDF(reportData, buildingName, selectedPeriod, isUserSystemAdmin);
+      await generateEnergyReportPDF(reportData, buildingName, 'custom', isUserSystemAdmin);
       
       console.log('✅ PDF downloaded successfully');
 
@@ -365,7 +413,7 @@ const Reports = () => {
     } finally {
       setDownloadingPDF(false);
     }
-  }, [reportData, selectedBuilding, selectedPeriod, isUserSystemAdmin, userBuildings]);
+  }, [reportData, selectedBuilding, isUserSystemAdmin, userBuildings]);
 
   // Refresh data
   const handleRefresh = useCallback(() => {
@@ -466,23 +514,39 @@ const Reports = () => {
           </div>
 
           <div className="control-group">
-            <label htmlFor="period-select">Time Period</label>
-            <select
-              id="period-select"
+            <label htmlFor="start-date-select">
+              <MdCalendarToday /> From Date
+            </label>
+            <input
+              id="start-date-select"
+              type="date"
               className="control-select"
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-            >
-              <option value="week">Weekly Report</option>
-              <option value="month">Monthly Report</option>
-              <option value="year">Yearly Report</option>
-            </select>
+              value={startDate}
+              onChange={handleStartDateChange}
+              min={minStartDate}
+              max={maxStartDate}
+            />
+          </div>
+
+          <div className="control-group">
+            <label htmlFor="end-date-select">
+              <MdCalendarToday /> To Date
+            </label>
+            <input
+              id="end-date-select"
+              type="date"
+              className="control-select"
+              value={endDate}
+              onChange={handleEndDateChange}
+              min={minEndDate}
+              max={maxEndDate}
+            />
           </div>
 
           <button
             className="generate-btn"
             onClick={generateReport}
-            disabled={generating || !selectedBuilding}
+            disabled={generating || !selectedBuilding || !dateValidation.isValid}
           >
             <MdBarChart />
             {generating ? 'Generating...' : 'Generate Report'}
@@ -499,6 +563,21 @@ const Reports = () => {
             </button>
           )}
         </div>
+
+        {/* Date validation error */}
+        {!dateValidation.isValid && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px 16px',
+            backgroundColor: '#fee2e2',
+            color: '#dc2626',
+            borderRadius: '6px',
+            fontSize: '14px',
+            border: '1px solid #fecaca'
+          }}>
+            {dateValidation.error}
+          </div>
+        )}
       </div>
 
       {/* Report Display */}
@@ -510,14 +589,13 @@ const Reports = () => {
             userBuildings.find(b => b.id === selectedBuilding)?.BuildingName || 
             selectedBuilding
           }
-          period={selectedPeriod}
           isSystemAdmin={isUserSystemAdmin}
         />
       ) : (
         <div className="no-report-state">
           <h3>Ready to Generate Report</h3>
           <p>
-            Select a {isUserSystemAdmin ? 'building or system overview' : 'building'} and time period, 
+            Select a {isUserSystemAdmin ? 'building or system overview' : 'building'} and date range, 
             then click "Generate Report" to view detailed energy analysis.
           </p>
         </div>

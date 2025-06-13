@@ -1,4 +1,4 @@
-// src/components/Reports/EnergyReport.js - Energy Report Display Component
+// src/components/Reports/EnergyReport.js - Updated Energy Report Display Component
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -9,7 +9,7 @@ import {
   calculateEfficiencyRating
 } from './reportUtils';
 
-const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
+const EnergyReport = ({ reportData, buildingName, isSystemAdmin }) => {
   if (!reportData) {
     return (
       <div className="no-report-state">
@@ -55,11 +55,12 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
     return null;
   };
 
-  // Efficiency rating
+  // Efficiency rating - updated to use total days from date range
+  const totalDays = dateRange.totalDays || summary.totalDays || energyData.length;
   const efficiencyRating = calculateEfficiencyRating(
     summary.totalUsage, 
     summary.totalDevices || deviceAnalysis.totalDevices, 
-    period
+    totalDays
   );
 
   return (
@@ -140,8 +141,9 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
                   <XAxis 
                     dataKey="name" 
                     tick={{ fontSize: 12 }}
-                    angle={period === 'month' ? -45 : 0}
-                    textAnchor={period === 'month' ? 'end' : 'middle'}
+                    angle={energyData.length > 7 ? -45 : 0}
+                    textAnchor={energyData.length > 7 ? 'end' : 'middle'}
+                    height={energyData.length > 7 ? 60 : 30}
                   />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip content={<CustomTooltip />} />
@@ -238,7 +240,7 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
           </table>
         </div>
 
-        {/* Environmental Impact
+        {/* Environmental Impact */}
         <div className="environmental-section">
           <h3>🌱 Environmental Impact</h3>
           
@@ -275,7 +277,7 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
               </div>
             )}
           </div>
-        </div> */}
+        </div>
 
         {/* Energy Efficiency Assessment */}
         <div className="efficiency-section">
@@ -294,6 +296,13 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
                 {formatEnergyValue(efficiencyRating.usagePerDevicePerDay)}
               </div>
               <p className="summary-label">Usage per Device/Day</p>
+            </div>
+
+            <div className="summary-card">
+              <div className="summary-value">
+                {totalDays}
+              </div>
+              <p className="summary-label">Days Analyzed</p>
             </div>
 
             {savingsPotential && (
@@ -315,18 +324,19 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
               </>
             )}
           </div>
-        </div>
-
-        {/* Recommendations
-        <div className="recommendations-section">
-          <h3>💡 Energy Optimization Recommendations</h3>
           
-          <ul className="recommendations-list">
-            {recommendations.map((recommendation, index) => (
-              <li key={index}>{recommendation}</li>
-            ))}
-          </ul>
-        </div> */}
+          <div style={{
+            marginTop: '16px',
+            padding: '12px 16px',
+            backgroundColor: '#f0f9ff',
+            borderRadius: '6px',
+            border: '1px solid #bae6fd'
+          }}>
+            <p style={{ margin: 0, fontSize: '14px', color: '#0369a1' }}>
+              <strong>Efficiency Rating:</strong> {efficiencyRating.rating} - {efficiencyRating.description}
+            </p>
+          </div>
+        </div>
 
         {/* Report Footer */}
         <div className="report-footer">
@@ -340,8 +350,9 @@ const EnergyReport = ({ reportData, buildingName, period, isSystemAdmin }) => {
           }}>
             Report generated on {new Date().toLocaleDateString()} by SISEAO Energy Management System
             <br />
-            Energy rates based on TNB Malaysia tariff structure. 
-            {/* Carbon footprint calculated using Malaysia's grid emission factor (0.708 kg CO₂/kWh). */}
+            Energy rates based on TNB Malaysia tariff structure.
+            <br />
+            Report period: {dateRange.formatted} ({totalDays} day{totalDays !== 1 ? 's' : ''})
           </p>
         </div>
       </div>

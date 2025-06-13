@@ -1,4 +1,4 @@
-// src/services/notificationService.js - Enhanced with Building and Device Notifications
+// src/services/notificationService.js - Enhanced with Building Deletion, Device Deletion, and Runtime Warning Notifications
 
 import { firestore } from './firebase';
 import { 
@@ -21,7 +21,8 @@ export const NOTIFICATION_TYPES = {
   SYSTEM: 'system',
   INVITATION: 'invitation',
   INFO: 'info',
-  SUCCESS: 'success' // NEW: For positive actions like building creation
+  SUCCESS: 'success',
+  WARNING: 'warning' // NEW: For device runtime warnings
 };
 
 // Invitation status
@@ -318,6 +319,18 @@ export const sendSystemNotification = async (userEmail, title, message) => {
   });
 };
 
+/**
+ * NEW: Send warning notification
+ */
+export const sendWarningNotification = async (userEmail, title, message) => {
+  return await createNotification({
+    title,
+    message,
+    userId: userEmail,
+    type: NOTIFICATION_TYPES.WARNING
+  });
+};
+
 // SystemAdmin utilities
 const getSystemAdminEmail = async () => {
   try {
@@ -339,12 +352,29 @@ const getSystemAdminEmail = async () => {
   }
 };
 
+// Building utilities
+const getBuildingParents = async (buildingId) => {
+  try {
+    const parentQuery = query(
+      collection(firestore, 'USERBUILDING'),
+      where('Building', '==', buildingId),
+      where('Role', '==', 'parent')
+    );
+    
+    const snapshot = await getDocs(parentQuery);
+    return snapshot.docs.map(doc => doc.data().User);
+  } catch (error) {
+    console.error('Error getting building parents:', error);
+    return [];
+  }
+};
+
 // ================================
-// NEW NOTIFICATION FUNCTIONS
+// EXISTING NOTIFICATION FUNCTIONS
 // ================================
 
 /**
- * NEW: Notify parent when they successfully create a building
+ * Notify parent when they successfully create a building
  */
 export const notifyParentBuildingCreated = async (parentEmail, buildingName, buildingId) => {
   try {
@@ -362,7 +392,7 @@ export const notifyParentBuildingCreated = async (parentEmail, buildingName, bui
 };
 
 /**
- * NEW: Notify parent when they add a location to their building
+ * Notify parent when they add a location to their building
  */
 export const notifyParentLocationAdded = async (parentEmail, locationName, buildingName) => {
   try {
@@ -380,7 +410,7 @@ export const notifyParentLocationAdded = async (parentEmail, locationName, build
 };
 
 /**
- * NEW: Notify parent when they successfully claim a device
+ * Notify parent when they successfully claim a device
  */
 export const notifyParentDeviceClaimed = async (parentEmail, deviceName, deviceId, locationName, buildingName) => {
   try {
@@ -398,7 +428,7 @@ export const notifyParentDeviceClaimed = async (parentEmail, deviceName, deviceI
 };
 
 /**
- * ENHANCED: Notify SystemAdmin about device registration (already exists but enhanced)
+ * ENHANCED: Notify SystemAdmin about device registration
  */
 export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy) => {
   try {
@@ -422,8 +452,7 @@ export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy)
 };
 
 /**
- * NEW: Notify SystemAdmin when admin adds/registers a device 
- * (This is different from user registration - for admin actions)
+ * Notify SystemAdmin when admin adds/registers a device 
  */
 export const notifyAdminDeviceAdded = async (deviceName, deviceId, addedBy) => {
   try {
@@ -456,36 +485,221 @@ export const notifyAdminDeviceAdded = async (deviceName, deviceId, addedBy) => {
  * Notify SystemAdmin about device deletion
  */
 export const notifyDeviceDeleted = async (deviceName, deviceId, deletedBy) => {
-  const systemAdminEmail = await getSystemAdminEmail();
-  if (!systemAdminEmail) return null;
+  try {
+    const systemAdminEmail = await getSystemAdminEmail();
+    if (!systemAdminEmail) {
+      console.log('⚠️ No SystemAdmin found to notify about device deletion');
+      return null;
+    }
 
-  return await sendSystemNotification(
-    systemAdminEmail,
-    'Device Deleted',
-    `Device "${deviceName}" (ID: ${deviceId}) has been deleted by ${deletedBy}.`
-  );
+    return await sendSystemNotification(
+      systemAdminEmail,
+      'Device Deleted',
+      `Device "${deviceName}" (ID: ${deviceId}) has been deleted by ${deletedBy}.`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying SystemAdmin about device deletion:', error);
+    return null;
+  }
 };
 
 /**
  * Notify parent when their device is deleted
  */
 export const notifyParentDeviceDeleted = async (parentEmail, deviceName, buildingName) => {
-  return await sendInfoNotification(
-    parentEmail,
-    'Device Deleted',
-    `Device "${deviceName}" in building "${buildingName}" has been deleted by an administrator.`
-  );
+  try {
+    return await sendInfoNotification(
+      parentEmail,
+      'Device Deleted',
+      `Device "${deviceName}" in building "${buildingName}" has been deleted by an administrator.`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying parent about device deletion:', error);
+    return null;
+  }
 };
 
 /**
  * Notify child when location is assigned to them
  */
 export const notifyLocationAssigned = async (childEmail, locationName, buildingName) => {
-  return await sendInfoNotification(
-    childEmail,
-    'Location Assigned',
-    `You've been assigned to "${locationName}" in "${buildingName}".`
-  );
+  try {
+    return await sendInfoNotification(
+      childEmail,
+      'Location Assigned',
+      `You've been assigned to "${locationName}" in "${buildingName}".`
+    );
+  } catch (error) {
+    console.error('❌ Error notifying about location assignment:', error);
+    return null;
+  }
+};
+
+// ================================
+// NEW NOTIFICATION FUNCTIONS
+// ================================
+
+/**
+ * NEW: Notify building parents when building is deleted by SystemAdmin
+ */
+export const notifyBuildingDeleted = async (buildingId, buildingName, deletedBy) => {
+  try {
+    console.log('🏢 Notifying building parents about building deletion:', { buildingId, buildingName, deletedBy });
+
+    const parentEmails = await getBuildingParents(buildingId);
+    
+    if (parentEmails.length === 0) {
+      console.log('⚠️ No parents found for building:', buildingId);
+      return [];
+    }
+
+    const notificationPromises = parentEmails.map(parentEmail => 
+      sendInfoNotification(
+        parentEmail,
+        'Building Deleted',
+        `Your building "${buildingName}" has been deleted by an administrator. All associated data has been removed from the system.`
+      )
+    );
+
+    const results = await Promise.allSettled(notificationPromises);
+    
+    // Log any failures
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`❌ Failed to notify parent ${parentEmails[index]}:`, result.reason);
+      }
+    });
+
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    console.log(`✅ Notified ${successCount}/${parentEmails.length} parents about building deletion`);
+    
+    return results;
+  } catch (error) {
+    console.error('❌ Error notifying about building deletion:', error);
+    return [];
+  }
+};
+
+/**
+ * NEW: Notify building parents when their device is deleted by SystemAdmin
+ */
+export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, buildingId, buildingName, deletedBy) => {
+  try {
+    console.log('📱 Notifying building parents about device deletion by SystemAdmin:', { 
+      deviceName, deviceId, buildingId, buildingName, deletedBy 
+    });
+
+    const parentEmails = await getBuildingParents(buildingId);
+    
+    if (parentEmails.length === 0) {
+      console.log('⚠️ No parents found for building:', buildingId);
+      return [];
+    }
+
+    // Filter out the deleter if they are also a parent (avoid self-notification)
+    const parentsToNotify = parentEmails.filter(email => email !== deletedBy);
+
+    if (parentsToNotify.length === 0) {
+      console.log('📝 No parents to notify (deleter is the only parent)');
+      return [];
+    }
+
+    const notificationPromises = parentsToNotify.map(parentEmail => 
+      sendInfoNotification(
+        parentEmail,
+        'Device Deleted by Administrator',
+        `Device "${deviceName}" in your building "${buildingName}" has been deleted by an administrator.`
+      )
+    );
+
+    const results = await Promise.allSettled(notificationPromises);
+    
+    // Log any failures
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`❌ Failed to notify parent ${parentsToNotify[index]}:`, result.reason);
+      }
+    });
+
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    console.log(`✅ Notified ${successCount}/${parentsToNotify.length} parents about device deletion`);
+    
+    return results;
+  } catch (error) {
+    console.error('❌ Error notifying about SystemAdmin device deletion:', error);
+    return [];
+  }
+};
+
+/**
+ * NEW: Send device runtime warning to building parents and assigned children
+ */
+export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationName, buildingId, buildingName, hoursOn, warningCount) => {
+  try {
+    console.log('⚠️ Sending device runtime warning:', { 
+      deviceId, deviceName, locationName, buildingId, hoursOn, warningCount 
+    });
+
+    const usersToNotify = [];
+
+    // Get building parents
+    const parentEmails = await getBuildingParents(buildingId);
+    usersToNotify.push(...parentEmails);
+
+    // Get children assigned to the device's location
+    const childrenQuery = query(
+      collection(firestore, 'USERBUILDING'),
+      where('Building', '==', buildingId),
+      where('Role', '==', 'children')
+    );
+    
+    const childrenSnapshot = await getDocs(childrenQuery);
+    
+    for (const childDoc of childrenSnapshot.docs) {
+      const childData = childDoc.data();
+      const assignedLocations = childData.AssignedLocations || [];
+      
+      // Check if child has access to the device's location
+      if (assignedLocations.includes(locationName)) {
+        usersToNotify.push(childData.User);
+      }
+    }
+
+    // Remove duplicates
+    const uniqueUsers = [...new Set(usersToNotify)];
+
+    if (uniqueUsers.length === 0) {
+      console.log('⚠️ No users found to notify about device runtime warning');
+      return [];
+    }
+
+    const warningMessage = `Device "${deviceName}" in "${locationName}", "${buildingName}" has been on for ${hoursOn} hours. Consider turning it off to save energy.`;
+    
+    const notificationPromises = uniqueUsers.map(userEmail => 
+      sendWarningNotification(
+        userEmail,
+        'Device Runtime Warning',
+        warningMessage
+      )
+    );
+
+    const results = await Promise.allSettled(notificationPromises);
+    
+    // Log any failures
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`❌ Failed to notify user ${uniqueUsers[index]}:`, result.reason);
+      }
+    });
+
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    console.log(`✅ Sent runtime warning to ${successCount}/${uniqueUsers.length} users for device ${deviceName}`);
+    
+    return results;
+  } catch (error) {
+    console.error('❌ Error sending device runtime warning:', error);
+    return [];
+  }
 };
 
 /**
@@ -548,14 +762,18 @@ export default {
   sendInfoNotification,
   sendSuccessNotification,
   sendSystemNotification,
-  notifyParentBuildingCreated, // NEW
-  notifyParentLocationAdded,   // NEW
-  notifyParentDeviceClaimed,   // NEW
-  notifyAdminDeviceAdded,      // NEW
+  sendWarningNotification, // NEW
+  notifyParentBuildingCreated,
+  notifyParentLocationAdded,
+  notifyParentDeviceClaimed,
+  notifyAdminDeviceAdded,
   notifyDeviceRegistered,
   notifyDeviceDeleted,
   notifyParentDeviceDeleted,
   notifyLocationAssigned,
+  notifyBuildingDeleted, // NEW
+  notifySystemAdminDeviceDeleted, // NEW
+  sendDeviceRuntimeWarning, // NEW
   checkUserPendingApproval,
   NOTIFICATION_TYPES,
   INVITATION_STATUS

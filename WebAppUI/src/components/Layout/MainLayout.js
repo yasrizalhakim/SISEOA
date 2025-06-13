@@ -61,7 +61,7 @@ const MainLayout = ({ handleLogout }) => {
         if (buildingId === 'SystemAdmin') continue;
         
         // Users with parent or admin role in any building can access users page
-        if (role === 'parent' || role === 'admin') {
+        if (role === 'parent' || role === 'admin' || role== 'children') {
           return true;
         }
       }
@@ -236,21 +236,6 @@ const MainLayout = ({ handleLogout }) => {
           </div>
           <div className="user-details">
             <div className="user-name">{userName}</div>
-            {/* <div className="user-role">
-              {isUserSystemAdmin ? 'SystemAdmin' : userRole}
-              {isUserSystemAdmin && (
-                <span style={{ 
-                  marginLeft: '4px', 
-                  fontSize: '10px', 
-                  backgroundColor: '#10b981', 
-                  color: 'white', 
-                  padding: '1px 4px', 
-                  borderRadius: '6px' 
-                }}>
-                  ADMIN
-                </span>
-              )}
-            </div> */}
           </div>
         </div>
         

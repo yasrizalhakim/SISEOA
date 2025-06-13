@@ -1,4 +1,5 @@
-// src/components/Devices/DeviceDetail.js - Complete with Enhanced Security and Building Name Display
+// src/components/Devices/DeviceDetail.js - Refactored with component consolidation
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore, database } from '../../services/firebase';
@@ -35,7 +36,7 @@ import {
   getUserBuildingRoles 
 } from '../../utils/helpers';
 import './DeviceDetail.css';
-import { notifyDeviceDeleted, notifyParentDeviceDeleted } from '../../services/notificationService';
+import { notifyDeviceDeleted, notifyParentDeviceDeleted, notifySystemAdminDeviceDeleted } from '../../services/notificationService';
 
 // Device types options
 const DEVICE_TYPES = [
@@ -98,7 +99,7 @@ const DeviceDetail = () => {
     return device?.locationDetails?.buildingName || 'Unknown Building';
   }, [device]);
 
-  // NEW: Check if user has access to this device
+  // Check if user has access to this device
   const checkDeviceAccess = useCallback(async (deviceData) => {
     try {
       console.log('🔐 Checking device access for user:', userEmail);
@@ -170,7 +171,7 @@ const DeviceDetail = () => {
       
       const deviceData = deviceDoc.data();
       
-      // NEW: Check device access before proceeding
+      // Check device access before proceeding
       const hasAccess = await checkDeviceAccess(deviceData);
       if (!hasAccess) {
         setError('You do not have access to this device');
@@ -225,7 +226,7 @@ const DeviceDetail = () => {
         if (locationDoc.exists()) {
           const locationData = locationDoc.data();
           
-          // NEW: Fetch building name for display
+          // Fetch building name for display
           let buildingName = 'Unknown Building';
           if (locationData.Building) {
             try {
@@ -275,7 +276,7 @@ const DeviceDetail = () => {
     let canEditDevice = isAdmin;
     let canDeleteDevice = isAdmin;
     let canAssignDevice = false;
-    let canViewSensitiveInfo = isAdmin; // NEW: Children can't see sensitive info
+    let canViewSensitiveInfo = isAdmin;
     let roleInDeviceBuilding = 'user';
     
     if (deviceData?.Location && deviceData?.locationDetails) {
@@ -580,7 +581,7 @@ const DeviceDetail = () => {
     }
   }, [editData, device, deviceId]);
 
-  // Handle device deletion
+  // Handle device deletion with enhanced notifications
   const handleDelete = useCallback(async () => {
     const confirmDelete = window.confirm(
       `Are you sure you want to delete device "${device?.DeviceName || device?.id}"?\n\n` +
@@ -599,39 +600,48 @@ const DeviceDetail = () => {
       return;
     }
 
-    // Get device location and building to notify parent
-    if (device?.Location && device?.locationDetails) {
-      try {
-        const buildingId = device.locationDetails.building;
-        // Get building parent
-        const parentQuery = query(
-          collection(firestore, 'USERBUILDING'),
-          where('Building', '==', buildingId),
-          where('Role', '==', 'parent')
-        );
-        const parentSnapshot = await getDocs(parentQuery);
-        
-        if (!parentSnapshot.empty) {
-          const parentEmail = parentSnapshot.docs[0].data().User;
-          await notifyParentDeviceDeleted(
-            parentEmail,
-            device.DeviceName || device.id,
-            device.locationDetails.building
-          );
-        }
-      } catch (notificationError) {
-        console.error('❌ Failed to send parent notification:', notificationError);
-      }
-    }
-    
     try {
       setDeleting(true);
       setError(null);
       
       console.log('🗑️ Deleting device...');
       
+      // Send notifications before deleting the device
+      if (device?.Location && device?.locationDetails) {
+        const buildingId = device.locationDetails.building;
+        const buildingName = device.locationDetails.buildingName;
+        
+        try {
+          // SystemAdmin device deletion notification (for building parents)
+          await notifySystemAdminDeviceDeleted(
+            device.DeviceName || device.id,
+            device.id,
+            buildingId,
+            buildingName,
+            userEmail
+          );
+          console.log('📢 SystemAdmin device deletion notifications sent to building parents');
+        } catch (notificationError) {
+          console.error('❌ Failed to send SystemAdmin device deletion notifications:', notificationError);
+        }
+      }
+      
+      // Notify SystemAdmin about the deletion (if deleter is not SystemAdmin)
+      try {
+        await notifyDeviceDeleted(
+          device?.DeviceName || device?.id,
+          device?.id,
+          userEmail
+        );
+        console.log('📢 SystemAdmin notification sent about device deletion');
+      } catch (notificationError) {
+        console.error('❌ Failed to send SystemAdmin notification:', notificationError);
+      }
+      
+      // Delete from Firestore
       await deleteDoc(doc(firestore, 'DEVICE', deviceId));
       
+      // Delete from Real-time Database
       const rtdbRef = ref(database, `Devices/${deviceId}`);
       await remove(rtdbRef);
       
@@ -649,7 +659,7 @@ const DeviceDetail = () => {
     } finally {
       setDeleting(false);
     }
-  }, [device, deviceId, navigate]);
+  }, [device, deviceId, navigate, userEmail]);
 
   // Handle back navigation
   const handleBack = useCallback(() => {
@@ -750,7 +760,7 @@ const DeviceDetail = () => {
   );
 };
 
-// Device header component
+// Component definitions
 const DeviceHeader = ({ onBack, deviceName }) => (
   <div className="detail-header">
     <button className="back-button" onClick={onBack}>
@@ -763,7 +773,6 @@ const DeviceHeader = ({ onBack, deviceName }) => (
   </div>
 );
 
-// Device info tab component
 const DeviceInfoTab = ({
   device,
   editData,
@@ -817,7 +826,6 @@ const DeviceInfoTab = ({
   </div>
 );
 
-// Device actions component
 const DeviceActions = ({
   canEdit,
   canDelete,
@@ -868,7 +876,6 @@ const DeviceActions = ({
   </div>
 );
 
-// Device info form component
 const DeviceInfoForm = ({
   device,
   editData,
@@ -965,7 +972,7 @@ const DeviceInfoForm = ({
   </div>
 );
 
-// Info field component
+// Helper components
 const InfoField = ({ label, value, className = '' }) => (
   <div className="info-group">
     <label>{label}</label>
@@ -973,7 +980,6 @@ const InfoField = ({ label, value, className = '' }) => (
   </div>
 );
 
-// Editable field component
 const EditableField = ({
   label,
   name,
@@ -1029,7 +1035,6 @@ const EditableField = ({
   </div>
 );
 
-// Location field component
 const LocationField = ({
   device,
   editData,
@@ -1086,7 +1091,6 @@ const LocationField = ({
   </div>
 );
 
-// Assignment tab component
 const AssignmentTab = ({
   assignedChildren,
   availableChildren,
@@ -1140,7 +1144,6 @@ const AssignmentTab = ({
   </div>
 );
 
-// Assignment section component
 const AssignmentSection = ({
   title,
   icon,
@@ -1161,15 +1164,22 @@ const AssignmentSection = ({
     {children.length > 0 ? (
       <div className="children-list">
         {children.map(child => (
-          <ChildItem
-            key={child.id}
-            child={child}
-            buttonIcon={buttonIcon}
-            buttonClass={buttonClass}
-            buttonTitle={buttonTitle}
-            onButtonClick={onButtonClick}
-            isAvailable={isAvailable}
-          />
+          <div key={child.id} className={`child-item ${isAvailable ? 'available' : ''}`}>
+            <div className="child-info">
+              <div className="child-name">{child.Name || 'Unnamed'}</div>
+              <div className="child-details">
+                <span>Email: {child.Email || child.id}</span>
+                {child.ContactNo && <span>Contact: {child.ContactNo}</span>}
+              </div>
+            </div>
+            <button
+              className={buttonClass}
+              onClick={() => onButtonClick(child.id)}
+              title={buttonTitle}
+            >
+              {buttonIcon}
+            </button>
+          </div>
         ))}
       </div>
     ) : (
@@ -1180,34 +1190,6 @@ const AssignmentSection = ({
   </div>
 );
 
-// Child item component
-const ChildItem = ({
-  child,
-  buttonIcon,
-  buttonClass,
-  buttonTitle,
-  onButtonClick,
-  isAvailable
-}) => (
-  <div className={`child-item ${isAvailable ? 'available' : ''}`}>
-    <div className="child-info">
-      <div className="child-name">{child.Name || 'Unnamed'}</div>
-      <div className="child-details">
-        <span>Email: {child.Email || child.id}</span>
-        {child.ContactNo && <span>Contact: {child.ContactNo}</span>}
-      </div>
-    </div>
-    <button
-      className={buttonClass}
-      onClick={() => onButtonClick(child.id)}
-      title={buttonTitle}
-    >
-      {buttonIcon}
-    </button>
-  </div>
-);
-
-// Energy Usage tab component
 const EnergyUsageTab = ({ deviceId, deviceName, locationName, buildingName }) => (
   <div className="energy-usage-tab">
     <div className="energy-info-banner">
