@@ -1,4 +1,4 @@
-// src/components/Devices/Devices.js - Refactored with component consolidation
+// src/components/Devices/Devices.js - Updated for Firestore Timestamps
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -288,8 +288,8 @@ const Devices = () => {
           d.id === device.id ? { 
             ...d, 
             status: newStatus,
-            // Reset runtime tracking info when toggled
-            onSince: newStatus === 'ON' ? new Date().toISOString() : null,
+            // UPDATED: Reset runtime tracking info when toggled (Firestore timestamps)
+            onSince: newStatus === 'ON' ? new Date() : null,
             warningCount: 0
           } : d
         )
@@ -551,7 +551,7 @@ const NoDevicesMessage = ({ searchTerm, userRole, isSystemAdmin }) => {
   );
 };
 
-// Device Card Component with runtime warning indicators
+// UPDATED: Device Card Component with Firestore timestamp handling
 const DeviceCard = ({ 
   device, 
   userEmail, 
@@ -578,11 +578,25 @@ const DeviceCard = ({
   const isClaimed = !!device.Location;
   const canViewSensitiveInfo = isSystemAdmin || userRoleInBuilding === 'parent';
 
-  // Runtime warning indicators
+  // UPDATED: Runtime warning indicators with Firestore timestamp handling
   const isLongRunning = useMemo(() => {
     if (deviceStatus !== 'ON' || !device.onSince) return false;
     
-    const onSince = new Date(device.onSince);
+    // UPDATED: Handle Firestore Timestamp objects
+    let onSince;
+    if (device.onSince && typeof device.onSince.toDate === 'function') {
+      // Firestore Timestamp object
+      onSince = device.onSince.toDate();
+    } else if (device.onSince instanceof Date) {
+      // JavaScript Date object
+      onSince = device.onSince;
+    } else if (typeof device.onSince === 'string') {
+      // ISO string (fallback for compatibility)
+      onSince = new Date(device.onSince);
+    } else {
+      return false;
+    }
+    
     const now = new Date();
     const hoursOn = Math.floor((now - onSince) / (1000 * 60 * 60));
     
@@ -665,7 +679,7 @@ const DeviceCardHeader = ({
   </div>
 );
 
-// Device Card Details Component with runtime info
+// UPDATED: Device Card Details Component with Firestore timestamp info
 const DeviceCardDetails = ({ 
   device, 
   canViewSensitiveInfo, 
@@ -682,11 +696,26 @@ const DeviceCardDetails = ({
     <DeviceDetailItem label="Building:" value={getBuildingName(device)} />
     <DeviceDetailItem label="Location:" value={getLocationName(device)} />
     
-    {/* Show runtime info for long-running devices */}
+    {/* UPDATED: Show runtime info for long-running devices with Firestore timestamp handling */}
     {isLongRunning && device.onSince && (
       <DeviceDetailItem 
         label="On Since:" 
-        value={new Date(device.onSince).toLocaleString()}
+        value={(() => {
+          let onSince;
+          if (device.onSince && typeof device.onSince.toDate === 'function') {
+            // Firestore Timestamp object
+            onSince = device.onSince.toDate();
+          } else if (device.onSince instanceof Date) {
+            // JavaScript Date object
+            onSince = device.onSince;
+          } else if (typeof device.onSince === 'string') {
+            // ISO string (fallback for compatibility)
+            onSince = new Date(device.onSince);
+          } else {
+            return 'Unknown';
+          }
+          return onSince.toLocaleString();
+        })()}
         style={{ color: '#f59e0b', fontSize: '0.75rem' }}
       />
     )}

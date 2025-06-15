@@ -141,7 +141,7 @@ export const getBuildingEnergyUsage = async (buildingId, deviceIds, startDate, e
           console.warn(`No energy data for device ${deviceId} on ${dateStr}`);
           deviceDataForDay.push({
             deviceId: deviceId,
-            usage: 0,
+            Usage: 0,
             wattage: null,
             lastUpdated: null
           });

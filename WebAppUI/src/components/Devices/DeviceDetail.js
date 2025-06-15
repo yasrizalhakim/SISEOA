@@ -1,8 +1,9 @@
-// src/components/Devices/DeviceDetail.js - Refactored with component consolidation
+// src/components/Devices/DeviceDetail.js - Clean Fixed Version
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore, database } from '../../services/firebase';
+import automationService from '../../services/automationService';
 import { 
   doc, 
   getDoc, 
@@ -11,7 +12,8 @@ import {
   collection, 
   query, 
   where, 
-  getDocs 
+  getDocs, 
+  serverTimestamp 
 } from 'firebase/firestore';
 import { ref, get, update, remove } from 'firebase/database';
 import { 
@@ -36,7 +38,8 @@ import {
   getUserBuildingRoles 
 } from '../../utils/helpers';
 import './DeviceDetail.css';
-import { notifyDeviceDeleted, notifyParentDeviceDeleted, notifySystemAdminDeviceDeleted } from '../../services/notificationService';
+import DeviceAutomationTab from './DeviceAutomationTab';
+import { notifyDeviceDeleted, notifySystemAdminDeviceDeleted } from '../../services/notificationService';
 
 // Device types options
 const DEVICE_TYPES = [
@@ -99,6 +102,32 @@ const DeviceDetail = () => {
     return device?.locationDetails?.buildingName || 'Unknown Building';
   }, [device]);
 
+  // Helper function to format Firestore timestamps
+  const formatTimestamp = useCallback((timestamp) => {
+    if (!timestamp) return 'Unknown';
+    
+    try {
+      let date;
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        // Firestore Timestamp object
+        date = timestamp.toDate();
+      } else if (timestamp instanceof Date) {
+        // JavaScript Date object
+        date = timestamp;
+      } else if (typeof timestamp === 'string') {
+        // ISO string (fallback for compatibility)
+        date = new Date(timestamp);
+      } else {
+        return 'Unknown';
+      }
+      
+      return date.toLocaleString();
+    } catch (error) {
+      console.error('Error formatting timestamp:', error);
+      return 'Unknown';
+    }
+  }, []);
+
   // Check if user has access to this device
   const checkDeviceAccess = useCallback(async (deviceData) => {
     try {
@@ -151,73 +180,9 @@ const DeviceDetail = () => {
     }
   }, [userEmail]);
 
-  // Fetch device and permission data
-  const fetchDeviceData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('🔍 Fetching device details for:', deviceId);
-      
-      const isAdmin = await isSystemAdmin(userEmail);
-      setIsUserSystemAdmin(isAdmin);
-      
-      const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
-      if (!deviceDoc.exists()) {
-        setError('Device not found');
-        setLoading(false);
-        return;
-      }
-      
-      const deviceData = deviceDoc.data();
-      
-      // Check device access before proceeding
-      const hasAccess = await checkDeviceAccess(deviceData);
-      if (!hasAccess) {
-        setError('You do not have access to this device');
-        setLoading(false);
-        return;
-      }
-      
-      const enrichedDevice = await enrichDeviceData(deviceId, deviceData);
-      setDevice(enrichedDevice);
-      setEditData({
-        DeviceName: enrichedDevice.DeviceName || '',
-        DeviceDescription: enrichedDevice.DeviceDescription || '',
-        DeviceType: enrichedDevice.DeviceType || '',
-        Location: enrichedDevice.Location || ''
-      });
-      
-      console.log('📱 Device data loaded:', enrichedDevice);
-      
-      const permissions = await calculatePermissions(isAdmin, enrichedDevice);
-      setUserRoleInBuilding(permissions.roleInDeviceBuilding);
-      setCanEdit(permissions.canEditDevice);
-      setCanDelete(permissions.canDeleteDevice);
-      setCanAssignUsers(permissions.canAssignDevice);
-      setCanViewSensitiveInfo(permissions.canViewSensitiveInfo);
-      
-      console.log('🔐 Permissions:', permissions);
-      
-      if (permissions.canEditDevice) {
-        await fetchUserBuildingsAndLocations();
-      }
-      
-      if (permissions.canAssignDevice && enrichedDevice.Location && enrichedDevice.locationDetails) {
-        await fetchBuildingChildren(enrichedDevice.locationDetails.building, enrichedDevice.AssignedTo || []);
-      }
-      
-    } catch (error) {
-      console.error('❌ Error fetching device data:', error);
-      setError('Failed to load device data');
-    } finally {
-      setLoading(false);
-    }
-  }, [deviceId, userEmail, checkDeviceAccess]);
-
   // Enrich device data with location and status information
-  const enrichDeviceData = useCallback(async (deviceId, deviceData) => {
-    const enrichedDevice = { id: deviceId, ...deviceData };
+  const enrichDeviceData = useCallback(async (currentDeviceId, deviceData) => {
+    const enrichedDevice = { id: currentDeviceId, ...deviceData };
     
     // Fetch location details if device has location
     if (deviceData.Location) {
@@ -254,18 +219,20 @@ const DeviceDetail = () => {
     
     // Get device status from RTDB
     try {
-      const rtdbRef = ref(database, `Devices/${deviceId}`);
+      const rtdbRef = ref(database, `Devices/${currentDeviceId}`);
       const rtdbSnapshot = await get(rtdbRef);
       
       if (rtdbSnapshot.exists()) {
         enrichedDevice.status = rtdbSnapshot.val().status || 'OFF';
-        enrichedDevice.lastSeen = rtdbSnapshot.val().lastSeen;
+        enrichedDevice.locationId = rtdbSnapshot.val().locationId || '';
       } else {
         enrichedDevice.status = 'OFF';
+        enrichedDevice.locationId = '';
       }
     } catch (rtdbError) {
       console.error('Error getting RTDB status:', rtdbError);
       enrichedDevice.status = 'OFF';
+      enrichedDevice.locationId = '';
     }
     
     return enrichedDevice;
@@ -427,6 +394,103 @@ const DeviceDetail = () => {
     }
   }, []);
 
+  // Device automation handler
+  const handleDeviceAutomation = useCallback(async (automationConfig) => {
+    try {
+      console.log('📱 Device automation applied:', automationConfig);
+      
+      // Apply automation to device in RTDB
+      await automationService.applyDeviceAutomation(deviceId, automationConfig);
+      
+      // Update device in Firestore with automation settings
+      const deviceRef = doc(firestore, 'DEVICE', deviceId);
+      await updateDoc(deviceRef, {
+        automationConfig: automationConfig,
+        lastSeen: serverTimestamp()
+      });
+      
+      // Show success message
+      if (automationConfig.automationType === 'custom-schedule') {
+        setSuccess(`Device schedule "${automationConfig.automationTitle}" applied successfully`);
+      } else {
+        setSuccess(`Device automation "${automationConfig.automationTitle}" applied successfully`);
+      }
+      
+      setTimeout(() => setSuccess(null), 5000);
+      
+      console.log('✅ Device automation state saved');
+      
+    } catch (error) {
+      console.error('❌ Error applying device automation:', error);
+      setError('Failed to apply device automation: ' + error.message);
+      setTimeout(() => setError(null), 5000);
+    }
+  }, [deviceId]);
+
+  // Fetch device and permission data
+  const fetchDeviceData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('🔍 Fetching device details for:', deviceId);
+      
+      const isAdmin = await isSystemAdmin(userEmail);
+      setIsUserSystemAdmin(isAdmin);
+      
+      const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
+      if (!deviceDoc.exists()) {
+        setError('Device not found');
+        setLoading(false);
+        return;
+      }
+      
+      const deviceData = deviceDoc.data();
+      
+      // Check device access before proceeding
+      const hasAccess = await checkDeviceAccess(deviceData);
+      if (!hasAccess) {
+        setError('You do not have access to this device');
+        setLoading(false);
+        return;
+      }
+      
+      const enrichedDevice = await enrichDeviceData(deviceId, deviceData);
+      setDevice(enrichedDevice);
+      setEditData({
+        DeviceName: enrichedDevice.DeviceName || '',
+        DeviceDescription: enrichedDevice.DeviceDescription || '',
+        DeviceType: enrichedDevice.DeviceType || '',
+        Location: enrichedDevice.Location || ''
+      });
+      
+      console.log('📱 Device data loaded:', enrichedDevice);
+      
+      const permissions = await calculatePermissions(isAdmin, enrichedDevice);
+      setUserRoleInBuilding(permissions.roleInDeviceBuilding);
+      setCanEdit(permissions.canEditDevice);
+      setCanDelete(permissions.canDeleteDevice);
+      setCanAssignUsers(permissions.canAssignDevice);
+      setCanViewSensitiveInfo(permissions.canViewSensitiveInfo);
+      
+      console.log('🔐 Permissions:', permissions);
+      
+      if (permissions.canEditDevice) {
+        await fetchUserBuildingsAndLocations();
+      }
+      
+      if (permissions.canAssignDevice && enrichedDevice.Location && enrichedDevice.locationDetails) {
+        await fetchBuildingChildren(enrichedDevice.locationDetails.building, enrichedDevice.AssignedTo || []);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fetching device data:', error);
+      setError('Failed to load device data');
+    } finally {
+      setLoading(false);
+    }
+  }, [deviceId, userEmail, checkDeviceAccess, enrichDeviceData, calculatePermissions, fetchUserBuildingsAndLocations, fetchBuildingChildren]);
+
   // Handle user assignment
   const handleAssignUser = useCallback(async (userId) => {
     try {
@@ -443,7 +507,8 @@ const DeviceDetail = () => {
       const updatedAssignedTo = [...currentAssignedTo, userId];
       
       await updateDoc(doc(firestore, 'DEVICE', deviceId), {
-        AssignedTo: updatedAssignedTo
+        AssignedTo: updatedAssignedTo,
+        lastSeen: serverTimestamp()
       });
       
       setDevice(prev => ({
@@ -479,7 +544,8 @@ const DeviceDetail = () => {
       const updatedAssignedTo = currentAssignedTo.filter(id => id !== userId);
       
       await updateDoc(doc(firestore, 'DEVICE', deviceId), {
-        AssignedTo: updatedAssignedTo
+        AssignedTo: updatedAssignedTo,
+        lastSeen: serverTimestamp()
       });
       
       setDevice(prev => ({
@@ -548,16 +614,17 @@ const DeviceDetail = () => {
         DeviceDescription: editData.DeviceDescription.trim(),
         DeviceName: editData.DeviceName.trim(),
         DeviceType: editData.DeviceType.trim(),
-        Location: editData.Location || null
+        Location: editData.Location || null,
+        lastSeen: serverTimestamp()
       };
       
       await updateDoc(doc(firestore, 'DEVICE', deviceId), updateData);
       
+      // Update RTDB if location changed
       if (updateData.Location !== device?.Location) {
         const rtdbRef = ref(database, `Devices/${deviceId}`);
         await update(rtdbRef, {
-          locationId: updateData.Location || '',
-          lastSeen: new Date().toISOString()
+          locationId: updateData.Location || ''
         });
       }
       
@@ -581,7 +648,7 @@ const DeviceDetail = () => {
     }
   }, [editData, device, deviceId]);
 
-  // Handle device deletion with enhanced notifications
+  // Handle device deletion
   const handleDelete = useCallback(async () => {
     const confirmDelete = window.confirm(
       `Are you sure you want to delete device "${device?.DeviceName || device?.id}"?\n\n` +
@@ -612,7 +679,6 @@ const DeviceDetail = () => {
         const buildingName = device.locationDetails.buildingName;
         
         try {
-          // SystemAdmin device deletion notification (for building parents)
           await notifySystemAdminDeviceDeleted(
             device.DeviceName || device.id,
             device.id,
@@ -626,7 +692,7 @@ const DeviceDetail = () => {
         }
       }
       
-      // Notify SystemAdmin about the deletion (if deleter is not SystemAdmin)
+      // Notify SystemAdmin about the deletion
       try {
         await notifyDeviceDeleted(
           device?.DeviceName || device?.id,
@@ -708,6 +774,7 @@ const DeviceDetail = () => {
           success={success}
           locationName={locationName}
           buildingName={buildingName}
+          formatTimestamp={formatTimestamp}
           onEditToggle={handleEditToggle}
           onInputChange={handleInputChange}
           onSave={handleSave}
@@ -744,6 +811,19 @@ const DeviceDetail = () => {
           deviceName={device?.DeviceName || device?.id}
           locationName={locationName}
           buildingName={buildingName}
+        />
+      )
+    });
+  }
+
+  if (device.Location) {
+    tabs.push({
+      label: 'Automation',
+      content: (
+        <DeviceAutomationTab
+          device={device}
+          userEmail={userEmail}
+          onAutomationApply={handleDeviceAutomation}
         />
       )
     });
@@ -788,6 +868,7 @@ const DeviceInfoTab = ({
   success,
   locationName,
   buildingName,
+  formatTimestamp,
   onEditToggle,
   onInputChange,
   onSave,
@@ -821,6 +902,7 @@ const DeviceInfoTab = ({
       allUserLocations={allUserLocations}
       locationName={locationName}
       buildingName={buildingName}
+      formatTimestamp={formatTimestamp}
       onInputChange={onInputChange}
     />
   </div>
@@ -887,6 +969,7 @@ const DeviceInfoForm = ({
   allUserLocations,
   locationName,
   buildingName,
+  formatTimestamp,
   onInputChange
 }) => (
   <div className="device-info-form">
@@ -952,7 +1035,30 @@ const DeviceInfoForm = ({
     {device?.lastSeen && (
       <InfoField 
         label="Last Seen" 
-        value={new Date(device.lastSeen).toLocaleString()} 
+        value={formatTimestamp(device.lastSeen)} 
+      />
+    )}
+    
+    {device?.createdAt && canViewSensitiveInfo && (
+      <InfoField 
+        label="Created At" 
+        value={formatTimestamp(device.createdAt)} 
+      />
+    )}
+    
+    {device?.onSince && device?.status === 'ON' && (
+      <InfoField 
+        label="On Since" 
+        value={formatTimestamp(device.onSince)}
+        className="runtime-info"
+      />
+    )}
+    
+    {device?.warningCount > 0 && canViewSensitiveInfo && (
+      <InfoField 
+        label="Runtime Warnings" 
+        value={`${device.warningCount} warning(s) sent`}
+        className="warning-info"
       />
     )}
     

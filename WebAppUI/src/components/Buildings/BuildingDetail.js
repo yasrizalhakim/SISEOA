@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
-import { notifyParentLocationAdded, notifyBuildingDeleted } from '../../services/notificationService'; // NEW: Added notifyBuildingDeleted
+import { notifyParentLocationAdded, notifyBuildingDeleted } from '../../services/notificationService';
+import automationService from '../../services/automationService'; // NEW: Added automation service
 import { 
   doc, 
   getDoc, 
@@ -37,6 +38,7 @@ import UserModal from '../common/UserModal';
 import { isSystemAdmin } from '../../utils/helpers';
 import energyUsageService from '../../services/energyUsageService';
 import { sendBuildingInvitation } from '../../services/notificationService';
+import BuildingAutomationTab from './BuildingAutomationTab';
 import './BuildingDetail.css';
 
 const BuildingDetail = () => {
@@ -487,7 +489,7 @@ const BuildingDetail = () => {
     } finally {
       setDeleting(false);
     }
-  }, [building, locations, devices, buildingId, navigate, userEmail]); // NEW: Added userEmail dependency
+  }, [building, locations, devices, buildingId, navigate, userEmail]);
   
   // Modal handlers
   const handleChildClick = useCallback((childId) => {
@@ -808,6 +810,31 @@ const BuildingDetail = () => {
     }
   }, [userRoleInBuilding]);
 
+  // NEW: Building automation handler with RTDB persistence
+  const handleBuildingAutomation = useCallback(async (automationConfig) => {
+    try {
+      console.log('🏢 Building automation applied:', automationConfig);
+      
+      // Save automation state to RTDB
+      await automationService.saveAutomationState(buildingId, automationConfig);
+      
+      // Show success message
+      const energyInfo = automationConfig.energySaved > 0 
+        ? ` (Est. ${automationConfig.energySaved}W energy saved)` 
+        : '';
+      
+      setSuccess(`Building automation "${automationConfig.automationTitle}" applied successfully${energyInfo}`);
+      setTimeout(() => setSuccess(null), 5000);
+      
+      console.log('✅ Building automation state saved to RTDB');
+      
+    } catch (error) {
+      console.error('❌ Error handling building automation:', error);
+      setError('Failed to apply building automation: ' + error.message);
+      setTimeout(() => setError(null), 5000);
+    }
+  }, [buildingId]);
+
   // Utility function
   const getLocationName = useCallback((locationId) => {
     const location = locations.find(loc => loc.id === locationId);
@@ -826,7 +853,11 @@ const BuildingDetail = () => {
   
   // Loading and error states
   if (loading) {
-    return <div className="loading">Loading building data...</div>;
+    return (
+      <div className="building-detail">
+        <div className="loading">Loading building data...</div>
+      </div>
+    );
   }
   
   if (error && !building) {
@@ -1294,6 +1325,7 @@ const BuildingDetail = () => {
     </div>
   );
 
+  
   // Energy Usage tab component
   const EnergyUsageTab = () => (
     <div className="energy-usage-tab">
@@ -1345,6 +1377,19 @@ const BuildingDetail = () => {
     tabs.push({
       label: 'Children',
       content: <ChildrenTab />
+    });
+  }
+
+  if (userRoleInBuilding === 'parent') {
+    tabs.push({
+      label: 'Automation',
+      content: (
+        <BuildingAutomationTab
+          building={building}
+          userRole={userRoleInBuilding}
+          onAutomationApply={handleBuildingAutomation}
+        />
+      )
     });
   }
 

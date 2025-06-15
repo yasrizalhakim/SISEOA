@@ -1,4 +1,4 @@
-// src/services/notificationService.js - Enhanced with Building Deletion, Device Deletion, and Runtime Warning Notifications
+// src/services/notificationService.js - Enhanced with Firestore Timestamp Compatibility
 
 import { firestore } from './firebase';
 import { 
@@ -22,7 +22,7 @@ export const NOTIFICATION_TYPES = {
   INVITATION: 'invitation',
   INFO: 'info',
   SUCCESS: 'success',
-  WARNING: 'warning' // NEW: For device runtime warnings
+  WARNING: 'warning' // For device runtime warnings
 };
 
 // Invitation status
@@ -320,7 +320,7 @@ export const sendSystemNotification = async (userEmail, title, message) => {
 };
 
 /**
- * NEW: Send warning notification
+ * Send warning notification
  */
 export const sendWarningNotification = async (userEmail, title, message) => {
   return await createNotification({
@@ -428,7 +428,7 @@ export const notifyParentDeviceClaimed = async (parentEmail, deviceName, deviceI
 };
 
 /**
- * ENHANCED: Notify SystemAdmin about device registration
+ * Notify SystemAdmin about device registration
  */
 export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy) => {
   try {
@@ -536,11 +536,11 @@ export const notifyLocationAssigned = async (childEmail, locationName, buildingN
 };
 
 // ================================
-// NEW NOTIFICATION FUNCTIONS
+// UPDATED NOTIFICATION FUNCTIONS
 // ================================
 
 /**
- * NEW: Notify building parents when building is deleted by SystemAdmin
+ * Notify building parents when building is deleted by SystemAdmin
  */
 export const notifyBuildingDeleted = async (buildingId, buildingName, deletedBy) => {
   try {
@@ -581,7 +581,7 @@ export const notifyBuildingDeleted = async (buildingId, buildingName, deletedBy)
 };
 
 /**
- * NEW: Notify building parents when their device is deleted by SystemAdmin
+ * Notify building parents when their device is deleted by SystemAdmin
  */
 export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, buildingId, buildingName, deletedBy) => {
   try {
@@ -632,7 +632,8 @@ export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, build
 };
 
 /**
- * NEW: Send device runtime warning to building parents and assigned children
+ * UPDATED: Send device runtime warning to building parents and assigned children
+ * Enhanced to work with Firestore timestamps and improved user targeting
  */
 export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationName, buildingId, buildingName, hoursOn, warningCount) => {
   try {
@@ -646,23 +647,44 @@ export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationNam
     const parentEmails = await getBuildingParents(buildingId);
     usersToNotify.push(...parentEmails);
 
-    // Get children assigned to the device's location
-    const childrenQuery = query(
-      collection(firestore, 'USERBUILDING'),
-      where('Building', '==', buildingId),
-      where('Role', '==', 'children')
-    );
-    
-    const childrenSnapshot = await getDocs(childrenQuery);
-    
-    for (const childDoc of childrenSnapshot.docs) {
-      const childData = childDoc.data();
-      const assignedLocations = childData.AssignedLocations || [];
+    // UPDATED: Get children assigned to locations in the building that have access to this device
+    try {
+      // Get the specific location document to find children assigned to it
+      const locationDoc = await getDoc(doc(firestore, 'LOCATION', locationName));
+      let actualLocationId = locationName;
       
-      // Check if child has access to the device's location
-      if (assignedLocations.includes(locationName)) {
-        usersToNotify.push(childData.User);
+      if (locationDoc.exists()) {
+        actualLocationId = locationDoc.id;
       }
+
+      const childrenQuery = query(
+        collection(firestore, 'USERBUILDING'),
+        where('Building', '==', buildingId),
+        where('Role', '==', 'children')
+      );
+      
+      const childrenSnapshot = await getDocs(childrenQuery);
+      
+      for (const childDoc of childrenSnapshot.docs) {
+        const childData = childDoc.data();
+        const assignedLocations = childData.AssignedLocations || [];
+        
+        // Check if child has access to the device's location
+        if (assignedLocations.includes(actualLocationId)) {
+          usersToNotify.push(childData.User);
+        }
+      }
+
+      // UPDATED: Also check legacy device assignments for backward compatibility
+      const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
+      if (deviceDoc.exists()) {
+        const deviceData = deviceDoc.data();
+        const legacyAssignedUsers = deviceData.AssignedTo || [];
+        usersToNotify.push(...legacyAssignedUsers);
+      }
+
+    } catch (childrenError) {
+      console.error('❌ Error getting children for runtime warning:', childrenError);
     }
 
     // Remove duplicates
@@ -673,12 +695,15 @@ export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationNam
       return [];
     }
 
-    const warningMessage = `Device "${deviceName}" in "${locationName}", "${buildingName}" has been on for ${hoursOn} hours. Consider turning it off to save energy.`;
+    // UPDATED: Enhanced warning message with better context
+    const warningMessage = warningCount === 1 
+      ? `Device "${deviceName}" in "${locationName}", "${buildingName}" has been running for ${hoursOn} hours. Consider turning it off to save energy and prevent overheating.`
+      : `Device "${deviceName}" in "${locationName}", "${buildingName}" has been running for ${hoursOn} hours (Warning #${warningCount}). Please check the device and turn it off if not needed.`;
     
     const notificationPromises = uniqueUsers.map(userEmail => 
       sendWarningNotification(
         userEmail,
-        'Device Runtime Warning',
+        `Device Runtime Warning${warningCount > 1 ? ` #${warningCount}` : ''}`,
         warningMessage
       )
     );
@@ -693,7 +718,7 @@ export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationNam
     });
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
-    console.log(`✅ Sent runtime warning to ${successCount}/${uniqueUsers.length} users for device ${deviceName}`);
+    console.log(`✅ Sent runtime warning to ${successCount}/${uniqueUsers.length} users for device ${deviceName} (${hoursOn}h runtime, warning #${warningCount})`);
     
     return results;
   } catch (error) {
@@ -762,7 +787,7 @@ export default {
   sendInfoNotification,
   sendSuccessNotification,
   sendSystemNotification,
-  sendWarningNotification, // NEW
+  sendWarningNotification,
   notifyParentBuildingCreated,
   notifyParentLocationAdded,
   notifyParentDeviceClaimed,
@@ -771,9 +796,9 @@ export default {
   notifyDeviceDeleted,
   notifyParentDeviceDeleted,
   notifyLocationAssigned,
-  notifyBuildingDeleted, // NEW
-  notifySystemAdminDeviceDeleted, // NEW
-  sendDeviceRuntimeWarning, // NEW
+  notifyBuildingDeleted,
+  notifySystemAdminDeviceDeleted,
+  sendDeviceRuntimeWarning, // UPDATED: Enhanced for Firestore timestamps
   checkUserPendingApproval,
   NOTIFICATION_TYPES,
   INVITATION_STATUS

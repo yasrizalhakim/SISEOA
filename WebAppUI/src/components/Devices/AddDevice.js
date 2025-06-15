@@ -1,4 +1,4 @@
-// src/components/Devices/AddDevice.js - Enhanced with Building Association
+// src/components/Devices/AddDevice.js - Updated for Firestore Timestamps
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdDevices, MdLocationOn, MdPerson, MdDelete } from 'react-icons/md';
@@ -387,13 +387,14 @@ const AddDevice = () => {
       Location: formData.location,
       DeviceName: formData.deviceName.trim(),
       DeviceDescription: formData.deviceDescription.trim() || '',
-      DeviceType: formData.deviceType || 'Other'
+      DeviceType: formData.deviceType || 'Other',
+      lastSeen: serverTimestamp() // UPDATED: Use serverTimestamp for Firestore
     });
     
+    // UPDATED: Update RTDB with only status and locationId
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     await update(rtdbRef, {
-      locationId: formData.location,
-      lastSeen: new Date().toISOString()
+      locationId: formData.location
     });
     
     console.log('✅ Device claimed successfully');
@@ -427,78 +428,80 @@ const AddDevice = () => {
   }, 1500);
 }, [formData, navigate, userEmail, userLocations]);
 
-  // Register new device with energy usage document
-  // Register new device with notification
-const registerDevice = useCallback(async (deviceId) => {
-  console.log('📱 Registering new device...');
-  
-  const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
-  if (deviceDoc.exists()) {
-    setError('Device ID already exists.');
-    setLoading(false);
-    return;
-  }
-  
-  const deviceData = {
-    AssignedTo: [],
-    DeviceDescription: formData.deviceDescription.trim() || '',
-    DeviceName: formData.deviceName.trim(),
-    DeviceType: formData.deviceType || 'Other',
-    Location: formData.location || null
-  };
-  
-  await setDoc(doc(firestore, 'DEVICE', deviceId), deviceData);
-  
-  const rtdbRef = ref(database, `Devices/${deviceId}`);
-  await set(rtdbRef, {
-    status: 'OFF',
-    lastSeen: serverTimestamp(),
-    createdAt: serverTimestamp(),
-    locationId: formData.location || ''
-  });
+  // UPDATED: Register new device with Firestore timestamps
+  const registerDevice = useCallback(async (deviceId) => {
+    console.log('📱 Registering new device...');
+    
+    const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
+    if (deviceDoc.exists()) {
+      setError('Device ID already exists.');
+      setLoading(false);
+      return;
+    }
+    
+    // UPDATED: Include Firestore timestamp fields
+    const deviceData = {
+      AssignedTo: [],
+      DeviceDescription: formData.deviceDescription.trim() || '',
+      DeviceName: formData.deviceName.trim(),
+      DeviceType: formData.deviceType || 'Other',
+      Location: formData.location || null,
+      // NEW: Firestore timestamp fields
+      createdAt: serverTimestamp(),
+      lastSeen: serverTimestamp(),
+      onSince: null,
+      lastWarningAt: null,
+      warningCount: 0
+    };
+    
+    await setDoc(doc(firestore, 'DEVICE', deviceId), deviceData);
+    
+    // UPDATED: Create RTDB entry with only status and locationId
+    const rtdbRef = ref(database, `Devices/${deviceId}`);
+    await set(rtdbRef, {
+      status: 'OFF',
+      locationId: formData.location || ''
+    });
 
-  // Create empty energy usage document for the device
-  await createEnergyUsageDocument(deviceId);
-
-  // Create empty energy usage document for the device
-  await createEnergyUsageDocument(deviceId);
-  
-  // **NEW: Create notification for SystemAdmin**
-  try {
-    await notifyDeviceRegistered(
-      formData.deviceName.trim(),
-      deviceId,
-      userEmail
-    );
-    console.log('📢 SystemAdmin notification sent for device registration');
-  } catch (notificationError) {
-    console.error('❌ Failed to send notification:', notificationError);
-    // Don't fail the device registration if notification fails
-  }
-
-  if (isUserSystemAdmin) {
+    // Create empty energy usage document for the device
+    await createEnergyUsageDocument(deviceId);
+    
+    // **NEW: Create notification for SystemAdmin**
     try {
-      await notifyAdminDeviceAdded(
+      await notifyDeviceRegistered(
         formData.deviceName.trim(),
         deviceId,
         userEmail
       );
-      console.log('📢 Admin device addition notification sent');
+      console.log('📢 SystemAdmin notification sent for device registration');
     } catch (notificationError) {
-      console.error('❌ Failed to send admin device addition notification:', notificationError);
+      console.error('❌ Failed to send notification:', notificationError);
       // Don't fail the device registration if notification fails
     }
-  }
-  
-  setSuccess(true);
-  await fetchRegisteredDevices();
-  setFormData(INITIAL_FORM_DATA);
-  
-  setTimeout(() => setSuccess(null), 3000);
-  console.log('✅ New device registered successfully');
-}, [formData, fetchRegisteredDevices, userEmail, isUserSystemAdmin]);
 
-  // NEW: Create empty energy usage document for new device
+    if (isUserSystemAdmin) {
+      try {
+        await notifyAdminDeviceAdded(
+          formData.deviceName.trim(),
+          deviceId,
+          userEmail
+        );
+        console.log('📢 Admin device addition notification sent');
+      } catch (notificationError) {
+        console.error('❌ Failed to send admin device addition notification:', notificationError);
+        // Don't fail the device registration if notification fails
+      }
+    }
+    
+    setSuccess(true);
+    await fetchRegisteredDevices();
+    setFormData(INITIAL_FORM_DATA);
+    
+    setTimeout(() => setSuccess(null), 3000);
+    console.log('✅ New device registered successfully');
+  }, [formData, fetchRegisteredDevices, userEmail, isUserSystemAdmin]);
+
+  // Create empty energy usage document for new device
   const createEnergyUsageDocument = useCallback(async (deviceId) => {
     try {
       console.log(`📊 Creating energy usage structure for device ${deviceId}`);
@@ -509,7 +512,7 @@ const registerDevice = useCallback(async (deviceId) => {
       
       // Create empty energy usage document at ENERGYUSAGE/{deviceId}/DailyUsage/{yyyy-mm-dd}
       await setDoc(doc(firestore, 'ENERGYUSAGE', deviceId, 'DailyUsage', dateStr), {
-        usage: 0,
+        Usage: 0,
         //timestamp: new Date().toISOString()
       });
       
@@ -548,7 +551,7 @@ const registerDevice = useCallback(async (deviceId) => {
       const rtdbRef = ref(database, `Devices/${deviceId}`);
       await remove(rtdbRef);
 
-      // NEW: Remove energy usage documents for the device
+      // Remove energy usage documents for the device
       await removeEnergyUsageDocuments(deviceId);
       
       setSuccess(`Device "${deviceName}" deleted successfully`);
@@ -562,7 +565,7 @@ const registerDevice = useCallback(async (deviceId) => {
     }
   }, [fetchRegisteredDevices]);
 
-  // NEW: Remove all energy usage documents for a device
+  // Remove all energy usage documents for a device
   const removeEnergyUsageDocuments = useCallback(async (deviceId) => {
     try {
       console.log(`📊 Removing energy usage structure for device ${deviceId}`);
