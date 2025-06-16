@@ -93,8 +93,8 @@ function App() {
             {/* Profile */}
             <Route path="profile" element={<Profile />} />
             
-            {/* Placeholder routes for other features */}
-            <Route path="automation" element={<div>Automation - Coming Soon</div>} />
+            {/* Placeholder routes for other features
+            <Route path="automation" element={<div>Automation - Coming Soon</div>} /> */}
             <Route path="reports" element={<Reports />} />
             <Route path="notifications" element={<Notification />} />
             

@@ -1,22 +1,7 @@
-// src/components/Buildings/BuildingDetail.js - Complete Updated with Building Deletion Notification
+// src/components/Buildings/BuildingDetail.js - Refactored without custom hooks
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { firestore } from '../../services/firebase';
-import { notifyParentLocationAdded, notifyBuildingDeleted } from '../../services/notificationService';
-import automationService from '../../services/automationService'; // NEW: Added automation service
-import { 
-  doc, 
-  getDoc, 
-  updateDoc, 
-  deleteDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  setDoc, 
-  serverTimestamp 
-} from 'firebase/firestore';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { 
   MdArrowBack, 
   MdLocationOn, 
@@ -35,16 +20,22 @@ import {
 import TabPanel from '../common/TabPanel';
 import EnergyChart from '../common/EnergyChart';
 import UserModal from '../common/UserModal';
-import { isSystemAdmin } from '../../utils/helpers';
-import energyUsageService from '../../services/energyUsageService';
-import { sendBuildingInvitation } from '../../services/notificationService';
 import BuildingAutomationTab from './BuildingAutomationTab';
+import buildingService from '../../services/buildingService';
+import energyUsageService from '../../services/energyUsageService';
+import automationService from '../../services/automationService';
+import { sendBuildingInvitation } from '../../services/notificationService';
+import { isSystemAdmin } from '../../utils/helpers';
 import './BuildingDetail.css';
+
+// ==============================================================================
+// MAIN BUILDING DETAIL COMPONENT
+// ==============================================================================
 
 const BuildingDetail = () => {
   const { buildingId } = useParams();
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
   
   // State Management
   const [building, setBuilding] = useState(null);
@@ -75,12 +66,10 @@ const BuildingDetail = () => {
   const [isAddingLocation, setIsAddingLocation] = useState(false);
   const [isRemovingLocation, setIsRemovingLocation] = useState(false);
   
-  // Child Management State - Updated for invitations
+  // Child Management State
   const [newChildEmail, setNewChildEmail] = useState('');
   const [isSendingInvitation, setIsSendingInvitation] = useState(false);
   const [showAddChildForm, setShowAddChildForm] = useState(false);
-  
-  // Email Validation State
   const [emailStatus, setEmailStatus] = useState({
     checking: false,
     exists: false,
@@ -91,8 +80,6 @@ const BuildingDetail = () => {
   // Modal State
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [selectedUserForProfile, setSelectedUserForProfile] = useState(null);
-  const [isUserProfileModalOpen, setIsUserProfileModalOpen] = useState(false);
   
   // Energy State
   const [buildingDeviceIds, setBuildingDeviceIds] = useState([]);
@@ -123,22 +110,15 @@ const BuildingDetail = () => {
         return 'admin';
       }
 
-      const userBuildingQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', userEmail),
-        where('Building', '==', buildingId)
-      );
+      const role = await buildingService.getUserRoleInBuilding(userEmail, buildingId);
+      setUserRoleInBuilding(role);
       
-      const userBuildingSnapshot = await getDocs(userBuildingQuery);
-      
-      if (!userBuildingSnapshot.empty) {
-        const userBuildingData = userBuildingSnapshot.docs[0].data();
-        console.log(`👤 User role in building ${buildingId}:`, userBuildingData.Role);
-        return userBuildingData.Role;
+      if (role === 'user') {
+        setError('You do not have access to this building');
+        return 'user';
       }
       
-      console.log(`❌ User has no access to building ${buildingId}`);
-      return 'user';
+      return role;
     } catch (err) {
       console.error('Error getting user role in building:', err);
       return 'user';
@@ -149,30 +129,8 @@ const BuildingDetail = () => {
   const fetchChildrenData = useCallback(async () => {
     try {
       if (userRoleInBuilding === 'parent') {
-        const userBuildingQuery = query(
-          collection(firestore, 'USERBUILDING'),
-          where('Building', '==', buildingId),
-          where('Role', '==', 'children')
-        );
-        
-        const userBuildingSnapshot = await getDocs(userBuildingQuery);
-        
-        const childrenList = [];
-        for (const userBuilding of userBuildingSnapshot.docs) {
-          const userData = userBuilding.data();
-          const userDoc = await getDoc(doc(firestore, 'USER', userData.User));
-          
-          if (userDoc.exists()) {
-            childrenList.push({
-              id: userData.User,
-              userBuildingId: userBuilding.id,
-              assignedLocations: userData.AssignedLocations || [],
-              ...userDoc.data()
-            });
-          }
-        }
-        
-        setChildren(childrenList);
+        const childrenData = await buildingService.getBuildingChildren(buildingId);
+        setChildren(childrenData);
       }
     } catch (err) {
       console.error('Error refreshing children data:', err);
@@ -184,23 +142,9 @@ const BuildingDetail = () => {
     if (userRoleInBuilding !== 'children') return [];
     
     try {
-      const userBuildingQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', userEmail),
-        where('Building', '==', buildingId)
-      );
-      
-      const userBuildingSnapshot = await getDocs(userBuildingQuery);
-      
-      if (!userBuildingSnapshot.empty) {
-        const userBuildingData = userBuildingSnapshot.docs[0].data();
-        const assignedLocs = userBuildingData.AssignedLocations || [];
-        setUserAssignedLocations(assignedLocs); // Set state for UI filtering
-        return assignedLocs;
-      }
-      
-      setUserAssignedLocations([]);
-      return [];
+      const assignedLocs = await buildingService.getUserAssignedLocations(userEmail, buildingId);
+      setUserAssignedLocations(assignedLocs);
+      return assignedLocs;
     } catch (err) {
       console.error('Error getting user assigned locations:', err);
       setUserAssignedLocations([]);
@@ -227,10 +171,8 @@ const BuildingDetail = () => {
         setLoading(true);
         
         const roleInBuilding = await getUserRoleInBuilding();
-        setUserRoleInBuilding(roleInBuilding);
         
         if (roleInBuilding === 'user' && !isUserSystemAdmin) {
-          setError('You do not have access to this building');
           setLoading(false);
           return;
         }
@@ -238,17 +180,12 @@ const BuildingDetail = () => {
         console.log(`🏢 Fetching building ${buildingId} data for user with role: ${roleInBuilding}`);
         
         // Fetch building details
-        const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
-        if (!buildingDoc.exists()) {
+        const buildingData = await buildingService.getBuildingById(buildingId);
+        if (!buildingData) {
           setError('Building not found');
           setLoading(false);
           return;
         }
-        
-        const buildingData = {
-          id: buildingId,
-          ...buildingDoc.data()
-        };
         
         setBuilding(buildingData);
         setEditData({
@@ -261,68 +198,28 @@ const BuildingDetail = () => {
         
         // Fetch locations only for non-admin users
         if (roleInBuilding !== 'admin') {
-          const locationsQuery = query(
-            collection(firestore, 'LOCATION'),
-            where('Building', '==', buildingId)
-          );
-          
-          const locationsSnapshot = await getDocs(locationsQuery);
-          const locationsList = locationsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          
-          setLocations(locationsList);
-          console.log(`📍 Found ${locationsList.length} locations`);
+          const locationsData = await buildingService.getBuildingLocations(buildingId);
+          setLocations(locationsData);
+          console.log(`📍 Found ${locationsData.length} locations`);
           
           // Fetch devices based on user role
-          const devicesList = [];
-          
           if (roleInBuilding === 'children') {
             // For children, only fetch devices in their assigned locations
             const assignedLocations = await getCurrentUserAssignedLocations();
             console.log(`👶 Child user assigned to ${assignedLocations.length} locations:`, assignedLocations);
             
-            for (const assignedLocationId of assignedLocations) {
-              const location = locationsList.find(loc => loc.id === assignedLocationId);
-              if (location) {
-                const devicesQuery = query(
-                  collection(firestore, 'DEVICE'),
-                  where('Location', '==', assignedLocationId)
-                );
-                
-                const devicesSnapshot = await getDocs(devicesQuery);
-                devicesSnapshot.docs.forEach(doc => {
-                  devicesList.push({
-                    id: doc.id,
-                    ...doc.data(),
-                    locationName: location.LocationName || location.id
-                  });
-                });
-              }
-            }
-            console.log(`📱 Child can access ${devicesList.length} devices in assigned locations`);
+            const allDevices = await buildingService.getBuildingDevices(buildingId);
+            const accessibleDevices = allDevices.filter(device => 
+              assignedLocations.includes(device.Location)
+            );
+            setDevices(accessibleDevices);
+            console.log(`📱 Child can access ${accessibleDevices.length} devices in assigned locations`);
           } else {
             // For parents and other roles, fetch all devices
-            for (const location of locationsList) {
-              const devicesQuery = query(
-                collection(firestore, 'DEVICE'),
-                where('Location', '==', location.id)
-              );
-              
-              const devicesSnapshot = await getDocs(devicesQuery);
-              devicesSnapshot.docs.forEach(doc => {
-                devicesList.push({
-                  id: doc.id,
-                  ...doc.data(),
-                  locationName: location.LocationName || location.id
-                });
-              });
-            }
-            console.log(`📱 Found ${devicesList.length} total devices`);
+            const devicesData = await buildingService.getBuildingDevices(buildingId);
+            setDevices(devicesData);
+            console.log(`📱 Found ${devicesData.length} total devices`);
           }
-          
-          setDevices(devicesList);
           
           // Fetch children for parent users
           if (roleInBuilding === 'parent') {
@@ -341,8 +238,10 @@ const BuildingDetail = () => {
       }
     };
     
-    fetchBuildingData();
-  }, [buildingId, userEmail, getUserRoleInBuilding, fetchChildrenData, isUserSystemAdmin, fetchBuildingDeviceIds, getCurrentUserAssignedLocations]);
+    if (buildingId) {
+      fetchBuildingData();
+    }
+  }, [buildingId, getUserRoleInBuilding, fetchChildrenData, isUserSystemAdmin, fetchBuildingDeviceIds, getCurrentUserAssignedLocations]);
   
   // Edit mode handlers
   const handleEditToggle = useCallback(() => {
@@ -372,27 +271,11 @@ const BuildingDetail = () => {
       setSaving(true);
       setError(null);
       
-      console.log('💾 Saving building changes...');
-      
-      if (!editData.BuildingName.trim()) {
-        setError('Building name is required');
-        setSaving(false);
-        return;
-      }
-      
-      const updateData = {
-        BuildingName: editData.BuildingName.trim(),
-        Address: editData.Address.trim(),
-        Description: editData.Description.trim(),
-        LastModified: serverTimestamp(),
-        LastModifiedBy: userEmail
-      };
-      
-      await updateDoc(doc(firestore, 'BUILDING', buildingId), updateData);
+      await buildingService.updateBuilding(buildingId, editData, userEmail);
       
       setBuilding(prev => ({
         ...prev,
-        ...updateData
+        ...editData
       }));
       
       setIsEditing(false);
@@ -400,17 +283,15 @@ const BuildingDetail = () => {
       
       setTimeout(() => setSuccess(null), 3000);
       
-      console.log('✅ Building updated successfully');
-      
     } catch (err) {
       console.error('❌ Error saving building:', err);
-      setError('Failed to save building changes');
+      setError('Failed to save building changes: ' + err.message);
     } finally {
       setSaving(false);
     }
   }, [editData, userEmail, buildingId]);
 
-  // ENHANCED: Delete handler with building deletion notification
+  // Delete handler with building deletion notification
   const handleDelete = useCallback(async () => {
     const confirmDelete = window.confirm(
       `Are you sure you want to delete building "${building.BuildingName || building.id}"?\n\n` +
@@ -434,48 +315,7 @@ const BuildingDetail = () => {
       setDeleting(true);
       setError(null);
       
-      console.log('🗑️ Deleting building...');
-      
-      // NEW: Send notification to building parents before deletion
-      try {
-        await notifyBuildingDeleted(
-          buildingId, 
-          building.BuildingName || building.id, 
-          userEmail
-        );
-        console.log('📢 Building deletion notifications sent to parents');
-      } catch (notificationError) {
-        console.error('❌ Failed to send building deletion notifications:', notificationError);
-        // Continue with deletion even if notifications fail
-      }
-      
-      // Delete all locations
-      for (const location of locations) {
-        await deleteDoc(doc(firestore, 'LOCATION', location.id));
-      }
-      
-      // Delete user-building relationships
-      const userBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('Building', '==', buildingId)
-      );
-      const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
-      
-      for (const userBuildingDoc of userBuildingsSnapshot.docs) {
-        await deleteDoc(userBuildingDoc.ref);
-      }
-      
-      // Update devices to remove location assignment
-      for (const device of devices) {
-        await updateDoc(doc(firestore, 'DEVICE', device.id), {
-          Location: null
-        });
-      }
-      
-      // Delete the building
-      await deleteDoc(doc(firestore, 'BUILDING', buildingId));
-      
-      console.log('✅ Building deleted successfully');
+      await buildingService.deleteBuilding(buildingId, userEmail);
       
       navigate('/buildings', { 
         state: { 
@@ -489,7 +329,7 @@ const BuildingDetail = () => {
     } finally {
       setDeleting(false);
     }
-  }, [building, locations, devices, buildingId, navigate, userEmail]);
+  }, [building, buildingId, navigate, userEmail]);
   
   // Modal handlers
   const handleChildClick = useCallback((childId) => {
@@ -497,21 +337,11 @@ const BuildingDetail = () => {
     setIsUserModalOpen(true);
   }, []);
   
-  const handleChildProfileClick = useCallback((child) => {
-    setSelectedUserForProfile(child);
-    setIsUserProfileModalOpen(true);
-  }, []);
-  
   const handleCloseUserModal = useCallback(() => {
     setIsUserModalOpen(false);
     setSelectedUserId(null);
     fetchChildrenData();
   }, [fetchChildrenData]);
-
-  const handleCloseUserProfileModal = useCallback(() => {
-    setIsUserProfileModalOpen(false);
-    setSelectedUserForProfile(null);
-  }, []);
   
   // Navigation handler
   const handleBack = useCallback(() => {
@@ -534,44 +364,15 @@ const BuildingDetail = () => {
       setIsAddingLocation(true);
       setError(null);
       
-      const now = new Date();
-      const dateCreated = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
-      const locationId = `${buildingId}${newLocationName.replace(/\s+/g, '')}`;
+      const createdLocation = await buildingService.addBuildingLocation(
+        buildingId, 
+        newLocationName.trim(), 
+        userEmail
+      );
       
-      const existingLocationDoc = await getDoc(doc(firestore, 'LOCATION', locationId));
-      if (existingLocationDoc.exists()) {
-        setError('A location with this name already exists in this building');
-        setIsAddingLocation(false);
-        return;
-      }
-      
-      await setDoc(doc(firestore, 'LOCATION', locationId), {
-        Building: buildingId,
-        LocationName: newLocationName,
-        DateCreated: dateCreated
-      });
-      
-      setLocations(prev => [...prev, {
-        id: locationId,
-        Building: buildingId,
-        LocationName: newLocationName,
-        DateCreated: dateCreated
-      }]);
-      
+      setLocations(prev => [...prev, createdLocation]);
       setNewLocationName('');
       setSuccess('Location added successfully');
-      
-      try {
-        await notifyParentLocationAdded(
-          userEmail,
-          newLocationName,
-          building.BuildingName || building.id
-        );
-        console.log('📢 Location addition notification sent to parent');
-      } catch (notificationError) {
-        console.error('❌ Failed to send location addition notification:', notificationError);
-        // Don't fail the location creation if notification fails
-      }
       
       setTimeout(() => setSuccess(null), 3000);
       
@@ -581,7 +382,7 @@ const BuildingDetail = () => {
     } finally {
       setIsAddingLocation(false);
     }
-  }, [userRoleInBuilding, newLocationName, buildingId, userEmail, building]);
+  }, [userRoleInBuilding, newLocationName, buildingId, userEmail]);
   
   const handleRemoveLocation = useCallback(async (locationId) => {
     if (userRoleInBuilding !== 'parent') {
@@ -592,42 +393,8 @@ const BuildingDetail = () => {
     try {
       setIsRemovingLocation(true);
       
-      const devicesQuery = query(
-        collection(firestore, 'DEVICE'),
-        where('Location', '==', locationId)
-      );
+      await buildingService.removeBuildingLocation(locationId, buildingId);
       
-      const devicesSnapshot = await getDocs(devicesQuery);
-      
-      if (!devicesSnapshot.empty) {
-        setError(`Cannot remove this location. It contains ${devicesSnapshot.size} device(s). Move or delete the devices first.`);
-        setIsRemovingLocation(false);
-        return;
-      }
-      
-      const userBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('Building', '==', buildingId)
-      );
-      const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
-      
-      let hasAssignedUsers = false;
-      for (const userBuildingDoc of userBuildingsSnapshot.docs) {
-        const userData = userBuildingDoc.data();
-        const assignedLocations = userData.AssignedLocations || [];
-        if (assignedLocations.includes(locationId)) {
-          hasAssignedUsers = true;
-          break;
-        }
-      }
-      
-      if (hasAssignedUsers) {
-        setError('Cannot remove this location. Some users are assigned to it. Remove user assignments first.');
-        setIsRemovingLocation(false);
-        return;
-      }
-      
-      await deleteDoc(doc(firestore, 'LOCATION', locationId));
       setLocations(prev => prev.filter(loc => loc.id !== locationId));
       setSuccess('Location removed successfully');
       setTimeout(() => setSuccess(null), 3000);
@@ -639,55 +406,15 @@ const BuildingDetail = () => {
     }
   }, [userRoleInBuilding, buildingId]);
   
-  // UPDATED: Child Management - Now uses invitation system
+  // Child Management - Email validation
   const checkEmailAvailability = useCallback(async (email) => {
     if (!email || !email.includes('@')) return;
     
     setEmailStatus(prev => ({ ...prev, checking: true, message: 'Checking email...' }));
     
     try {
-      const trimmedEmail = email.trim();
-      
-      // Check if user exists in the system
-      const userDoc = await getDoc(doc(firestore, 'USER', trimmedEmail));
-      
-      if (!userDoc.exists()) {
-        setEmailStatus({
-          checking: false,
-          exists: false,
-          available: false,
-          message: 'User not found'
-        });
-        return;
-      }
-      
-      // Check if user already has access to this building
-      const existingUserQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', trimmedEmail),
-        where('Building', '==', buildingId)
-      );
-      
-      const existingUserSnapshot = await getDocs(existingUserQuery);
-      
-      if (!existingUserSnapshot.empty) {
-        setEmailStatus({
-          checking: false,
-          exists: true,
-          available: false,
-          message: 'Already has access'
-        });
-        return;
-      }
-      
-      // User exists and is available
-      setEmailStatus({
-        checking: false,
-        exists: true,
-        available: true,
-        message: 'Available to invite'
-      });
-      
+      const validation = await buildingService.checkEmailAvailability(email.trim(), buildingId);
+      setEmailStatus(validation);
     } catch (err) {
       console.error('Error checking email availability:', err);
       setEmailStatus({
@@ -729,7 +456,7 @@ const BuildingDetail = () => {
     return () => clearTimeout(timeoutId);
   }, [error, checkEmailAvailability]);
 
-  // UPDATED: Send invitation instead of directly adding child
+  // Send invitation
   const handleSendInvitation = useCallback(async () => {
     if (userRoleInBuilding !== 'parent') {
       setError('Only parents can invite users to this building');
@@ -758,8 +485,6 @@ const BuildingDetail = () => {
       setIsSendingInvitation(true);
       setError(null);
       
-      console.log('📨 Sending building invitation to:', trimmedEmail);
-      
       await sendBuildingInvitation(
         userEmail,
         trimmedEmail,
@@ -779,15 +504,13 @@ const BuildingDetail = () => {
       setSuccess(`Invitation sent to ${trimmedEmail}. They will receive a notification to join this building.`);
       setTimeout(() => setSuccess(null), 5000);
       
-      console.log('✅ Building invitation sent successfully');
-      
     } catch (err) {
       console.error('❌ Error sending invitation:', err);
       setError(err.message || 'Failed to send invitation');
     } finally {
       setIsSendingInvitation(false);
     }
-  }, [userRoleInBuilding, newChildEmail, buildingId, emailStatus, userEmail, building]);
+  }, [userRoleInBuilding, newChildEmail, emailStatus, userEmail, buildingId, building]);
   
   const handleRemoveChild = useCallback(async (childId, userBuildingId) => {
     if (userRoleInBuilding !== 'parent') {
@@ -800,7 +523,7 @@ const BuildingDetail = () => {
     }
     
     try {
-      await deleteDoc(doc(firestore, 'USERBUILDING', userBuildingId));
+      await buildingService.removeChildFromBuilding(childId, buildingId);
       setChildren(prev => prev.filter(child => child.id !== childId));
       setSuccess('Child user removed successfully');
       setTimeout(() => setSuccess(null), 3000);
@@ -808,25 +531,21 @@ const BuildingDetail = () => {
       console.error('Error removing child:', err);
       setError('Failed to remove child user: ' + err.message);
     }
-  }, [userRoleInBuilding]);
+  }, [userRoleInBuilding, buildingId]);
 
-  // NEW: Building automation handler with RTDB persistence
+  // Building automation handler
   const handleBuildingAutomation = useCallback(async (automationConfig) => {
     try {
       console.log('🏢 Building automation applied:', automationConfig);
       
-      // Save automation state to RTDB
       await automationService.saveAutomationState(buildingId, automationConfig);
       
-      // Show success message
       const energyInfo = automationConfig.energySaved > 0 
         ? ` (Est. ${automationConfig.energySaved}W energy saved)` 
         : '';
       
       setSuccess(`Building automation "${automationConfig.automationTitle}" applied successfully${energyInfo}`);
       setTimeout(() => setSuccess(null), 5000);
-      
-      console.log('✅ Building automation state saved to RTDB');
       
     } catch (error) {
       console.error('❌ Error handling building automation:', error);
@@ -841,7 +560,7 @@ const BuildingDetail = () => {
     return location ? (location.LocationName || locationId) : locationId;
   }, [locations]);
   
-  // Permission checks
+  // Permission checks - moved before early returns
   const permissions = useMemo(() => ({
     canManageLocations: userRoleInBuilding === 'parent',
     canEditBuilding: userRoleInBuilding === 'admin' || userRoleInBuilding === 'parent',
@@ -850,6 +569,14 @@ const BuildingDetail = () => {
     canViewChildren: userRoleInBuilding === 'parent',
     canViewLocations: userRoleInBuilding !== 'admin'
   }), [userRoleInBuilding]);
+
+  // Filter locations for children - moved before early returns
+  const displayedLocations = useMemo(() => {
+    if (userRoleInBuilding === 'children') {
+      return locations.filter(location => userAssignedLocations.includes(location.id));
+    }
+    return locations;
+  }, [locations, userRoleInBuilding, userAssignedLocations]);
   
   // Loading and error states
   if (loading) {
@@ -873,238 +600,215 @@ const BuildingDetail = () => {
       </div>
     );
   }
-  
-  // Tab content components
-  const BuildingInfoTab = () => {
-    // Filter locations for children - ONLY show locations they are assigned to
-    const displayedLocations = useMemo(() => {
-      if (userRoleInBuilding === 'children') {
-        // Only show locations that the child user is specifically assigned to
-        return locations.filter(location => userAssignedLocations.includes(location.id));
-      }
-      // For all other roles (admin, parent), show all locations
-      return locations;
-    }, [locations, userRoleInBuilding, userAssignedLocations]);
 
-    return (
-      <div className="building-info-tab">
-        {(permissions.canEditBuilding || permissions.canDeleteBuilding) && (
-          <div className="building-actions">
-            {permissions.canEditBuilding && (
-              <>
-                {!isEditing ? (
-                  <button className="edit-button" onClick={handleEditToggle} type="button">
-                    <MdEdit /> Edit Building
+  // Tab content components
+  const BuildingInfoTab = () => (
+    <div className="building-info-tab">
+      {(permissions.canEditBuilding || permissions.canDeleteBuilding) && (
+        <div className="building-actions">
+          {permissions.canEditBuilding && (
+            <>
+              {!isEditing ? (
+                <button className="edit-button" onClick={handleEditToggle} type="button">
+                  <MdEdit /> Edit Building
+                </button>
+              ) : (
+                <div className="edit-actions">
+                  <button 
+                    type="button"
+                    className="save-button" 
+                    onClick={handleSave}
+                    disabled={saving || !editData.BuildingName.trim()}
+                  >
+                    <MdSave /> {saving ? 'Saving...' : 'Save Changes'}
                   </button>
-                ) : (
-                  <div className="edit-actions">
-                    <button 
-                      type="button"
-                      className="save-button" 
-                      onClick={handleSave}
-                      disabled={saving || !editData.BuildingName.trim()}
-                    >
-                      <MdSave /> {saving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    <button 
-                      type="button"
-                      className="cancel-button" 
-                      onClick={handleEditToggle}
-                      disabled={saving}
-                    >
-                      <MdCancel /> Cancel
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-            
-            {permissions.canDeleteBuilding && !isEditing && (
-              <button 
-                type="button"
-                className="delete-button" 
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                <MdDelete /> {deleting ? 'Deleting...' : 'Delete Building'}
-              </button>
-            )}
+                  <button 
+                    type="button"
+                    className="cancel-button" 
+                    onClick={handleEditToggle}
+                    disabled={saving}
+                  >
+                    <MdCancel /> Cancel
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+          
+          {permissions.canDeleteBuilding && !isEditing && (
+            <button 
+              type="button"
+              className="delete-button" 
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              <MdDelete /> {deleting ? 'Deleting...' : 'Delete Building'}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="building-info-form">
+        {userRoleInBuilding !== 'children' && (
+          <div className="info-group">
+            <label>Building ID</label>
+            <p className="building-id">{building.id}</p>
           </div>
         )}
-
-        {success && <div className="success-message">{success}</div>}
-        {error && <div className="error-message">{error}</div>}
-
-        <div className="building-info-form">
-          {userRoleInBuilding !== 'children' && (
-            <div className="info-group">
-              <label>Building ID</label>
-              <p className="building-id">{building.id}</p>
-            </div>
-          )}
-          
-          <div className="info-group">
-            <label>
-              <MdBusiness /> Building Name
-            </label>
-            {isEditing ? (
-              <input
-                type="text"
-                name="BuildingName"
-                value={editData.BuildingName}
-                onChange={handleInputChange}
-                placeholder="Enter building name"
-                disabled={saving}
-                className={editData.BuildingName.trim() ? 'input-valid' : ''}
-              />
-            ) : (
-              <p>{building.BuildingName || 'Unnamed Building'}</p>
-            )}
-          </div>
-          
-          <div className="info-group">
-            <label>
-              <MdLocationOn /> Address
-            </label>
-            {isEditing ? (
-              <input
-                type="text"
-                name="Address"
-                value={editData.Address}
-                onChange={handleInputChange}
-                placeholder="Enter building address (optional)"
-                disabled={saving}
-              />
-            ) : (
-              <p>{building.Address || 'No address specified'}</p>
-            )}
-          </div>
-          
-          <div className="info-group">
-            <label>
-              <MdDescription /> Description
-            </label>
-            {isEditing ? (
-              <textarea
-                name="Description"
-                value={editData.Description}
-                onChange={handleInputChange}
-                placeholder="Enter building description (optional)"
-                disabled={saving}
-                rows="4"
-              />
-            ) : (
-              <p>{building.Description || 'No description'}</p>
-            )}
-          </div>
-          
-          {userRoleInBuilding !== 'parent' && userRoleInBuilding !== 'children' && (
-            <div className="info-group">
-              <label>Created By</label>
-              <p>{building.CreatedBy || 'Unknown'}</p>
-            </div>
-          )}
-          
-          {building.CreatedAt && userRoleInBuilding !== 'children' && (
-            <div className="info-group">
-              <label>Created At</label>
-              <p>{typeof building.CreatedAt === 'string' 
-                  ? building.CreatedAt 
-                  : building.CreatedAt.toDate().toLocaleString()}</p>
-            </div>
-          )}
-
-          {building.LastModifiedBy && userRoleInBuilding !== 'children' && (
-            <div className="info-group">
-              <label>Last Modified By</label>
-              <p>{building.LastModifiedBy}</p>
-            </div>
+        
+        <div className="info-group">
+          <label>
+            <MdBusiness /> Building Name
+          </label>
+          {isEditing ? (
+            <input
+              type="text"
+              name="BuildingName"
+              value={editData.BuildingName}
+              onChange={handleInputChange}
+              placeholder="Enter building name"
+              disabled={saving}
+              className={editData.BuildingName.trim() ? 'input-valid' : ''}
+            />
+          ) : (
+            <p>{building.BuildingName || 'Unnamed Building'}</p>
           )}
         </div>
         
-        {permissions.canViewLocations && (
-          <div className="locations-section">
-            <div className="locations-header">
-              <h3>
-                <MdLocationOn /> 
-                {userRoleInBuilding === 'children' 
-                  ? `My Assigned Locations (${displayedLocations.length})` 
-                  : `Locations (${displayedLocations.length})`
-                }
-              </h3>
-            </div>
-            
-            {/* Add location form - only for parents */}
-            {permissions.canManageLocations && (
-              <div className="add-location-form">
-                <input
-                  id="new-location-input"
-                  type="text"
-                  value={newLocationName}
-                  onChange={(e) => setNewLocationName(e.target.value)}
-                  placeholder="Enter new location name"
-                  disabled={isAddingLocation}
-                />
-                <button
-                  type="button"
-                  className="confirm-add-btn"
-                  onClick={handleAddLocation}
-                  disabled={isAddingLocation || !newLocationName.trim()}
-                >
-                  {isAddingLocation ? 'Adding...' : 'Add'}
-                </button>
-              </div>
-            )}
-            
-            {displayedLocations.length > 0 ? (
-              <div className="locations-list">
-                {displayedLocations.map(location => (
-                  <div key={location.id} className="location-item">
-                    <div className="location-name">{location.LocationName || location.id}</div>
-                    <div className="location-details">
-                      {/* Completely hide location ID for children - they don't need to see technical IDs */}
-                      {userRoleInBuilding !== 'children' && (
-                        <span className="location-id">ID: {location.id}</span>
-                      )}
-                      {location.DateCreated && userRoleInBuilding !== 'children' && (
-                        <span className="location-date">Created: {location.DateCreated}</span>
-                      )}
-                      <span className="location-devices">
-                        Devices: {devices.filter(d => d.Location === location.id).length}
-                      </span>
-                      {userRoleInBuilding === 'children' && (
-                        <span style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic' }}>
-                          ✓ You have access to this location
-                        </span>
-                      )}
-                    </div>
-                    {permissions.canManageLocations && (
-                      <button
-                        type="button"
-                        className="remove-location-btn"
-                        onClick={() => handleRemoveLocation(location.id)}
-                        disabled={isRemovingLocation}
-                        aria-label="Remove location"
-                      >
-                        <MdDelete />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="no-data-message">
-                {userRoleInBuilding === 'children' 
-                  ? "You have not been assigned to any locations yet. Ask a parent to assign you to locations."
-                  : "No locations found for this building"
-                }
-              </p>
-            )}
+        <div className="info-group">
+          <label>
+            <MdLocationOn /> Address
+          </label>
+          {isEditing ? (
+            <input
+              type="text"
+              name="Address"
+              value={editData.Address}
+              onChange={handleInputChange}
+              placeholder="Enter building address (optional)"
+              disabled={saving}
+            />
+          ) : (
+            <p>{building.Address || 'No address specified'}</p>
+          )}
+        </div>
+        
+        <div className="info-group">
+          <label>
+            <MdDescription /> Description
+          </label>
+          {isEditing ? (
+            <textarea
+              name="Description"
+              value={editData.Description}
+              onChange={handleInputChange}
+              placeholder="Enter building description (optional)"
+              disabled={saving}
+              rows="4"
+            />
+          ) : (
+            <p>{building.Description || 'No description'}</p>
+          )}
+        </div>
+        
+        {userRoleInBuilding !== 'parent' && userRoleInBuilding !== 'children' && (
+          <div className="info-group">
+            <label>Created By</label>
+            <p>{building.CreatedBy || 'Unknown'}</p>
+          </div>
+        )}
+        
+        {building.CreatedAt && userRoleInBuilding !== 'children' && (
+          <div className="info-group">
+            <label>Created At</label>
+            <p>{typeof building.CreatedAt === 'string' 
+                ? building.CreatedAt 
+                : building.CreatedAt.toDate().toLocaleString()}</p>
           </div>
         )}
       </div>
-    );
-  };
+      
+      {permissions.canViewLocations && (
+        <div className="locations-section">
+          <div className="locations-header">
+            <h3>
+              <MdLocationOn /> 
+              {userRoleInBuilding === 'children' 
+                ? `My Assigned Locations (${displayedLocations.length})` 
+                : `Locations (${displayedLocations.length})`
+              }
+            </h3>
+          </div>
+          
+          {/* Add location form - only for parents */}
+          {permissions.canManageLocations && (
+            <div className="add-location-form">
+              <input
+                id="new-location-input"
+                type="text"
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value)}
+                placeholder="Enter new location name"
+                disabled={isAddingLocation}
+              />
+              <button
+                type="button"
+                className="confirm-add-btn"
+                onClick={handleAddLocation}
+                disabled={isAddingLocation || !newLocationName.trim()}
+              >
+                {isAddingLocation ? 'Adding...' : 'Add'}
+              </button>
+            </div>
+          )}
+          
+          {displayedLocations.length > 0 ? (
+            <div className="locations-list">
+              {displayedLocations.map(location => (
+                <div key={location.id} className="location-item">
+                  <div className="location-name">{location.LocationName || location.id}</div>
+                  <div className="location-details">
+                    {userRoleInBuilding !== 'children' && (
+                      <span className="location-id">ID: {location.id}</span>
+                    )}
+                    {location.DateCreated && userRoleInBuilding !== 'children' && (
+                      <span className="location-date">Created: {location.DateCreated}</span>
+                    )}
+                    <span className="location-devices">
+                      Devices: {devices.filter(d => d.Location === location.id).length}
+                    </span>
+                    {userRoleInBuilding === 'children' && (
+                      <span style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic' }}>
+                        ✓ You have access to this location
+                      </span>
+                    )}
+                  </div>
+                  {permissions.canManageLocations && (
+                    <button
+                      type="button"
+                      className="remove-location-btn"
+                      onClick={() => handleRemoveLocation(location.id)}
+                      disabled={isRemovingLocation}
+                      aria-label="Remove location"
+                    >
+                      <MdDelete />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="no-data-message">
+              {userRoleInBuilding === 'children' 
+                ? "You have not been assigned to any locations yet. Ask a parent to assign you to locations."
+                : "No locations found for this building"
+              }
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const DevicesTab = () => (
     <div className="devices-tab">
@@ -1155,7 +859,7 @@ const BuildingDetail = () => {
     </div>
   );
 
-  // UPDATED: Children Tab with invitation system
+  // Children Tab with invitation system
   const ChildrenTab = () => (
     <div className="children-tab">
       <div className="children-header">
@@ -1167,7 +871,6 @@ const BuildingDetail = () => {
               className="add-child-btn"
               onClick={() => {
                 setShowAddChildForm(!showAddChildForm);
-                // Clear any existing errors and email status when toggling form
                 if (!showAddChildForm) {
                   setError(null);
                   setNewChildEmail('');
@@ -1325,7 +1028,6 @@ const BuildingDetail = () => {
     </div>
   );
 
-  
   // Energy Usage tab component
   const EnergyUsageTab = () => (
     <div className="energy-usage-tab">
@@ -1405,8 +1107,11 @@ const BuildingDetail = () => {
         <button className="back-button" onClick={handleBack} type="button">
           <MdArrowBack /> Back
         </button>
-        <h2>{building.BuildingName || building.id}</h2>
+        <h2>{building?.BuildingName || building?.id || 'Building Detail'}</h2>
       </div>
+
+      {success && <div className="success-message">{success}</div>}
+      {error && <div className="error-message">{error}</div>}
       
       <TabPanel tabs={tabs} />
       
@@ -1420,64 +1125,6 @@ const BuildingDetail = () => {
         viewOnly={false}
         onUserUpdate={handleCloseUserModal}
       />
-
-      <UserProfileModal
-        isOpen={isUserProfileModalOpen}
-        onClose={handleCloseUserProfileModal}
-        user={selectedUserForProfile}
-        buildingId={buildingId}
-      />
-    </div>
-  );
-};
-
-// User Profile Modal Component
-const UserProfileModal = ({ isOpen, onClose, user, buildingId }) => {
-  if (!isOpen || !user) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>
-            <MdPeople /> User Profile
-          </h3>
-          <button 
-            type="button"
-            className="close-button" 
-            onClick={onClose}
-            aria-label="Close modal"
-          >
-            <MdDelete />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="user-info-section">
-            <h4>User Information</h4>
-            <div className="user-details-grid">
-              <div className="detail-item">
-                <label>Name:</label>
-                <span>{user.Name || 'N/A'}</span>
-              </div>
-              <div className="detail-item">
-                <label>Email:</label>
-                <span>{user.Email || user.id}</span>
-              </div>
-              {user.ContactNo && (
-                <div className="detail-item">
-                  <label>Contact:</label>
-                  <span>{user.ContactNo}</span>
-                </div>
-              )}
-              <div className="detail-item">
-                <label>Assigned Locations:</label>
-                <span>{user.assignedLocations?.length || 0}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

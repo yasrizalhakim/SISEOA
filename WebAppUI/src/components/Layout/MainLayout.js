@@ -38,7 +38,7 @@ const MainLayout = ({ handleLogout }) => {
     if (path.includes('/buildings')) return 'Building Management';
     if (path.includes('/devices')) return 'Device Management';
     if (path.includes('/users')) return 'User Management';
-    if (path.includes('/automation')) return 'Automation';
+    // if (path.includes('/automation')) return 'Automation';
     if (path.includes('/reports')) return 'Reports';
     if (path.includes('/notifications')) return 'Notifications';
     if (path.includes('/profile')) return 'User Profile';
@@ -182,7 +182,7 @@ const MainLayout = ({ handleLogout }) => {
     }
 
     baseItems.push(
-      { path: '/automation', icon: MdSchedule, label: 'Automation' },
+      // { path: '/automation', icon: MdSchedule, label: 'Automation' },
       { path: '/reports', icon: MdAssessment, label: 'Reports' },
       { path: '/notifications', icon: MdNotifications, label: 'Notifications' },
       { path: '/profile', icon: MdAccountCircle, label: 'Profile' }

@@ -1,12 +1,15 @@
-// src/components/Buildings/Buildings.js - Refactored with component consolidation
+// src/components/Buildings/Buildings.js - Refactored without custom hooks
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MdEdit, MdAdd, MdRefresh, MdSearch, MdAdminPanelSettings } from 'react-icons/md';
-import { firestore } from '../../services/firebase';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
+import buildingService from '../../services/buildingService';
 import { isSystemAdmin } from '../../utils/helpers';
 import './Buildings.css';
+
+// ==============================================================================
+// MAIN BUILDINGS COMPONENT
+// ==============================================================================
 
 const Buildings = () => {
   const [buildings, setBuildings] = useState([]);
@@ -17,11 +20,7 @@ const Buildings = () => {
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
   
   const navigate = useNavigate();
-  
-  const userEmail = useMemo(() => 
-    localStorage.getItem('userEmail') || '', 
-    []
-  );
+  const userEmail = useMemo(() => localStorage.getItem('userEmail') || '', []);
 
   // Check if user is SystemAdmin
   const checkSystemAdmin = useCallback(async () => {
@@ -29,7 +28,7 @@ const Buildings = () => {
     
     try {
       const isAdmin = await isSystemAdmin(userEmail);
-      console.log('🔧 SystemAdmin check result:', isAdmin);
+      setIsUserSystemAdmin(isAdmin);
       return isAdmin;
     } catch (err) {
       console.error('Error checking SystemAdmin status:', err);
@@ -45,88 +44,18 @@ const Buildings = () => {
       setRefreshing(true);
       setError(null);
 
-      console.log('🏢 Fetching buildings for user:', userEmail);
-
       const isAdmin = await checkSystemAdmin();
-      setIsUserSystemAdmin(isAdmin);
-      
       let buildingsData = [];
 
       if (isAdmin) {
-        console.log('🔧 SystemAdmin detected - fetching ALL buildings in system');
-        
-        const allBuildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
-        
-        buildingsData = allBuildingsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          userRoleInBuilding: 'admin'
-        }));
-        
-        console.log('🏢 SystemAdmin found', buildingsData.length, 'total buildings in system');
-        
+        buildingsData = await buildingService.getAllBuildings();
       } else {
-        console.log('👨‍👩‍👧‍👦 Regular user - fetching user-specific buildings');
-        
-        const userBuildingsQuery = query(
-          collection(firestore, 'USERBUILDING'),
-          where('User', '==', userEmail)
-        );
-        
-        const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
-        
-        if (userBuildingsSnapshot.empty) {
-          console.log('⚠️ User has no building access');
-          setBuildings([]);
-          return;
-        }
-
-        console.log('🏢 Found', userBuildingsSnapshot.docs.length, 'building relationships');
-
-        buildingsData = await Promise.all(
-          userBuildingsSnapshot.docs.map(async (userBuildingDoc) => {
-            const userBuildingData = userBuildingDoc.data();
-            const buildingId = userBuildingData.Building;
-            const userRoleInBuilding = userBuildingData.Role;
-            
-            if (buildingId === 'SystemAdmin') {
-              return null;
-            }
-            
-            console.log(`🏢 Processing building ${buildingId} with role ${userRoleInBuilding}`);
-            
-            try {
-              const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
-              
-              if (buildingDoc.exists()) {
-                return {
-                  id: buildingId,
-                  ...buildingDoc.data(),
-                  userRoleInBuilding: userRoleInBuilding
-                };
-              } else {
-                console.warn(`⚠️ Building ${buildingId} not found in BUILDING collection`);
-                return null;
-              }
-            } catch (buildingError) {
-              console.error(`❌ Error fetching building ${buildingId}:`, buildingError);
-              return null;
-            }
-          })
-        );
-
-        buildingsData = buildingsData.filter(building => building !== null);
+        buildingsData = await buildingService.getUserBuildings(userEmail);
       }
 
       // Sort buildings alphabetically
-      buildingsData.sort((a, b) => {
-        const nameA = a.BuildingName || a.id;
-        const nameB = b.BuildingName || b.id;
-        return nameA.localeCompare(nameB);
-      });
-
-      console.log('🏢 Valid buildings loaded:', buildingsData.length);
-      setBuildings(buildingsData);
+      const sortedBuildings = buildingService.sortBuildingsAlphabetically(buildingsData);
+      setBuildings(sortedBuildings);
       
     } catch (err) {
       console.error('❌ Error fetching buildings:', err);
@@ -139,18 +68,7 @@ const Buildings = () => {
 
   // Filter buildings by search term
   const filteredBuildings = useMemo(() => {
-    return buildings.filter(building => {
-      if (!searchTerm) return true;
-      
-      const buildingName = building.BuildingName || building.id;
-      const buildingAddress = building.Address || '';
-      const createdBy = building.CreatedBy || '';
-      
-      return buildingName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             buildingAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             createdBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             building.id.toLowerCase().includes(searchTerm.toLowerCase());
-    });
+    return buildingService.filterBuildingsBySearch(buildings, searchTerm);
   }, [buildings, searchTerm]);
 
   // Navigation handler
@@ -210,7 +128,6 @@ const Buildings = () => {
 
       <BuildingsGrid 
         buildings={filteredBuildings}
-        userEmail={userEmail}
         onBuildingClick={handleBuildingClick}
         isSystemAdmin={isUserSystemAdmin}
         searchTerm={searchTerm}
@@ -219,7 +136,10 @@ const Buildings = () => {
   );
 };
 
-// Buildings Header Component
+// ==============================================================================
+// BUILDINGS HEADER COMPONENT
+// ==============================================================================
+
 const BuildingsHeader = ({ 
   canAddBuildings, 
   onRefresh, 
@@ -237,17 +157,7 @@ const BuildingsHeader = ({
       );
     }
     
-    return (
-      <span style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '0.5rem', 
-        flexDirection: 'column', 
-        alignItems: 'flex-start' 
-      }}>
-        <span>My Buildings ({buildingsCount})</span>
-      </span>
-    );
+    return `My Buildings (${buildingsCount})`;
   }, [isSystemAdmin, buildingsCount]);
 
   return (
@@ -274,7 +184,10 @@ const BuildingsHeader = ({
   );
 };
 
-// Search Controls Component
+// ==============================================================================
+// SEARCH CONTROLS COMPONENT
+// ==============================================================================
+
 const SearchControls = ({ searchTerm, onSearchChange, isSystemAdmin }) => (
   <div className="search-section">
     <div className="search-container">
@@ -291,33 +204,18 @@ const SearchControls = ({ searchTerm, onSearchChange, isSystemAdmin }) => (
   </div>
 );
 
-// Buildings Grid Component
+// ==============================================================================
+// BUILDINGS GRID COMPONENT
+// ==============================================================================
+
 const BuildingsGrid = ({ 
   buildings, 
-  userEmail, 
   onBuildingClick, 
   isSystemAdmin, 
   searchTerm 
 }) => {
   if (buildings.length === 0) {
-    return (
-      <div className="no-buildings">
-        <div className="no-data-content">
-          <h3>
-            {searchTerm ? 'No Buildings Found' : 'No Buildings Available'}
-          </h3>
-          <p>
-            {searchTerm ? (
-              `No buildings match "${searchTerm}". Try adjusting your search terms.`
-            ) : isSystemAdmin ? (
-              "No buildings exist in the system yet. Buildings will appear here once users create them."
-            ) : (
-              "You don't have access to any buildings yet. Create your first building or ask a parent to add you to theirs."
-            )}
-          </p>
-        </div>
-      </div>
-    );
+    return <EmptyBuildingsState searchTerm={searchTerm} isSystemAdmin={isSystemAdmin} />;
   }
 
   return (
@@ -334,29 +232,34 @@ const BuildingsGrid = ({
   );
 };
 
-// Building Card Component
-const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
-  const formatDate = useCallback((dateStr) => {
-    if (!dateStr) return 'N/A';
-    
-    if (typeof dateStr === 'object' && dateStr.toDate) {
-      return dateStr.toDate().toLocaleDateString();
-    }
-    
-    if (typeof dateStr === 'string') {
-      if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        if (parts.length === 3) {
-          const date = new Date(parts[2], parts[1] - 1, parts[0]);
-          return date.toLocaleDateString();
-        }
-      }
-      return new Date(dateStr).toLocaleDateString();
-    }
-    
-    return dateStr;
-  }, []);
+// ==============================================================================
+// EMPTY STATE COMPONENT
+// ==============================================================================
 
+const EmptyBuildingsState = ({ searchTerm, isSystemAdmin }) => (
+  <div className="no-buildings">
+    <div className="no-data-content">
+      <h3>
+        {searchTerm ? 'No Buildings Found' : 'No Buildings Available'}
+      </h3>
+      <p>
+        {searchTerm ? (
+          `No buildings match "${searchTerm}". Try adjusting your search terms.`
+        ) : isSystemAdmin ? (
+          "No buildings exist in the system yet. Buildings will appear here once users create them."
+        ) : (
+          "You don't have access to any buildings yet. Create your first building or ask a parent to add you to theirs."
+        )}
+      </p>
+    </div>
+  </div>
+);
+
+// ==============================================================================
+// BUILDING CARD COMPONENT
+// ==============================================================================
+
+const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
   const handleCardClick = useCallback(() => {
     onClick();
   }, [onClick]);
@@ -385,8 +288,7 @@ const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
         </div>
         
         <div className="building-details">
-          {/* Completely hide Building ID for children role */}
-          {building.userRoleInBuilding !== 'children' || isSystemAdmin && (
+          {building.userRoleInBuilding !== 'children' && (
             <div className="detail-item">
               <span className="detail-label">ID:</span>
               <span className="detail-value">{building.id}</span>
@@ -402,7 +304,9 @@ const BuildingCard = ({ building, onClick, isSystemAdmin }) => {
           
           <div className="detail-item">
             <span className="detail-label">Created:</span>
-            <span className="detail-value">{formatDate(building.DateCreated || building.CreatedAt)}</span>
+            <span className="detail-value">
+              {buildingService.formatBuildingDate(building.DateCreated || building.CreatedAt)}
+            </span>
           </div>
 
           <div className="detail-item">

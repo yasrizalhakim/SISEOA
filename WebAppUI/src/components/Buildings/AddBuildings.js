@@ -1,21 +1,14 @@
-// src/components/Buildings/AddBuilding.js - Refactored with component consolidation
+// src/components/Buildings/AddBuilding.js - Refactored without custom hooks
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MdArrowBack, MdAdd, MdClose } from 'react-icons/md';
-import { firestore } from '../../services/firebase';
-import { notifyParentBuildingCreated } from '../../services/notificationService';
-import { 
-  doc, 
-  setDoc, 
-  collection, 
-  getDocs, 
-  query, 
-  where, 
-  serverTimestamp, 
-  getDoc 
-} from 'firebase/firestore';
+import buildingService from '../../services/buildingService';
 import './AddBuildings.css';
+
+// ==============================================================================
+// MAIN ADD BUILDING COMPONENT
+// ==============================================================================
 
 const AddBuilding = () => {
   const navigate = useNavigate();
@@ -40,9 +33,11 @@ const AddBuilding = () => {
   
   // Validation State
   const [buildingExists, setBuildingExists] = useState(false);
-  const [deviceExists, setDeviceExists] = useState(false);
-  const [deviceAvailable, setDeviceAvailable] = useState(false);
-  const [isCheckingDevice, setIsCheckingDevice] = useState(false);
+  const [deviceValidation, setDeviceValidation] = useState({
+    checking: false,
+    exists: false,
+    available: false
+  });
   
   // User Context
   const userEmail = useMemo(() => 
@@ -63,8 +58,7 @@ const AddBuilding = () => {
     if (!buildingId) return;
     
     try {
-      const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
-      const exists = buildingDoc.exists();
+      const exists = await buildingService.buildingExists(buildingId);
       setBuildingExists(exists);
       
       if (exists) {
@@ -81,60 +75,25 @@ const AddBuilding = () => {
   const checkDeviceAvailability = useCallback(async (deviceId) => {
     if (!deviceId) return;
     
-    setIsCheckingDevice(true);
-    setDeviceExists(false);
-    setDeviceAvailable(false);
+    setDeviceValidation({ checking: true, exists: false, available: false });
+    setError(null);
     
     try {
-      const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
+      const validation = await buildingService.validateDeviceForBuilding(deviceId);
       
-      if (!deviceDoc.exists()) {
-        setDeviceExists(false);
-        setDeviceAvailable(false);
-        setError('Device Unavailable');
-        return;
-      }
+      setDeviceValidation({
+        checking: false,
+        exists: validation.exists,
+        available: validation.available
+      });
       
-      setDeviceExists(true);
-      const deviceData = deviceDoc.data();
-      
-      if (deviceData.Location) {
-        const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
-        
-        if (locationDoc.exists()) {
-          const locationData = locationDoc.data();
-          const deviceBuildingId = locationData.Building;
-          
-          const parentQuery = query(
-            collection(firestore, 'USERBUILDING'),
-            where('Building', '==', deviceBuildingId),
-            where('Role', '==', 'parent')
-          );
-          
-          const parentSnapshot = await getDocs(parentQuery);
-          
-          if (!parentSnapshot.empty) {
-            setDeviceAvailable(false);
-            setError('Device Unavailable');
-          } else {
-            setDeviceAvailable(true);
-            setError(null);
-          }
-        } else {
-          setDeviceAvailable(true);
-          setError(null);
-        }
-      } else {
-        setDeviceAvailable(true);
-        setError(null);
+      if (!validation.available) {
+        setError(validation.reason);
       }
     } catch (err) {
-      console.error('Error checking device availability:', err);
-      setDeviceExists(false);
-      setDeviceAvailable(false);
+      console.error('Error validating device:', err);
+      setDeviceValidation({ checking: false, exists: false, available: false });
       setError('Error checking device availability');
-    } finally {
-      setIsCheckingDevice(false);
     }
   }, []);
   
@@ -190,8 +149,8 @@ const AddBuilding = () => {
            formData.buildingId && 
            formData.buildingName && 
            !buildingExists &&
-           deviceExists &&
-           deviceAvailable &&
+           deviceValidation.exists &&
+           deviceValidation.available &&
            locations.length > 0 &&
            locations.every(loc => loc.name.trim() !== '');
   }, [
@@ -199,8 +158,8 @@ const AddBuilding = () => {
     formData.buildingId,
     formData.buildingName,
     buildingExists,
-    deviceExists,
-    deviceAvailable,
+    deviceValidation.exists,
+    deviceValidation.available,
     locations
   ]);
   
@@ -227,7 +186,7 @@ const AddBuilding = () => {
       return;
     }
     
-    if (!deviceExists || !deviceAvailable) {
+    if (!deviceValidation.exists || !deviceValidation.available) {
       setError('Device Unavailable.');
       return;
     }
@@ -247,64 +206,19 @@ const AddBuilding = () => {
       setLoading(true);
       setError(null);
       
-      const timestamp = serverTimestamp();
-      const now = new Date();
-      const dateCreated = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
+      const buildingData = {
+        deviceId: formData.deviceId,
+        buildingId: formData.buildingId,
+        buildingName: formData.buildingName,
+        buildingAddress: formData.buildingAddress,
+        buildingDescription: formData.buildingDescription,
+        locations: validLocations,
+        userEmail: userEmail
+      };
       
-      // Create building
-      await setDoc(doc(firestore, 'BUILDING', formData.buildingId), {
-        BuildingName: formData.buildingName,
-        Address: formData.buildingAddress || '',
-        Description: formData.buildingDescription || '',
-        CreatedAt: timestamp,
-        DateCreated: dateCreated,
-        CreatedBy: userEmail
-      });
-      
-      // Create user-building relationship
-      const userBuildingId = `${userEmail.replace(/\./g, '_')}_${formData.buildingId}`;
-      await setDoc(doc(firestore, 'USERBUILDING', userBuildingId), {
-        User: userEmail,
-        Building: formData.buildingId,
-        Role: 'parent',
-        CreatedAt: timestamp
-      });
-      
-      // Create locations
-      for (const location of validLocations) {
-        const locationId = location.id || `${formData.buildingId}${location.name.replace(/\s+/g, '')}`;
-        
-        await setDoc(doc(firestore, 'LOCATION', locationId), {
-          Building: formData.buildingId,
-          LocationName: location.name,
-          DateCreated: dateCreated
-        });
-      }
-      
-      // Assign device to first location
-      const firstLocationId = validLocations[0].id || 
-        `${formData.buildingId}${validLocations[0].name.replace(/\s+/g, '')}`;
-      
-      const deviceDoc = await getDoc(doc(firestore, 'DEVICE', formData.deviceId));
-      const currentDeviceData = deviceDoc.data();
-      
-      await setDoc(doc(firestore, 'DEVICE', formData.deviceId), {
-        ...currentDeviceData,
-        Location: firstLocationId
-      });
+      await buildingService.createBuilding(buildingData);
       
       setSuccess(true);
-
-      try {
-        await notifyParentBuildingCreated(
-          userEmail,
-          formData.buildingName,
-          formData.buildingId
-        );
-        console.log('📢 Building creation notification sent to parent');
-      } catch (notificationError) {
-        console.error('❌ Failed to send building creation notification:', notificationError);
-      }
       
       setTimeout(() => {
         navigate('/buildings');
@@ -319,8 +233,7 @@ const AddBuilding = () => {
   }, [
     formData,
     buildingExists,
-    deviceExists,
-    deviceAvailable,
+    deviceValidation,
     locations,
     userEmail,
     navigate
@@ -340,9 +253,7 @@ const AddBuilding = () => {
       <BuildingForm
         formData={formData}
         locations={locations}
-        deviceExists={deviceExists}
-        deviceAvailable={deviceAvailable}
-        isCheckingDevice={isCheckingDevice}
+        deviceValidation={deviceValidation}
         buildingExists={buildingExists}
         loading={loading}
         isFormValid={isFormValid}
@@ -356,7 +267,10 @@ const AddBuilding = () => {
   );
 };
 
-// Header Component
+// ==============================================================================
+// HEADER COMPONENT
+// ==============================================================================
+
 const BuildingHeader = ({ onBack }) => (
   <div className="building-header">
     <button className="back-button" onClick={onBack} type="button">
@@ -366,7 +280,10 @@ const BuildingHeader = ({ onBack }) => (
   </div>
 );
 
-// Message Section Component
+// ==============================================================================
+// MESSAGE SECTION COMPONENT
+// ==============================================================================
+
 const MessageSection = ({ error, success }) => (
   <>
     {error && <div className="error-message">{error}</div>}
@@ -374,13 +291,14 @@ const MessageSection = ({ error, success }) => (
   </>
 );
 
-// Main Form Component
+// ==============================================================================
+// MAIN FORM COMPONENT
+// ==============================================================================
+
 const BuildingForm = ({
   formData,
   locations,
-  deviceExists,
-  deviceAvailable,
-  isCheckingDevice,
+  deviceValidation,
   buildingExists,
   loading,
   isFormValid,
@@ -395,9 +313,7 @@ const BuildingForm = ({
     
     <DeviceIdInput
       value={formData.deviceId}
-      deviceExists={deviceExists}
-      deviceAvailable={deviceAvailable}
-      isCheckingDevice={isCheckingDevice}
+      deviceValidation={deviceValidation}
       loading={loading}
       onChange={onChange}
     />
@@ -461,7 +377,10 @@ const BuildingForm = ({
   </form>
 );
 
-// Device Requirement Banner
+// ==============================================================================
+// DEVICE REQUIREMENT BANNER
+// ==============================================================================
+
 const DeviceRequirementBanner = () => (
   <div className="device-requirement-banner">
     <h4>📱 Device ID Required</h4>
@@ -472,15 +391,11 @@ const DeviceRequirementBanner = () => (
   </div>
 );
 
-// Device ID Input Component
-const DeviceIdInput = ({ 
-  value, 
-  deviceExists, 
-  deviceAvailable, 
-  isCheckingDevice, 
-  loading, 
-  onChange 
-}) => (
+// ==============================================================================
+// DEVICE ID INPUT COMPONENT
+// ==============================================================================
+
+const DeviceIdInput = ({ value, deviceValidation, loading, onChange }) => (
   <div className="form-group">
     <label htmlFor="deviceId">Device ID *</label>
     <div className="device-input-container">
@@ -492,44 +407,48 @@ const DeviceIdInput = ({
         onChange={onChange}
         placeholder="Enter device ID"
         disabled={loading}
-        className={deviceExists && deviceAvailable ? 'input-valid' : ''}
+        className={deviceValidation.exists && deviceValidation.available ? 'input-valid' : ''}
         autoComplete="off"
       />
       <DeviceStatusIndicator
         deviceId={value}
-        isChecking={isCheckingDevice}
-        exists={deviceExists}
-        available={deviceAvailable}
+        deviceValidation={deviceValidation}
       />
     </div>
     <small>This device will be assigned to the first location in your building</small>
   </div>
 );
 
-// Device Status Indicator
-const DeviceStatusIndicator = ({ deviceId, isChecking, exists, available }) => {
-  if (isChecking) {
+// ==============================================================================
+// DEVICE STATUS INDICATOR
+// ==============================================================================
+
+const DeviceStatusIndicator = ({ deviceId, deviceValidation }) => {
+  if (deviceValidation.checking) {
     return <span className="checking-message">Checking...</span>;
   }
   
   if (!deviceId) return null;
   
-  if (!exists) {
+  if (!deviceValidation.exists) {
     return <span className="device-invalid">Device unavailable</span>;
   }
   
-  if (exists && available) {
+  if (deviceValidation.exists && deviceValidation.available) {
     return <span className="device-valid">Device available</span>;
   }
   
-  if (exists && !available) {
+  if (deviceValidation.exists && !deviceValidation.available) {
     return <span className="device-invalid">Device unavailable</span>;
   }
   
   return null;
 };
 
-// Building ID Input Component
+// ==============================================================================
+// BUILDING ID INPUT COMPONENT
+// ==============================================================================
+
 const BuildingIdInput = ({ value, buildingExists, loading, onChange }) => (
   <div className="form-group">
     <label htmlFor="buildingId">Building ID *</label>
@@ -545,10 +464,14 @@ const BuildingIdInput = ({ value, buildingExists, loading, onChange }) => (
       autoComplete="off"
     />
     <small>Building ID must be unique and cannot be changed later</small>
+    {buildingExists && <span className="validation-error">Building ID already exists</span>}
   </div>
 );
 
-// Generic Form Field Component
+// ==============================================================================
+// GENERIC FORM FIELD COMPONENT
+// ==============================================================================
+
 const FormField = ({ 
   id, 
   name, 
@@ -590,7 +513,10 @@ const FormField = ({
   </div>
 );
 
-// Locations Section Component
+// ==============================================================================
+// LOCATIONS SECTION COMPONENT
+// ==============================================================================
+
 const LocationsSection = ({ locations, loading, onChange, onAdd, onRemove }) => (
   <div className="locations-section">
     <div className="section-header">
@@ -621,7 +547,10 @@ const LocationsSection = ({ locations, loading, onChange, onAdd, onRemove }) => 
   </div>
 );
 
-// Location Input Row Component
+// ==============================================================================
+// LOCATION INPUT ROW COMPONENT
+// ==============================================================================
+
 const LocationInputRow = ({ location, index, disabled, canRemove, onChange, onRemove }) => (
   <div className="location-input-row">
     <input
@@ -644,7 +573,10 @@ const LocationInputRow = ({ location, index, disabled, canRemove, onChange, onRe
   </div>
 );
 
-// User Access Section Component
+// ==============================================================================
+// USER ACCESS SECTION COMPONENT
+// ==============================================================================
+
 const UserAccessSection = () => (
   <div className="user-access-section">
     <h3>Building Access</h3>
@@ -655,7 +587,10 @@ const UserAccessSection = () => (
   </div>
 );
 
-// Submit Button Component
+// ==============================================================================
+// SUBMIT BUTTON COMPONENT
+// ==============================================================================
+
 const SubmitButton = ({ loading, isFormValid, onSave }) => (
   <button 
     type="button"
