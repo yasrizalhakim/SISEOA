@@ -1,9 +1,9 @@
-// src/components/Devices/DeviceDetail.js - Clean Fixed Version
+// src/components/Devices/DeviceDetail.js - Updated to hide location details and automation for SystemAdmin
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore, database } from '../../services/firebase';
-import automationService from '../../services/automationService';
+import automationService from '../../services/AutomationService';
 import { 
   doc, 
   getDoc, 
@@ -184,8 +184,8 @@ const DeviceDetail = () => {
   const enrichDeviceData = useCallback(async (currentDeviceId, deviceData) => {
     const enrichedDevice = { id: currentDeviceId, ...deviceData };
     
-    // Fetch location details if device has location
-    if (deviceData.Location) {
+    // UPDATED: Only fetch location details for non-SystemAdmin users
+    if (deviceData.Location && !isUserSystemAdmin) {
       try {
         const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
         if (locationDoc.exists()) {
@@ -236,7 +236,7 @@ const DeviceDetail = () => {
     }
     
     return enrichedDevice;
-  }, []);
+  }, [isUserSystemAdmin]);
 
   // Calculate user permissions for the device
   const calculatePermissions = useCallback(async (isAdmin, deviceData) => {
@@ -768,6 +768,7 @@ const DeviceDetail = () => {
           canEdit={canEdit}
           canDelete={canDelete}
           canViewSensitiveInfo={canViewSensitiveInfo}
+          isUserSystemAdmin={isUserSystemAdmin}
           allUserBuildings={allUserBuildings}
           allUserLocations={allUserLocations}
           error={error}
@@ -801,7 +802,22 @@ const DeviceDetail = () => {
     });
   }
 
-  // Add Energy Usage tab if device has location (claimed)
+
+  // UPDATED: Hide Automation tab for SystemAdmin
+  if (device.Location && !isUserSystemAdmin) {
+    tabs.push({
+      label: 'Automation',
+      content: (
+        <DeviceAutomationTab
+          device={device}
+          userEmail={userEmail}
+          onAutomationApply={handleDeviceAutomation}
+        />
+      )
+    });
+  }
+
+   // Add Energy Usage tab if device has location (claimed)
   if (device.Location) {
     tabs.push({
       label: 'Energy Usage',
@@ -811,19 +827,6 @@ const DeviceDetail = () => {
           deviceName={device?.DeviceName || device?.id}
           locationName={locationName}
           buildingName={buildingName}
-        />
-      )
-    });
-  }
-
-  if (device.Location) {
-    tabs.push({
-      label: 'Automation',
-      content: (
-        <DeviceAutomationTab
-          device={device}
-          userEmail={userEmail}
-          onAutomationApply={handleDeviceAutomation}
         />
       )
     });
@@ -862,6 +865,7 @@ const DeviceInfoTab = ({
   canEdit,
   canDelete,
   canViewSensitiveInfo,
+  isUserSystemAdmin,
   allUserBuildings,
   allUserLocations,
   error,
@@ -898,6 +902,7 @@ const DeviceInfoTab = ({
       saving={saving}
       canEdit={canEdit}
       canViewSensitiveInfo={canViewSensitiveInfo}
+      isUserSystemAdmin={isUserSystemAdmin}
       allUserBuildings={allUserBuildings}
       allUserLocations={allUserLocations}
       locationName={locationName}
@@ -965,6 +970,7 @@ const DeviceInfoForm = ({
   saving,
   canEdit,
   canViewSensitiveInfo,
+  isUserSystemAdmin,
   allUserBuildings,
   allUserLocations,
   locationName,
@@ -1013,18 +1019,21 @@ const DeviceInfoForm = ({
       onChange={onInputChange}
     />
     
-    <LocationField
-      device={device}
-      editData={editData}
-      isEditing={isEditing}
-      canEdit={canEdit}
-      saving={saving}
-      allUserBuildings={allUserBuildings}
-      allUserLocations={allUserLocations}
-      locationName={locationName}
-      buildingName={buildingName}
-      onChange={onInputChange}
-    />
+    {/* UPDATED: Hide location field for SystemAdmin */}
+    {!isUserSystemAdmin && (
+      <LocationField
+        device={device}
+        editData={editData}
+        isEditing={isEditing}
+        canEdit={canEdit}
+        saving={saving}
+        allUserBuildings={allUserBuildings}
+        allUserLocations={allUserLocations}
+        locationName={locationName}
+        buildingName={buildingName}
+        onChange={onInputChange}
+      />
+    )}
     
     <InfoField 
       label="Status" 

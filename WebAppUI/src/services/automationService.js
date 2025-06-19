@@ -1,655 +1,942 @@
-// src/services/automationService.js - MINIMAL VERSION - No Firestore Device Automation Metadata
+// src/services/AutomationService.js - COMPLETE ENHANCED SERVICE
+// Enhanced service for Pi automation with multiple ON/OFF stages per day
 
-import { database, firestore } from './firebase';
+import { firestore, database } from './firebase';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  doc, 
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  orderBy,
+  serverTimestamp,
+  Timestamp,
+  addDoc
+} from 'firebase/firestore';
 import { ref, get, update } from 'firebase/database';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 // ==============================================================================
-// BUILDING AUTOMATION SERVICE - MINIMAL ARCHITECTURE
+// CONSTANTS AND UTILITIES
 // ==============================================================================
+
+const MINIMUM_STAGE_GAP_MINUTES = 15; // Must match Pi controller
+const MAX_EVENT_HISTORY = 30; // Maximum events to keep per device
+const MAX_STAGES_PER_DAY = 3; // Maximum stages allowed per day
 
 /**
- * Get all devices in a building with minimal data structure
- * @param {string} buildingId - Building ID
- * @returns {Promise<Array>} Array of devices with current status
+ * Format time for display (HH:MM to readable format)
  */
-const getBuildingDevices = async (buildingId) => {
-  try {
-    console.log(`🔍 Getting devices for building: ${buildingId}`);
+const formatTimeDisplay = (timeStr) => {
+  if (!timeStr) return timeStr;
+  const [hours, minutes] = timeStr.split(':');
+  const h = parseInt(hours);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${displayHour}:${minutes} ${ampm}`;
+};
+
+/**
+ * Format hour for display
+ */
+const formatHour = (hour) => {
+  const h = parseInt(hour);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${displayHour}:00 ${ampm}`;
+};
+
+/**
+ * Format multi-stage schedule for display
+ */
+const formatMultiStageSchedule = (schedules) => {
+  if (!schedules || !Array.isArray(schedules)) return 'No schedule';
+  
+  const daySchedules = schedules.map(daySchedule => {
+    const day = daySchedule.day;
+    const stages = daySchedule.stages || [];
     
-    // Step 1: Get all locations in the building
-    const locationsQuery = query(
-      collection(firestore, 'LOCATION'),
-      where('Building', '==', buildingId)
+    if (stages.length === 0) return `${day}: No stages`;
+    
+    const stageTexts = stages.map(stage => 
+      `${formatTimeDisplay(stage.start)} - ${formatTimeDisplay(stage.end)}`
     );
-    const locationsSnapshot = await getDocs(locationsQuery);
     
-    if (locationsSnapshot.empty) {
-      console.log(`⚠️ No locations found for building ${buildingId}`);
-      return [];
-    }
-    
-    const locationIds = locationsSnapshot.docs.map(doc => doc.id);
-    console.log(`📍 Found ${locationIds.length} locations in building:`, locationIds);
-    
-    // Step 2: Get all devices in these locations from Firestore (core info only)
-    const devices = [];
-    const batches = [];
-    for (let i = 0; i < locationIds.length; i += 10) {
-      batches.push(locationIds.slice(i, i + 10));
-    }
-    
-    for (const [batchIndex, batch] of batches.entries()) {
-      const devicesQuery = query(
-        collection(firestore, 'DEVICE'),
-        where('Location', 'in', batch)
-      );
-      const devicesSnapshot = await getDocs(devicesQuery);
-      
-      for (const deviceDoc of devicesSnapshot.docs) {
-        const deviceData = deviceDoc.data();
-        const deviceId = deviceDoc.id;
-        
-        // Step 3: Get minimal RTDB data (status, locationId, locked only)
-        try {
-          const rtdbRef = ref(database, `Devices/${deviceId}`);
-          const rtdbSnapshot = await get(rtdbRef);
-          const rtdbData = rtdbSnapshot.exists() ? rtdbSnapshot.val() : {};
-          
-          const device = {
-            id: deviceId,
-            name: deviceData.DeviceName || deviceId,
-            type: deviceData.DeviceType || 'Unknown',
-            location: deviceData.Location,
-            // RTDB data (minimal - only 3 fields)
-            status: rtdbData.status || 'OFF',
-            locked: rtdbData.locked || false,
-            locationId: rtdbData.locationId || deviceData.Location,
-            // Core Firestore data (no automation metadata)
-            ...deviceData
-          };
-          
-          devices.push(device);
-          console.log(`✅ Added device ${deviceId} with status: ${device.status}, locked: ${device.locked}`);
-          
-        } catch (rtdbError) {
-          console.error(`❌ Error getting RTDB status for device ${deviceId}:`, rtdbError);
-          const device = {
-            id: deviceId,
-            name: deviceData.DeviceName || deviceId,
-            type: deviceData.DeviceType || 'Unknown',
-            location: deviceData.Location,
-            status: 'OFF',
-            locked: false,
-            locationId: deviceData.Location,
-            ...deviceData
-          };
-          devices.push(device);
-        }
-      }
-    }
-    
-    console.log(`📱 Total devices found in building ${buildingId}: ${devices.length}`);
-    return devices;
-    
-  } catch (error) {
-    console.error('❌ Error getting building devices:', error);
-    throw error;
-  }
+    return `${day}: ${stageTexts.join(', ')}`;
+  });
+  
+  return daySchedules.join('\n');
 };
 
-/**
- * Check if building has turn-off-all lockdown active (from Firestore)
- * @param {string} buildingId - Building ID
- * @returns {Promise<boolean>} True if lockdown is active
- */
-const isTurnOffAllLockdownActive = async (buildingId) => {
-  try {
-    const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
-    
-    if (buildingDoc.exists()) {
-      const buildingData = buildingDoc.data();
-      const automation = buildingData.Automation;
-      
-      if (automation) {
-        const isLockdownActive = automation.currentMode === 'turn-off-all' && 
-                                automation.status === 'active' &&
-                                automation.lockdownActive === true;
-        
-        console.log(`🔒 Turn-off-all lockdown status for building ${buildingId}: ${isLockdownActive}`);
-        return isLockdownActive;
-      }
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('❌ Error checking lockdown status:', error);
-    return false;
-  }
-};
+// ==============================================================================
+// PI AUTOMATION RULE MANAGEMENT (Enhanced for Multi-Stage)
+// ==============================================================================
 
 /**
- * Lock all devices in a building (RTDB only)
- * @param {string} buildingId - Building ID
- * @returns {Promise<Object>} Lock operation result
- */
-const lockAllBuildingDevices = async (buildingId) => {
-  try {
-    console.log(`🔒 Locking all devices in building ${buildingId}`);
-    
-    const devices = await getBuildingDevices(buildingId);
-    const rtdbUpdates = {};
-    
-    let devicesLocked = 0;
-    
-    for (const device of devices) {
-      // RTDB: Only update lock status
-      rtdbUpdates[`Devices/${device.id}/locked`] = true;
-      devicesLocked++;
-    }
-    
-    // Apply RTDB updates
-    if (Object.keys(rtdbUpdates).length > 0) {
-      await update(ref(database), rtdbUpdates);
-    }
-    
-    console.log(`🔒 Successfully locked ${devicesLocked} devices in building ${buildingId}`);
-    
-    return {
-      devicesLocked: devicesLocked,
-      lockedAt: new Date().toISOString()
-    };
-    
-  } catch (error) {
-    console.error('❌ Error locking building devices:', error);
-    throw error;
-  }
-};
-
-/**
- * Unlock all devices in a building (RTDB only)
- * @param {string} buildingId - Building ID
- * @returns {Promise<Object>} Unlock operation result
- */
-const unlockAllBuildingDevices = async (buildingId) => {
-  try {
-    console.log(`🔓 Unlocking all devices in building ${buildingId}`);
-    
-    const devices = await getBuildingDevices(buildingId);
-    const rtdbUpdates = {};
-    
-    let devicesUnlocked = 0;
-    
-    for (const device of devices) {
-      if (device.locked) {
-        // RTDB: Only update lock status
-        rtdbUpdates[`Devices/${device.id}/locked`] = false;
-        devicesUnlocked++;
-      }
-    }
-    
-    // Apply RTDB updates
-    if (Object.keys(rtdbUpdates).length > 0) {
-      await update(ref(database), rtdbUpdates);
-    }
-    
-    console.log(`🔓 Successfully unlocked ${devicesUnlocked} devices in building ${buildingId}`);
-    
-    return {
-      devicesUnlocked: devicesUnlocked,
-      unlockedAt: new Date().toISOString()
-    };
-    
-  } catch (error) {
-    console.error('❌ Error unlocking building devices:', error);
-    throw error;
-  }
-};
-
-/**
- * Validate device operation against automation lockdown (RTDB check only)
+ * Get Pi automation rule for a device (supports both single and multi-stage)
  * @param {string} deviceId - Device ID
- * @param {string} operation - Operation type ('turn-on', 'turn-off', 'toggle')
- * @returns {Promise<Object>} Validation result
+ * @returns {Promise<Object|null>} Pi automation rule or null
  */
-const validateDeviceOperation = async (deviceId, operation) => {
+export const getPiAutomationRule = async (deviceId) => {
   try {
-    console.log(`🔍 Validating ${operation} operation for device ${deviceId}`);
+    console.log(`🤖 Getting Pi automation rule for device: ${deviceId}`);
     
-    // Get device RTDB data (only 3 fields: status, locationId, locked)
-    const deviceRef = ref(database, `Devices/${deviceId}`);
-    const deviceSnapshot = await get(deviceRef);
+    const ruleDoc = await getDoc(doc(firestore, 'AUTOMATIONRULE', deviceId));
     
-    if (!deviceSnapshot.exists()) {
-      return {
-        allowed: false,
-        reason: 'Device not found in database',
-        code: 'DEVICE_NOT_FOUND'
-      };
-    }
-    
-    const deviceData = deviceSnapshot.val();
-    const currentStatus = deviceData.status || 'OFF';
-    const isLocked = deviceData.locked || false;
-    
-    // Check if operation is trying to turn device on while locked
-    if (isLocked && (operation === 'turn-on' || (operation === 'toggle' && currentStatus === 'OFF'))) {
-      return {
-        allowed: false,
-        reason: 'Turn Off All automation - devices cannot be turned on until automation is disabled',
-        code: 'DEVICE_LOCKED',
-        currentStatus: currentStatus
-      };
-    }
-    
-    return {
-      allowed: true,
-      reason: 'Operation permitted',
-      code: 'OPERATION_ALLOWED',
-      currentStatus: currentStatus,
-      isLocked: isLocked
-    };
-    
-  } catch (error) {
-    console.error('❌ Error validating device operation:', error);
-    return {
-      allowed: false,
-      reason: 'Error validating operation',
-      code: 'VALIDATION_ERROR'
-    };
-  }
-};
-
-/**
- * Apply automation mode with minimal RTDB updates only
- * @param {string} buildingId - Building ID
- * @param {string} mode - Automation mode ('turn-off-all', 'eco-mode', 'night-mode')
- * @returns {Promise<Object>} Automation result with statistics
- */
-const applyAutomationMode = async (buildingId, mode) => {
-  try {
-    console.log(`🔄 Applying ${mode} automation to building: ${buildingId}`);
-    
-    const devices = await getBuildingDevices(buildingId);
-    
-    if (devices.length === 0) {
-      console.log(`ℹ️ No devices found in building ${buildingId}`);
-      return { totalDevices: 0, devicesUpdated: 0, energySaved: 0 };
-    }
-    
-    const rtdbUpdates = {};
-    let devicesUpdated = 0;
-    let energySaved = 0;
-    const timestamp = new Date().toISOString();
-    const userEmail = localStorage.getItem('userEmail') || 'automation';
-    
-    const devicePriority = {
-      'Light': { priority: 1, maxWattage: 60, essential: true },
-      'Fan': { priority: 2, maxWattage: 100, essential: false },
-      'AC': { priority: 3, maxWattage: 2000, essential: false },
-      'Other': { priority: 2, maxWattage: 80, essential: false }
-    };
-    
-    switch (mode) {
-      case 'turn-off-all':
-        console.log(`🔒 Applying turn-off-all with lockdown for building ${buildingId}`);
-        
-        for (const device of devices) {
-          // RTDB: Update status and lock (minimal updates)
-          if (device.status === 'ON') {
-            rtdbUpdates[`Devices/${device.id}/status`] = 'OFF';
-            devicesUpdated++;
-            energySaved += devicePriority[device.type]?.maxWattage || 50;
-          }
-          rtdbUpdates[`Devices/${device.id}/locked`] = true;
-          
-          console.log(`🔒 Turning OFF and LOCKING device ${device.id} (${device.name})`);
-        }
-        break;
-        
-      case 'eco-mode':
-        for (const device of devices) {
-          const deviceInfo = devicePriority[device.type] || devicePriority['Other'];
-          
-          if (deviceInfo.priority === 3 && device.status === 'ON') {
-            // Turn off high-energy devices (AC, etc.)
-            rtdbUpdates[`Devices/${device.id}/status`] = 'OFF';
-            devicesUpdated++;
-            energySaved += deviceInfo.maxWattage;
-            
-            console.log(`🌱 ECO: Turning OFF high-energy device ${device.id} (${device.name})`);
-          } else if (device.status === 'ON') {
-            // Calculate energy savings for optimization (no device metadata stored)
-            energySaved += Math.floor(deviceInfo.maxWattage * 0.3);
-            
-            console.log(`🌱 ECO: Optimizing device ${device.id} (${device.name}) - estimated 30% energy saving`);
-          }
-        }
-        break;
-        
-      case 'night-mode':
-        for (const device of devices) {
-          const deviceInfo = devicePriority[device.type] || devicePriority['Other'];
-          
-          if (deviceInfo.priority >= 2 && device.status === 'ON') {
-            // Turn off non-essential devices (fans, AC, etc.)
-            rtdbUpdates[`Devices/${device.id}/status`] = 'OFF';
-            devicesUpdated++;
-            energySaved += deviceInfo.maxWattage;
-            
-            console.log(`🌙 NIGHT: Turning OFF non-essential device ${device.id} (${device.name})`);
-          } else if (device.type === 'Light' && device.status === 'ON') {
-            // Calculate energy savings for dimming (no device metadata stored)
-            energySaved += Math.floor(deviceInfo.maxWattage * 0.5);
-            
-            console.log(`🌙 NIGHT: Light ${device.id} (${device.name}) - estimated 50% energy saving from dimming`);
-          }
-        }
-        break;
-        
-      default:
-        throw new Error(`Unknown automation mode: ${mode}`);
-    }
-    
-    // Apply RTDB updates (only status and locked fields)
-    if (Object.keys(rtdbUpdates).length > 0) {
-      await update(ref(database), rtdbUpdates);
-      console.log(`✅ Applied RTDB updates for ${mode} automation`);
-    }
-    
-    return {
-      totalDevices: devices.length,
-      devicesUpdated: devicesUpdated,
-      energySaved: energySaved,
-      mode: mode,
-      appliedAt: timestamp,
-      appliedBy: userEmail,
-      lockdownActive: mode === 'turn-off-all'
-    };
-    
-  } catch (error) {
-    console.error(`❌ Error applying ${mode} automation:`, error);
-    throw error;
-  }
-};
-
-/**
- * Save automation state to Firestore BUILDING collection only
- * @param {string} buildingId - Building ID
- * @param {Object} automationConfig - Automation configuration
- * @returns {Promise<Object>} Saved automation data
- */
-const saveAutomationState = async (buildingId, automationConfig) => {
-  try {
-    console.log(`💾 Saving automation state to Firestore for building ${buildingId}:`, automationConfig);
-    
-    const automationData = {
-      currentMode: automationConfig.automationType,
-      modeTitle: automationConfig.automationTitle,
-      appliedAt: serverTimestamp(),
-      appliedBy: automationConfig.appliedBy,
-      deviceCount: automationConfig.deviceCount || 0,
-      devicesUpdated: automationConfig.devicesUpdated || 0,
-      energySaved: automationConfig.energySaved || 0,
-      lastUpdated: serverTimestamp(),
-      buildingId: buildingId,
-      buildingName: automationConfig.buildingName || buildingId,
-      lockdownActive: automationConfig.automationType === 'turn-off-all',
-      lockdownReason: automationConfig.automationType === 'turn-off-all' ? 
-                     'All devices locked - cannot be turned on until Turn Off All is disabled' : null,
-      modes: {
-        'turn-off-all': automationConfig.automationType === 'turn-off-all',
-        'eco-mode': automationConfig.automationType === 'eco-mode',
-        'night-mode': automationConfig.automationType === 'night-mode'
-      },
-      status: automationConfig.automationType !== 'none' ? 'active' : 'inactive',
-      version: '1.1'
-    };
-    
-    // Update Firestore BUILDING document
-    await updateDoc(doc(firestore, 'BUILDING', buildingId), {
-      Automation: automationData
-    });
-    
-    console.log(`✅ Automation state saved to Firestore for building ${buildingId}`);
-    return automationData;
-    
-  } catch (error) {
-    console.error('❌ Error saving automation state to Firestore:', error);
-    throw error;
-  }
-};
-
-/**
- * Load automation state from Firestore BUILDING collection
- * @param {string} buildingId - Building ID
- * @returns {Promise<Object|null>} Automation state or null if not found
- */
-const loadAutomationState = async (buildingId) => {
-  try {
-    console.log(`📖 Loading automation state from Firestore for building ${buildingId}`);
-    
-    const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
-    
-    if (buildingDoc.exists()) {
-      const buildingData = buildingDoc.data();
-      const automationData = buildingData.Automation;
+    if (ruleDoc.exists()) {
+      const ruleData = ruleDoc.data();
+      console.log(`✅ Found Pi automation rule for ${deviceId}:`, ruleData);
       
-      if (automationData) {
-        console.log(`✅ Loaded automation state from Firestore:`, automationData);
-        return automationData;
-      }
+      // Enhanced rule object with multi-stage support
+      const enhancedRule = {
+        id: deviceId,
+        ...ruleData,
+        // Convert timestamps for display
+        createdAt: ruleData.createdAt instanceof Date ? ruleData.createdAt : 
+                   (ruleData.createdAt?.toDate?.() || new Date(ruleData.createdAt)),
+        lastModified: ruleData.lastModified instanceof Date ? ruleData.lastModified :
+                     (ruleData.lastModified?.toDate?.() || new Date(ruleData.lastModified)),
+        
+        // Multi-stage support
+        isMultiStage: ruleData.multiStage || false,
+        stageCount: ruleData.multiStage ? 
+          (ruleData.schedules || []).reduce((total, daySchedule) => 
+            total + (daySchedule.stages || []).length, 0) : 1,
+        
+        // Display helpers
+        displaySchedule: ruleData.multiStage ? 
+          formatMultiStageSchedule(ruleData.schedules) :
+          `${formatTimeDisplay(ruleData.start)} - ${formatTimeDisplay(ruleData.end)}`,
+        
+        // Summary for UI
+        summary: generateRuleSummary(ruleData)
+      };
+      
+      return enhancedRule;
     }
     
-    console.log(`ℹ️ No automation state found for building ${buildingId}`);
+    console.log(`ℹ️ No Pi automation rule found for device ${deviceId}`);
     return null;
     
   } catch (error) {
-    console.error('❌ Error loading automation state from Firestore:', error);
+    console.error('❌ Error getting Pi automation rule:', error);
     return null;
   }
 };
 
 /**
- * Clear automation state with device unlocking (minimal updates)
- * @param {string} buildingId - Building ID
+ * Generate rule summary for UI display
+ */
+const generateRuleSummary = (ruleData) => {
+  if (ruleData.multiStage && ruleData.schedules) {
+    const totalStages = ruleData.schedules.reduce((total, daySchedule) => 
+      total + (daySchedule.stages || []).length, 0);
+    const activeDays = ruleData.schedules.length;
+    
+    return {
+      type: 'Multi-Stage',
+      stageCount: totalStages,
+      activeDays: activeDays,
+      description: `${totalStages} stages across ${activeDays} days`
+    };
+  } else {
+    const days = ruleData.days || [];
+    return {
+      type: 'Single-Stage',
+      stageCount: 1,
+      activeDays: days.length,
+      description: `${ruleData.start || 'N/A'} - ${ruleData.end || 'N/A'} on ${days.length} days`
+    };
+  }
+};
+
+/**
+ * Create manual Pi automation rule with multi-stage support
+ * @param {string} deviceId - Device ID
+ * @param {Object} ruleData - Rule configuration
+ * @param {string} userEmail - User creating the rule
+ * @returns {Promise<Object>} Created rule
+ */
+export const createManualPiRule = async (deviceId, ruleData, userEmail) => {
+  try {
+    console.log(`🤖 Creating manual Pi rule for device: ${deviceId}`, ruleData);
+    
+    const { 
+      startTime, 
+      endTime, 
+      days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      multiStage = false,
+      stages = null
+    } = ruleData;
+    
+    let manualRule;
+    
+    if (multiStage && stages) {
+      // Multi-stage rule
+      manualRule = {
+        schedules: stages,
+        enabled: false, // NEW RULES START DISABLED
+        source: "manual",
+        multiStage: true,
+        stageGapMinutes: MINIMUM_STAGE_GAP_MINUTES,
+        createdAt: new Date().toISOString(),
+        createdBy: userEmail,
+        lastModified: new Date().toISOString(),
+        modifiedBy: userEmail,
+        basedOnEvents: 0,
+        confidence: null,
+        patternType: "manual_multi_stage",
+        analysisWindow: null,
+        nextReview: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      };
+    } else {
+      // Single-stage rule (legacy format)
+      manualRule = {
+        start: startTime,
+        end: endTime,
+        days: days,
+        enabled: false, // NEW RULES START DISABLED
+        source: "manual",
+        multiStage: false,
+        createdAt: new Date().toISOString(),
+        createdBy: userEmail,
+        lastModified: new Date().toISOString(),
+        modifiedBy: userEmail,
+        basedOnEvents: 0,
+        confidence: null,
+        patternType: "manual_single_stage",
+        analysisWindow: null,
+        nextReview: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      };
+    }
+    
+    // Save to AUTOMATIONRULE collection (Pi's collection)
+    const ruleRef = doc(firestore, 'AUTOMATIONRULE', deviceId);
+    await setDoc(ruleRef, manualRule); // setDoc overwrites existing rule
+    
+    console.log(`✅ Manual Pi rule created for ${deviceId} (DISABLED by default):`, manualRule);
+    return manualRule;
+    
+  } catch (error) {
+    console.error('❌ Error creating manual Pi rule:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update Pi automation rule (enable/disable, modify settings)
+ * @param {string} deviceId - Device ID
+ * @param {Object} updates - Rule updates
+ * @param {string} userEmail - User making changes
+ * @returns {Promise<Object>} Updated rule
+ */
+export const updatePiAutomationRule = async (deviceId, updates, userEmail) => {
+  try {
+    console.log(`🤖 Updating Pi rule for device: ${deviceId}`, updates);
+    
+    const updateData = {
+      ...updates,
+      lastModified: new Date().toISOString(),
+      modifiedBy: userEmail
+    };
+    
+    const ruleRef = doc(firestore, 'AUTOMATIONRULE', deviceId);
+    await updateDoc(ruleRef, updateData);
+    
+    console.log(`✅ Pi rule updated for ${deviceId}`);
+    return updateData;
+    
+  } catch (error) {
+    console.error('❌ Error updating Pi rule:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete Pi automation rule
+ * @param {string} deviceId - Device ID
  * @returns {Promise<boolean>} Success indicator
  */
-const clearAutomationState = async (buildingId) => {
+export const deletePiAutomationRule = async (deviceId) => {
   try {
-    console.log(`🧹 Clearing automation state for building ${buildingId}`);
+    console.log(`🤖 Deleting Pi rule for device: ${deviceId}`);
     
-    // Unlock all devices (RTDB only)
-    const unlockResult = await unlockAllBuildingDevices(buildingId);
-    console.log(`🔓 Unlocked ${unlockResult.devicesUnlocked} devices`);
+    await deleteDoc(doc(firestore, 'AUTOMATIONRULE', deviceId));
     
-    // Clear building automation state in Firestore
-    const clearData = {
-      currentMode: 'none',
-      modeTitle: 'No Automation',
-      appliedAt: serverTimestamp(),
-      appliedBy: localStorage.getItem('userEmail') || 'system',
-      deviceCount: (await getBuildingDevices(buildingId)).length,
-      devicesUpdated: 0,
-      energySaved: 0,
-      lastUpdated: serverTimestamp(),
-      buildingId: buildingId,
-      lockdownActive: false,
-      lockdownReason: null,
-      modes: {
-        'turn-off-all': false,
-        'eco-mode': false,
-        'night-mode': false
-      },
-      status: 'inactive',
-      version: '1.1'
-    };
-    
-    await updateDoc(doc(firestore, 'BUILDING', buildingId), {
-      Automation: clearData
-    });
-    
-    console.log(`✅ Automation state cleared for building ${buildingId}`);
+    console.log(`✅ Pi rule deleted for ${deviceId}`);
     return true;
     
   } catch (error) {
-    console.error('❌ Error clearing automation state:', error);
+    console.error('❌ Error deleting Pi rule:', error);
+    throw error;
+  }
+};
+
+// ==============================================================================
+// EVENT HISTORY MANAGEMENT (30-Event Rolling Limit)
+// ==============================================================================
+
+/**
+ * Clear device event history (for "Learn New Pattern" feature)
+ * @param {string} deviceId - Device ID
+ * @returns {Promise<number>} Number of events cleared
+ */
+export const clearDeviceEventHistory = async (deviceId) => {
+  try {
+    console.log(`🧹 Clearing event history for device: ${deviceId}`);
+    
+    const eventsRef = collection(firestore, 'DEVICE', deviceId, 'eventHistory');
+    const allEvents = await getDocs(eventsRef);
+    
+    let clearedCount = 0;
+    const deletePromises = [];
+    
+    allEvents.docs.forEach(eventDoc => {
+      deletePromises.push(deleteDoc(eventDoc.ref));
+      clearedCount++;
+    });
+    
+    await Promise.all(deletePromises);
+    
+    console.log(`✅ Cleared ${clearedCount} events from ${deviceId} history`);
+    return clearedCount;
+    
+  } catch (error) {
+    console.error('❌ Error clearing event history:', error);
     throw error;
   }
 };
 
 /**
- * Get automation statistics (minimal - no device metadata)
- * @param {string} buildingId - Building ID
- * @returns {Promise<Object>} Automation statistics
+ * Get device event history count
+ * @param {string} deviceId - Device ID
+ * @returns {Promise<number>} Number of events in history
  */
-const getAutomationStatistics = async (buildingId) => {
+export const getEventHistoryCount = async (deviceId) => {
   try {
-    console.log(`📊 Getting automation statistics for building ${buildingId}`);
-    
-    const automationState = await loadAutomationState(buildingId);
-    const devices = await getBuildingDevices(buildingId);
-    
-    // Calculate device breakdown by type
-    const deviceBreakdown = devices.reduce((breakdown, device) => {
-      const type = device.type.toLowerCase();
-      breakdown[type] = (breakdown[type] || 0) + 1;
-      return breakdown;
-    }, {});
-    
-    // Calculate devices by status (from RTDB)
-    const onlineDevices = devices.filter(d => d.status === 'ON').length;
-    const offlineDevices = devices.filter(d => d.status === 'OFF').length;
-    const lockedDevices = devices.filter(d => d.locked).length;
-    
-    const stats = {
-      totalDevices: devices.length,
-      onlineDevices: onlineDevices,
-      offlineDevices: offlineDevices,
-      lockedDevices: lockedDevices,
-      currentMode: automationState?.currentMode || 'none',
-      modeTitle: automationState?.modeTitle || 'No Automation',
-      lastApplied: automationState?.appliedAt || null,
-      appliedBy: automationState?.appliedBy || null,
-      energySaved: automationState?.energySaved || 0,
-      automationActive: automationState?.status === 'active',
-      lockdownActive: automationState?.lockdownActive || false,
-      lockdownReason: automationState?.lockdownReason || null,
-      deviceBreakdown: deviceBreakdown,
-      automationEfficiency: devices.length > 0 ? Math.round((lockedDevices / devices.length) * 100) : 0,
-      energyEfficiency: automationState?.energySaved > 0 ? 'High' : 'None',
-      hasHighEnergyDevices: devices.some(d => d.type === 'AC'),
-      hasEssentialDevices: devices.some(d => d.type === 'Light'),
-      needsOptimization: onlineDevices > (devices.length * 0.8),
-      lastUpdated: new Date().toISOString()
+    const eventsRef = collection(firestore, 'DEVICE', deviceId, 'eventHistory');
+    const eventsSnapshot = await getDocs(eventsRef);
+    return eventsSnapshot.size;
+  } catch (error) {
+    console.error('❌ Error getting event history count:', error);
+    return 0;
+  }
+};
+
+/**
+ * Log device event to eventHistory subcollection (enforces 30-event limit)
+ * @param {string} deviceId - Device ID
+ * @param {string} action - Action type
+ * @param {string} status - Device status
+ * @param {string} source - Event source
+ * @param {string} userId - User ID
+ * @returns {Promise<string|null>} Event ID or null
+ */
+export const logDeviceEvent = async (deviceId, action, status, source = 'manual', userId = null) => {
+  try {
+    const now = new Date();
+    const eventData = {
+      action: action,           // "TURN_ON", "TURN_OFF", etc.
+      status: status,           // "ON", "OFF"
+      timestamp: now,           // Use Date for Pi compatibility
+      hour: now.getHours(),     // Essential for time patterns
+      dayOfWeek: now.getDay(),  // Essential for day patterns
+      source: source,           // "manual", "automation", "schedule"
+      userId: userId || 'unknown'
     };
     
-    console.log(`📊 Automation statistics calculated:`, stats);
-    return stats;
+    const historyRef = collection(firestore, 'DEVICE', deviceId, 'eventHistory');
+    
+    // Check current count and enforce rolling limit
+    const currentEvents = await getDocs(query(historyRef, orderBy('timestamp', 'asc')));
+    
+    if (currentEvents.size >= MAX_EVENT_HISTORY) {
+      // Delete oldest events to make room
+      const eventsToDelete = currentEvents.size - MAX_EVENT_HISTORY + 1;
+      for (let i = 0; i < eventsToDelete; i++) {
+        if (currentEvents.docs[i]) {
+          await deleteDoc(currentEvents.docs[i].ref);
+        }
+      }
+      console.log(`🧹 Deleted ${eventsToDelete} old events for ${deviceId} (rolling limit)`);
+    }
+    
+    // Add new event
+    const docRef = await addDoc(historyRef, eventData);
+    
+    console.log(`📝 Logged device event: ${deviceId} ${action} at ${now.toISOString()}`);
+    return docRef.id;
     
   } catch (error) {
-    console.error('❌ Error getting automation statistics:', error);
+    console.error('❌ Error logging device event:', error);
+    return null;
+  }
+};
+
+/**
+ * Get device event history for pattern analysis
+ * @param {string} deviceId - Device ID
+ * @param {Date} startDate - Start date
+ * @param {Date} endDate - End date
+ * @returns {Promise<Array>} Array of events
+ */
+export const getDeviceEventHistory = async (deviceId, startDate, endDate) => {
+  try {
+    console.log(`📊 Getting device history for ${deviceId}`);
+    
+    const startTimestamp = Timestamp.fromDate(startDate);
+    const endTimestamp = Timestamp.fromDate(endDate);
+    
+    const eventsQuery = query(
+      collection(firestore, 'DEVICE', deviceId, 'eventHistory'),
+      where('timestamp', '>=', startTimestamp),
+      where('timestamp', '<=', endTimestamp),
+      orderBy('timestamp', 'asc')
+    );
+    
+    const eventsSnapshot = await getDocs(eventsQuery);
+    const events = [];
+    
+    eventsSnapshot.docs.forEach(doc => {
+      const eventData = doc.data();
+      events.push({
+        id: doc.id,
+        action: eventData.action,
+        status: eventData.status,
+        timestamp: eventData.timestamp.toDate ? eventData.timestamp.toDate() : new Date(eventData.timestamp),
+        hour: eventData.hour,
+        dayOfWeek: eventData.dayOfWeek,
+        source: eventData.source,
+        userId: eventData.userId,
+        isWeekend: eventData.dayOfWeek === 0 || eventData.dayOfWeek === 6
+      });
+    });
+    
+    console.log(`📊 Retrieved ${events.length} events from eventHistory`);
+    return events;
+    
+  } catch (error) {
+    console.error('❌ Error getting device event history:', error);
+    return [];
+  }
+};
+
+// ==============================================================================
+// PATTERN DETECTION (Enhanced for Multi-Stage)
+// ==============================================================================
+
+/**
+ * Group events into sessions based on time gaps
+ */
+const groupEventsIntoSessions = (events, gapMinutes = MINIMUM_STAGE_GAP_MINUTES) => {
+  if (!events || events.length === 0) return [];
+  
+  const sessions = [];
+  let currentSession = [];
+  
+  const sortedEvents = events.sort((a, b) => a.timestamp - b.timestamp);
+  
+  for (const event of sortedEvents) {
+    if (currentSession.length === 0) {
+      currentSession.push(event);
+    } else {
+      const lastEvent = currentSession[currentSession.length - 1];
+      const timeDiff = (event.timestamp - lastEvent.timestamp) / (1000 * 60); // minutes
+      
+      if (timeDiff <= gapMinutes) {
+        currentSession.push(event);
+      } else {
+        // Gap is large enough - finish current session
+        if (currentSession.length >= 2) {
+          sessions.push([...currentSession]);
+        }
+        currentSession = [event];
+      }
+    }
+  }
+  
+  // Don't forget the last session
+  if (currentSession.length >= 2) {
+    sessions.push(currentSession);
+  }
+  
+  return sessions;
+};
+
+/**
+ * Analyze device usage patterns for insights (enhanced for multi-stage)
+ * @param {string} deviceId - Device ID
+ * @param {number} analysisWindow - Days to analyze
+ * @returns {Promise<Object>} Pattern analysis results
+ */
+export const detectDevicePatterns = async (deviceId, analysisWindow = 14) => {
+  try {
+    console.log(`🔍 Analyzing patterns for device ${deviceId} (${analysisWindow} days)`);
+    
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - analysisWindow);
+    
+    const allEvents = await getDeviceEventHistory(deviceId, startDate, endDate);
+    const turnOnEvents = allEvents.filter(event => event.action === 'TURN_ON');
+    
+    if (turnOnEvents.length < 3) {
+      return {
+        hasPatterns: false,
+        message: `Need at least 3 usage events. Currently have ${turnOnEvents.length} events.`,
+        patterns: [],
+        summary: generateUsageSummary(allEvents, analysisWindow),
+        analysisWindow,
+        totalEvents: allEvents.length,
+        turnOnEvents: turnOnEvents.length,
+        multiStageAnalysis: {
+          sessionsDetected: 0,
+          avgSessionsPerDay: 0,
+          potentialStages: 0
+        }
+      };
+    }
+    
+    // Enhanced multi-stage analysis
+    const multiStageAnalysis = analyzeMultiStagePatterns(allEvents, analysisWindow);
+    const insights = analyzeUsageInsights(turnOnEvents, analysisWindow);
+    const summary = generateUsageSummary(allEvents, analysisWindow);
+    
+    console.log(`🎯 Multi-stage pattern analysis completed: ${insights.length} insights generated`);
+    
     return {
-      totalDevices: 0,
-      onlineDevices: 0,
-      offlineDevices: 0,
-      lockedDevices: 0,
-      currentMode: 'none',
-      modeTitle: 'No Automation',
-      lastApplied: null,
-      automationActive: false,
-      lockdownActive: false,
-      deviceBreakdown: {},
-      lastUpdated: new Date().toISOString()
+      hasPatterns: insights.length > 0 || multiStageAnalysis.sessionsDetected > 0,
+      patterns: insights,
+      summary: summary,
+      analysisWindow,
+      totalEvents: allEvents.length,
+      turnOnEvents: turnOnEvents.length,
+      multiStageAnalysis
+    };
+    
+  } catch (error) {
+    console.error('❌ Error analyzing patterns:', error);
+    return { 
+      hasPatterns: false, 
+      patterns: [], 
+      error: error.message,
+      summary: { error: 'Analysis failed' },
+      multiStageAnalysis: { error: 'Multi-stage analysis failed' }
     };
   }
 };
 
 /**
- * Validate automation with Firestore lockdown check
- * @param {string} buildingId - Building ID
- * @param {string} mode - Automation mode
- * @returns {Promise<Object>} Validation result
+ * Analyze multi-stage usage patterns
  */
-const validateAutomationApplication = async (buildingId, mode) => {
+const analyzeMultiStagePatterns = (allEvents, totalDays) => {
   try {
-    const devices = await getBuildingDevices(buildingId);
-    const currentAutomationState = await loadAutomationState(buildingId);
+    // Group events by day
+    const dailyEvents = {};
+    allEvents.forEach(event => {
+      const dayKey = event.timestamp.toISOString().split('T')[0];
+      if (!dailyEvents[dayKey]) dailyEvents[dayKey] = [];
+      dailyEvents[dayKey].push(event);
+    });
     
-    if (devices.length === 0) {
-      return {
-        valid: false,
-        reason: 'No devices found in building',
-        affectedDevices: 0,
-        totalDevices: 0
-      };
-    }
+    let totalSessions = 0;
+    let daysWithMultipleSessions = 0;
+    let maxSessionsInDay = 0;
     
-    // Check for existing lockdown
-    if (currentAutomationState?.lockdownActive && mode !== 'turn-off-all') {
-      return {
-        valid: false,
-        reason: 'Cannot apply other automation modes while Turn Off All lockdown is active',
-        affectedDevices: 0,
-        totalDevices: devices.length,
-        recommendations: ['Disable Turn Off All automation first']
-      };
-    }
+    Object.values(dailyEvents).forEach(dayEvents => {
+      const sessions = groupEventsIntoSessions(dayEvents);
+      totalSessions += sessions.length;
+      
+      if (sessions.length > 1) {
+        daysWithMultipleSessions++;
+      }
+      
+      if (sessions.length > maxSessionsInDay) {
+        maxSessionsInDay = sessions.length;
+      }
+    });
     
-    let affectedDevices = 0;
-    const deviceCounts = {
-      total: devices.length,
-      on: devices.filter(d => d.status === 'ON').length,
-      off: devices.filter(d => d.status === 'OFF').length,
-      locked: devices.filter(d => d.locked).length
-    };
-    
-    switch (mode) {
-      case 'turn-off-all':
-        affectedDevices = deviceCounts.on;
-        break;
-      case 'eco-mode':
-        affectedDevices = devices.filter(d => 
-          d.status === 'ON' && (d.type === 'AC' || d.type === 'Fan' || d.type === 'Other')
-        ).length;
-        break;
-      case 'night-mode':
-        affectedDevices = devices.filter(d => 
-          d.status === 'ON' && d.type !== 'Light'
-        ).length;
-        break;
-      default:
-        return { valid: false, reason: 'Invalid automation mode' };
-    }
+    const avgSessionsPerDay = totalDays > 0 ? totalSessions / totalDays : 0;
+    const multiStageScore = daysWithMultipleSessions / Math.max(Object.keys(dailyEvents).length, 1);
     
     return {
-      valid: true,
-      reason: 'Automation can be applied',
-      affectedDevices: affectedDevices,
-      totalDevices: devices.length,
-      lockdownWillBeActive: mode === 'turn-off-all'
+      sessionsDetected: totalSessions,
+      avgSessionsPerDay: parseFloat(avgSessionsPerDay.toFixed(2)),
+      daysWithMultipleSessions,
+      maxSessionsInDay,
+      multiStageScore: parseFloat(multiStageScore.toFixed(2)),
+      potentialStages: maxSessionsInDay,
+      recommendation: multiStageScore > 0.3 ? 
+        'Device shows multi-stage usage patterns' : 
+        'Device primarily used in single sessions'
     };
-    
   } catch (error) {
-    console.error('❌ Error validating automation application:', error);
-    return { valid: false, reason: 'Error validating automation' };
+    console.error('❌ Error analyzing multi-stage patterns:', error);
+    return {
+      sessionsDetected: 0,
+      avgSessionsPerDay: 0,
+      potentialStages: 0,
+      error: 'Multi-stage analysis failed'
+    };
   }
+};
+
+/**
+ * Generate insights from usage data (enhanced for multi-stage)
+ * @param {Array} turnOnEvents - Turn-on events
+ * @param {number} totalDays - Analysis window
+ * @returns {Array} Usage insights
+ */
+const analyzeUsageInsights = (turnOnEvents, totalDays) => {
+  const insights = [];
+  
+  // Time usage insights
+  const hourFrequency = {};
+  turnOnEvents.forEach(event => {
+    hourFrequency[event.hour] = (hourFrequency[event.hour] || 0) + 1;
+  });
+  
+  // Find top 3 most active hours for multi-stage detection
+  const topHours = Object.entries(hourFrequency)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 3);
+  
+  if (topHours.length >= 2) {
+    const [firstHour, secondHour] = topHours;
+    const hourGap = Math.abs(parseInt(firstHour[0]) - parseInt(secondHour[0]));
+    
+    if (hourGap >= 2) { // Significant gap between peak hours
+      insights.push({
+        type: 'multi_peak_insight',
+        title: 'Multiple Usage Peaks Detected',
+        description: `Device has distinct usage peaks at ${formatHour(firstHour[0])} and ${formatHour(secondHour[0])}`,
+        confidence: (firstHour[1] + secondHour[1]) / totalDays,
+        details: `Primary peak: ${firstHour[1]} times, Secondary peak: ${secondHour[1]} times`,
+        recommendation: 'Excellent candidate for multi-stage automation'
+      });
+    }
+  }
+  
+  // Peak usage hour
+  if (topHours.length > 0) {
+    const [peakHour, peakCount] = topHours[0];
+    const usageRate = peakCount / totalDays;
+    
+    if (usageRate > 0.3) { // Used more than 30% of days at this hour
+      insights.push({
+        type: 'peak_hour_insight',
+        title: `Peak Usage at ${formatHour(peakHour)}`,
+        description: `Device is most commonly turned on at ${formatHour(peakHour)}`,
+        confidence: usageRate,
+        details: `Used ${peakCount} times out of ${totalDays} days (${Math.round(usageRate * 100)}%)`,
+        recommendation: usageRate > 0.7 ? 'Highly predictable pattern - perfect for automation' : 'Good automation candidate'
+      });
+    }
+  }
+  
+  // Day of week patterns
+  const dayFrequency = {};
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  turnOnEvents.forEach(event => {
+    const dayName = dayNames[event.dayOfWeek];
+    dayFrequency[dayName] = (dayFrequency[dayName] || 0) + 1;
+  });
+  
+  // Weekday vs weekend usage
+  const weekdayEvents = turnOnEvents.filter(event => event.dayOfWeek >= 1 && event.dayOfWeek <= 5);
+  const weekendEvents = turnOnEvents.filter(event => event.dayOfWeek === 0 || event.dayOfWeek === 6);
+  
+  if (weekdayEvents.length > 0 && weekendEvents.length === 0) {
+    insights.push({
+      type: 'weekday_only_insight',
+      title: 'Weekday-Only Usage Pattern',
+      description: 'Device is only used on weekdays',
+      confidence: 1.0,
+      details: `${weekdayEvents.length} weekday events, ${weekendEvents.length} weekend events`,
+      recommendation: 'Perfect for weekday-only automation schedule'
+    });
+  } else if (weekendEvents.length > 0 && weekdayEvents.length === 0) {
+    insights.push({
+      type: 'weekend_only_insight',
+      title: 'Weekend-Only Usage Pattern',
+      description: 'Device is only used on weekends',
+      confidence: 1.0,
+      details: `${weekendEvents.length} weekend events, ${weekdayEvents.length} weekday events`,
+      recommendation: 'Perfect for weekend-only automation schedule'
+    });
+  } else if (weekdayEvents.length > 0 && weekendEvents.length > 0) {
+    const weekdayRatio = weekdayEvents.length / (weekdayEvents.length + weekendEvents.length);
+    
+    if (weekdayRatio > 0.8) {
+      insights.push({
+        type: 'weekday_dominant_insight',
+        title: 'Primarily Weekday Usage',
+        description: 'Device is used mostly on weekdays with occasional weekend use',
+        confidence: weekdayRatio,
+        details: `${Math.round(weekdayRatio * 100)}% weekday usage`,
+        recommendation: 'Consider separate weekday and weekend schedules'
+      });
+    } else if (weekdayRatio < 0.2) {
+      insights.push({
+        type: 'weekend_dominant_insight',
+        title: 'Primarily Weekend Usage',
+        description: 'Device is used mostly on weekends with occasional weekday use',
+        confidence: 1 - weekdayRatio,
+        details: `${Math.round((1 - weekdayRatio) * 100)}% weekend usage`,
+        recommendation: 'Consider separate weekend and weekday schedules'
+      });
+    }
+  }
+  
+  // Consistency insights
+  const uniqueHours = Object.keys(hourFrequency).length;
+  const consistencyScore = topHours.length > 0 ? topHours[0][1] / turnOnEvents.length : 0;
+  
+  if (consistencyScore > 0.6) {
+    insights.push({
+      type: 'high_consistency_insight',
+      title: 'Highly Consistent Usage',
+      description: 'Device usage shows very consistent timing patterns',
+      confidence: consistencyScore,
+      details: `${Math.round(consistencyScore * 100)}% of usage at peak hour`,
+      recommendation: 'Excellent reliability for automated scheduling'
+    });
+  } else if (uniqueHours > 8) {
+    insights.push({
+      type: 'variable_usage_insight',
+      title: 'Variable Usage Pattern',
+      description: 'Device usage varies significantly throughout the day',
+      confidence: 1 - consistencyScore,
+      details: `Used across ${uniqueHours} different hours`,
+      recommendation: 'Consider flexible or adaptive automation'
+    });
+  }
+  
+  return insights;
+};
+
+/**
+ * Generate usage summary
+ * @param {Array} allEvents - All events
+ * @param {number} analysisWindow - Analysis window in days
+ * @returns {Object} Usage summary
+ */
+const generateUsageSummary = (allEvents, analysisWindow) => {
+  if (allEvents.length === 0) {
+    return {
+      totalEvents: 0,
+      avgEventsPerDay: 0,
+      mostActiveDay: 'No data',
+      mostActiveHour: 'No data',
+      usagePattern: 'No usage detected'
+    };
+  }
+  
+  const turnOnEvents = allEvents.filter(event => event.action === 'TURN_ON');
+  const avgEventsPerDay = turnOnEvents.length / analysisWindow;
+  
+  // Most active day
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayFrequency = {};
+  
+  turnOnEvents.forEach(event => {
+    const dayName = dayNames[event.dayOfWeek];
+    dayFrequency[dayName] = (dayFrequency[dayName] || 0) + 1;
+  });
+  
+  const mostActiveDay = Object.entries(dayFrequency)
+    .sort(([,a], [,b]) => b - a)[0]?.[0] || 'No data';
+  
+  // Most active hour
+  const hourFrequency = {};
+  turnOnEvents.forEach(event => {
+    hourFrequency[event.hour] = (hourFrequency[event.hour] || 0) + 1;
+  });
+  
+  const mostActiveHourData = Object.entries(hourFrequency)
+    .sort(([,a], [,b]) => b - a)[0];
+  const mostActiveHour = mostActiveHourData ? formatHour(mostActiveHourData[0]) : 'No data';
+  
+  // Usage pattern classification
+  let usagePattern = 'Irregular';
+  if (avgEventsPerDay > 1) {
+    usagePattern = 'Heavy usage';
+  } else if (avgEventsPerDay > 0.5) {
+    usagePattern = 'Regular usage';
+  } else if (avgEventsPerDay > 0.1) {
+    usagePattern = 'Light usage';
+  } else {
+    usagePattern = 'Minimal usage';
+  }
+  
+  return {
+    totalEvents: allEvents.length,
+    turnOnEvents: turnOnEvents.length,
+    avgEventsPerDay: parseFloat(avgEventsPerDay.toFixed(1)),
+    mostActiveDay,
+    mostActiveHour,
+    usagePattern,
+    analysisWindow
+  };
+};
+
+// ==============================================================================
+// MULTI-STAGE VALIDATION HELPERS
+// ==============================================================================
+
+/**
+ * Validate multi-stage configuration
+ * @param {Array} stageConfig - Multi-stage configuration
+ * @returns {Object} Validation result
+ */
+export const validateStageConfiguration = (stageConfig) => {
+  const errors = [];
+  const warnings = [];
+  let totalStages = 0;
+  
+  if (!Array.isArray(stageConfig) || stageConfig.length === 0) {
+    errors.push('No stage configuration provided');
+    return { isValid: false, errors, warnings, stageCount: 0 };
+  }
+  
+  stageConfig.forEach((dayConfig, dayIndex) => {
+    const day = dayConfig.day;
+    const stages = dayConfig.stages || [];
+    
+    if (!day) {
+      errors.push(`Day ${dayIndex + 1}: Missing day name`);
+      return;
+    }
+    
+    if (stages.length === 0) {
+      warnings.push(`${day}: No stages defined`);
+      return;
+    }
+    
+    // NEW: Check maximum stages per day limit
+    if (stages.length > MAX_STAGES_PER_DAY) {
+      errors.push(`${day}: Too many stages (${stages.length}). Maximum ${MAX_STAGES_PER_DAY} stages allowed per day`);
+      return;
+    }
+    
+    stages.forEach((stage, stageIndex) => {
+      totalStages++;
+      
+      if (!stage.start || !stage.end) {
+        errors.push(`${day} Stage ${stageIndex + 1}: Missing start or end time`);
+        return;
+      }
+      
+      // Convert time strings to minutes for comparison
+      const startMinutes = timeToMinutes(stage.start);
+      const endMinutes = timeToMinutes(stage.end);
+      
+      if (startMinutes >= endMinutes) {
+        errors.push(`${day} Stage ${stageIndex + 1}: Start time (${stage.start}) must be before end time (${stage.end})`);
+      }
+      
+      // Check minimum duration (at least 15 minutes)
+      if (endMinutes - startMinutes < 15) {
+        warnings.push(`${day} Stage ${stageIndex + 1}: Very short duration (${endMinutes - startMinutes} minutes)`);
+      }
+    });
+    
+    // Check for overlapping stages within the same day
+    for (let i = 0; i < stages.length - 1; i++) {
+      for (let j = i + 1; j < stages.length; j++) {
+        const stage1 = stages[i];
+        const stage2 = stages[j];
+        
+        const start1 = timeToMinutes(stage1.start);
+        const end1 = timeToMinutes(stage1.end);
+        const start2 = timeToMinutes(stage2.start);
+        const end2 = timeToMinutes(stage2.end);
+        
+        if ((start1 < end2 && end1 > start2)) {
+          errors.push(`${day}: Overlapping stages detected (${stage1.start}-${stage1.end} and ${stage2.start}-${stage2.end})`);
+        }
+      }
+    }
+    
+    // Check gaps between stages
+    const sortedStages = [...stages].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+    for (let i = 0; i < sortedStages.length - 1; i++) {
+      const currentEnd = timeToMinutes(sortedStages[i].end);
+      const nextStart = timeToMinutes(sortedStages[i + 1].start);
+      const gap = nextStart - currentEnd;
+      
+      if (gap < MINIMUM_STAGE_GAP_MINUTES) {
+        warnings.push(`${day}: Short gap (${gap} min) between stages ${sortedStages[i].end} and ${sortedStages[i + 1].start}`);
+      }
+    }
+  });
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    stageCount: totalStages
+  };
+};
+
+/**
+ * Convert HH:MM time string to minutes since midnight
+ * @param {string} timeStr - Time string in HH:MM format
+ * @returns {number} Minutes since midnight
+ */
+const timeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const [hours, minutes] = timeStr.split(':').map(num => parseInt(num, 10));
+  return (hours * 60) + minutes;
+};
+
+/**
+ * Convert minutes since midnight to HH:MM format
+ * @param {number} minutes - Minutes since midnight
+ * @returns {string} Time string in HH:MM format
+ */
+const minutesToTime = (minutes) => {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 };
 
 // ==============================================================================
 // EXPORTS
 // ==============================================================================
 
-export default {
-  getBuildingDevices,
-  applyAutomationMode,
-  saveAutomationState,
-  loadAutomationState,
-  clearAutomationState,
-  getAutomationStatistics,
-  validateAutomationApplication,
-  isTurnOffAllLockdownActive,
-  lockAllBuildingDevices,
-  unlockAllBuildingDevices,
-  validateDeviceOperation
+const AutomationService = {
+  // Pi Automation Rule Management
+  getPiAutomationRule,
+  createManualPiRule,
+  updatePiAutomationRule,
+  deletePiAutomationRule,
+  
+  // Event History Management
+  clearDeviceEventHistory,
+  getEventHistoryCount,
+  logDeviceEvent,
+  getDeviceEventHistory,
+  
+  // Pattern Detection
+  detectDevicePatterns,
+  
+  // Multi-Stage Validation
+  validateStageConfiguration,
+  
+  // Utility Functions
+  formatTimeDisplay,
+  formatHour,
+  formatMultiStageSchedule,
+  
+  // Constants
+  MINIMUM_STAGE_GAP_MINUTES,
+  MAX_EVENT_HISTORY,
+  MAX_STAGES_PER_DAY
 };
+
+export default AutomationService;

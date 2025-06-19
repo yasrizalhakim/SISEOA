@@ -1,4 +1,4 @@
-// src/components/Users/UserDetail.js - Updated with Parent Delete Child Logic
+// src/components/Users/UserDetail.js - Updated to show only parent buildings for SystemAdmin view
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { firestore } from '../../services/firebase';
@@ -114,8 +114,10 @@ const UserDetail = () => {
         // Get user's building relationships (filtered by building-specific parent-child relationship)
         await fetchUserBuildings(userId, userData);
         
-        // Get user's assigned locations across filtered buildings
-        await fetchUserLocations(userId);
+        // Get user's assigned locations across filtered buildings (only if not SystemAdmin viewing)
+        if (!isAdmin) {
+          await fetchUserLocations(userId);
+        }
         
       } catch (error) {
         console.error('❌ Error fetching user data:', error);
@@ -130,47 +132,28 @@ const UserDetail = () => {
     }
   }, [userId, currentUserEmail]);
 
-  // UPDATED: Check if current user can manage the target user using USERBUILDING
+  // UPDATED: Check if current user can manage the target user using getUserBuildingRoles helper
   const checkUserManagementPermission = async (targetUserId, managerEmail) => {
     try {
-      // SystemAdmin can manage all users
+      // SystemAdmin can view all users but cannot edit them
       if (await isSystemAdmin(managerEmail)) {
         setCurrentUserRole('systemadmin');
-        return true;
+        return false; // SystemAdmin can view but not manage/edit
       }
 
-      // Check if manager and target user are in same buildings with parent-child roles
-      const managerBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', managerEmail)
-      );
-      const managerBuildingsSnapshot = await getDocs(managerBuildingsQuery);
-      
-      const targetUserBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', targetUserId)
-      );
-      const targetUserBuildings = await getDocs(targetUserBuildingsQuery);
-      
-      // Create maps for easier lookup
-      const managerBuildingRoles = new Map();
-      managerBuildingsSnapshot.forEach(doc => {
-        const data = doc.data();
-        managerBuildingRoles.set(data.Building, data.Role);
-      });
+      // Use getUserBuildingRoles helper to get roles for both users
+      const managerBuildingRoles = await getUserBuildingRoles(managerEmail);
+      const targetUserBuildingRoles = await getUserBuildingRoles(targetUserId);
       
       let hasParentChildRelation = false;
       let hasAdminRelation = false;
       
       // Check each building where target user has access
-      targetUserBuildings.forEach(targetDoc => {
-        const targetData = targetDoc.data();
-        const buildingId = targetData.Building;
-        const targetRole = targetData.Role;
+      for (const [buildingId, targetRole] of targetUserBuildingRoles) {
+        if (buildingId === 'SystemAdmin') continue;
         
-        if (managerBuildingRoles.has(buildingId)) {
-          const managerRole = managerBuildingRoles.get(buildingId);
-          
+        const managerRole = managerBuildingRoles.get(buildingId);
+        if (managerRole) {
           // Parent-child relationship: manager has 'parent' role, target has 'children' role in same building
           if (managerRole === 'parent' && targetRole === 'children') {
             hasParentChildRelation = true;
@@ -182,7 +165,7 @@ const UserDetail = () => {
             setCurrentUserRole('admin');
           }
         }
-      });
+      }
       
       // Self-management: users can manage themselves
       if (managerEmail === targetUserId) {
@@ -205,92 +188,104 @@ const UserDetail = () => {
     }
   };
 
-  // UPDATED: Check if current user can remove target user from buildings using USERBUILDING
+  // UPDATED: Check if current user can remove target user from buildings using getUserBuildingRoles helper
   const checkRemoveFromBuildingPermission = async (targetUserId, managerEmail) => {
     try {
-      // SystemAdmin can remove anyone
+      // SystemAdmin cannot remove users from buildings (view-only access)
       if (await isSystemAdmin(managerEmail)) {
-        return true;
+        return false;
       }
       
-      // Check if manager has parent role for target user in any building
-      const managerBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', managerEmail),
-        where('Role', '==', 'parent')
-      );
-      const managerBuildingsSnapshot = await getDocs(managerBuildingsQuery);
-      
-      const targetUserBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', targetUserId),
-        where('Role', '==', 'children')
-      );
-      const targetUserBuildings = await getDocs(targetUserBuildingsQuery);
+      // Use getUserBuildingRoles helper to get roles for both users
+      const managerBuildingRoles = await getUserBuildingRoles(managerEmail);
+      const targetUserBuildingRoles = await getUserBuildingRoles(targetUserId);
       
       // Check if there's any building where manager is parent and target is children
-      const managerParentBuildings = new Set();
-      managerBuildingsSnapshot.forEach(doc => {
-        managerParentBuildings.add(doc.data().Building);
-      });
-      
-      let canRemove = false;
-      targetUserBuildings.forEach(doc => {
-        const buildingId = doc.data().Building;
-        if (managerParentBuildings.has(buildingId)) {
-          canRemove = true;
+      for (const [buildingId, targetRole] of targetUserBuildingRoles) {
+        if (buildingId === 'SystemAdmin') continue;
+        
+        const managerRole = managerBuildingRoles.get(buildingId);
+        if (managerRole === 'parent' && targetRole === 'children') {
+          return true;
         }
-      });
+      }
       
-      return canRemove;
+      return false;
     } catch (error) {
       console.error('Error checking remove permission:', error);
       return false;
     }
   };
 
-  // UPDATED: Fetch user's building relationships using USERBUILDING parent-child logic
+  // UPDATED: Fetch user's building relationships - SystemAdmin shows only parent buildings
   const fetchUserBuildings = async (targetUserId, targetUserData) => {
     try {
+      console.log('🔍 Fetching buildings using getUserBuildingRoles for user:', targetUserId);
+      console.log('🔍 Current user is SystemAdmin:', isUserSystemAdmin);
+      
+      // Use getUserBuildingRoles helper to get user's building roles
+      const targetUserBuildingRoles = await getUserBuildingRoles(targetUserId);
+      console.log(`📋 Found ${targetUserBuildingRoles.size} building roles for user ${targetUserId}:`, Object.fromEntries(targetUserBuildingRoles));
+      
+      // Get current user's building roles for permission checking (only if not SystemAdmin)
+      let currentUserBuildingRoles = new Map();
+      if (!isUserSystemAdmin) {
+        currentUserBuildingRoles = await getUserBuildingRoles(currentUserEmail);
+        console.log(`📋 Current user building roles:`, Object.fromEntries(currentUserBuildingRoles));
+      }
+      
+      const buildingsList = [];
+      
+      // Get USERBUILDING documents for assignedLocations and userBuildingId
       const userBuildingsQuery = query(
         collection(firestore, 'USERBUILDING'),
         where('User', '==', targetUserId)
       );
       const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
+      const userBuildingMap = new Map();
+      userBuildingsSnapshot.forEach(doc => {
+        const data = doc.data();
+        userBuildingMap.set(data.Building, {
+          id: doc.id,
+          assignedLocations: data.AssignedLocations || []
+        });
+      });
       
-      const buildingsList = [];
+      console.log(`📋 USERBUILDING documents for ${targetUserId}:`, Array.from(userBuildingMap.keys()));
       
-      for (const userBuildingDoc of userBuildingsSnapshot.docs) {
-        const userBuildingData = userBuildingDoc.data();
-        const buildingId = userBuildingData.Building;
+      for (const [buildingId, userRole] of targetUserBuildingRoles) {
+        // Skip SystemAdmin building
+        if (buildingId === 'SystemAdmin') {
+          console.log(`🚫 Skipping SystemAdmin building`);
+          continue;
+        }
         
-        if (buildingId === 'SystemAdmin') continue;
+        console.log(`🔍 Processing building: ${buildingId}, Role: ${userRole}`);
         
-        // UPDATED: Apply USERBUILDING-based parent-child relationship filtering
+        // Determine if this building should be shown based on current user's permissions
         let shouldShowBuilding = false;
         
         if (isUserSystemAdmin) {
-          // SystemAdmin can see all buildings
-          shouldShowBuilding = true;
+          // UPDATED: SystemAdmin can only see buildings where target user has 'parent' role
+          console.log(`🔧 SystemAdmin checking building ${buildingId} where target user has role: ${userRole}`);
+          
+          if (userRole === 'parent') {
+            shouldShowBuilding = true;
+            console.log(`✅ SystemAdmin viewing - target user is PARENT of building ${buildingId}`);
+          } else {
+            console.log(`🚫 SystemAdmin skipping - target user has role ${userRole} in building ${buildingId} (only showing parent buildings)`);
+          }
         } else if (currentUserEmail === targetUserId) {
           // Users can see their own building access
           shouldShowBuilding = true;
+          console.log(`✅ Self-view - showing own building access for ${buildingId}`);
         } else {
-          // Check if current user has parent role in this building and target user has children role
-          const currentUserBuildingQuery = query(
-            collection(firestore, 'USERBUILDING'),
-            where('User', '==', currentUserEmail),
-            where('Building', '==', buildingId)
-          );
-          const currentUserBuildingSnapshot = await getDocs(currentUserBuildingQuery);
+          // For non-SystemAdmin users, check parent-child or admin relationships
+          const currentUserRoleInBuilding = currentUserBuildingRoles.get(buildingId);
           
-          if (!currentUserBuildingSnapshot.empty) {
-            const currentUserBuildingData = currentUserBuildingSnapshot.docs[0].data();
-            const currentUserRoleInBuilding = currentUserBuildingData.Role;
-            const targetUserRoleInBuilding = userBuildingData.Role;
-            
+          if (currentUserRoleInBuilding) {
             // Show building if current user is parent and target user is children in same building
-            if (currentUserRoleInBuilding === 'parent' && targetUserRoleInBuilding === 'children') {
+            if (currentUserRoleInBuilding === 'parent' && userRole === 'children') {
               shouldShowBuilding = true;
               console.log(`✅ Parent-child relationship found in building ${buildingId}`);
             }
@@ -298,82 +293,105 @@ const UserDetail = () => {
             else if (currentUserRoleInBuilding === 'admin') {
               shouldShowBuilding = true;
               console.log(`✅ Admin access to building ${buildingId}`);
+            } else {
+              console.log(`🚫 No valid relationship in building ${buildingId} (current: ${currentUserRoleInBuilding}, target: ${userRole})`);
             }
+          } else {
+            console.log(`🚫 Current user has no role in building ${buildingId}`);
           }
         }
         
         if (shouldShowBuilding) {
-          // Get building details
+          // Get building details from BUILDING collection
           const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
           if (buildingDoc.exists()) {
+            const buildingData = buildingDoc.data();
+            const userBuildingInfo = userBuildingMap.get(buildingId);
+            
             buildingsList.push({
               id: buildingId,
-              userBuildingId: userBuildingDoc.id, // Store for removal
-              ...buildingDoc.data(),
-              userRole: userBuildingData.Role,
-              assignedLocations: userBuildingData.AssignedLocations || []
+              userBuildingId: userBuildingInfo?.id, // Store USERBUILDING document ID for removal
+              ...buildingData,
+              userRole: userRole, // Role from getUserBuildingRoles
+              assignedLocations: userBuildingInfo?.assignedLocations || []
             });
             
-            console.log(`✅ Showing building ${buildingId} - role: ${userBuildingData.Role}`);
+            console.log(`✅ Added building to list: ${buildingData.BuildingName || buildingId} (target user role: ${userRole})`);
+          } else {
+            console.log(`⚠️ Building document not found for ID: ${buildingId}`);
           }
-        } else {
-          console.log(`🚫 Hiding building ${buildingId} - no parent-child relationship or admin access`);
         }
       }
       
       setUserBuildings(buildingsList);
-      console.log('🏢 User buildings (filtered by USERBUILDING logic):', buildingsList.length);
+      console.log(`🏢 Final building list (SystemAdmin filtered to parent only): ${buildingsList.length} buildings`);
+      
+      if (isUserSystemAdmin) {
+        console.log(`👑 SystemAdmin view: Showing ${buildingsList.length} buildings where user is parent`);
+      }
+      
     } catch (error) {
-      console.error('Error fetching user buildings:', error);
+      console.error('Error fetching user buildings using getUserBuildingRoles:', error);
     }
   };
 
-  // UPDATED: Fetch user's assigned locations (only for buildings the current user can see via USERBUILDING)
+  // UPDATED: Fetch user's assigned locations using getUserBuildingRoles helper for access validation
   const fetchUserLocations = async (targetUserId) => {
     try {
+      console.log('🔍 Fetching user locations using getUserBuildingRoles');
+      
+      // Use getUserBuildingRoles helper to get user's building roles
+      const targetUserBuildingRoles = await getUserBuildingRoles(targetUserId);
+      const currentUserBuildingRoles = await getUserBuildingRoles(currentUserEmail);
+      
+      // Get USERBUILDING documents for assignedLocations
       const userBuildingsQuery = query(
         collection(firestore, 'USERBUILDING'),
         where('User', '==', targetUserId)
       );
       const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
+      const userBuildingMap = new Map();
+      userBuildingsSnapshot.forEach(doc => {
+        const data = doc.data();
+        userBuildingMap.set(data.Building, data.AssignedLocations || []);
+      });
       
       const allLocations = [];
       
-      for (const userBuildingDoc of userBuildingsSnapshot.docs) {
-        const userBuildingData = userBuildingDoc.data();
-        const buildingId = userBuildingData.Building;
-        const assignedLocationIds = userBuildingData.AssignedLocations || [];
+      for (const [buildingId, targetUserRole] of targetUserBuildingRoles) {
+        if (buildingId === 'SystemAdmin') continue;
         
-        if (buildingId === 'SystemAdmin' || assignedLocationIds.length === 0) continue;
+        const assignedLocationIds = userBuildingMap.get(buildingId) || [];
+        if (assignedLocationIds.length === 0) continue;
         
-        // UPDATED: Only show locations for buildings where current user has appropriate access via USERBUILDING
+        console.log(`🏢 Checking location access for building ${buildingId} (target role: ${targetUserRole})`);
+        
+        // Check if current user can see locations in this building using getUserBuildingRoles
         let canSeeBuilding = false;
         
         if (isUserSystemAdmin || currentUserEmail === targetUserId) {
           canSeeBuilding = true;
+          console.log(`✅ Location access granted - SystemAdmin or self-view`);
         } else {
-          // Check if current user has parent or admin role in this building
-          const currentUserBuildingQuery = query(
-            collection(firestore, 'USERBUILDING'),
-            where('User', '==', currentUserEmail),
-            where('Building', '==', buildingId)
-          );
-          const currentUserBuildingSnapshot = await getDocs(currentUserBuildingQuery);
+          // Validate current user's role in this building using getUserBuildingRoles
+          const currentUserRole = currentUserBuildingRoles.get(buildingId);
           
-          if (!currentUserBuildingSnapshot.empty) {
-            const currentUserRole = currentUserBuildingSnapshot.docs[0].data().Role;
-            const targetUserRole = userBuildingData.Role;
-            
+          if (currentUserRole) {
             // Can see if parent-child relationship or admin access
             if ((currentUserRole === 'parent' && targetUserRole === 'children') || 
                 currentUserRole === 'admin') {
               canSeeBuilding = true;
+              console.log(`✅ Location access granted - Role relationship (current: ${currentUserRole}, target: ${targetUserRole})`);
+            } else {
+              console.log(`🚫 Location access denied - No valid role relationship (current: ${currentUserRole}, target: ${targetUserRole})`);
             }
+          } else {
+            console.log(`🚫 Location access denied - Current user has no role in building ${buildingId}`);
           }
         }
         
         if (!canSeeBuilding) {
-          console.log(`🚫 Skipping locations for building ${buildingId} - no access via USERBUILDING`);
+          console.log(`🚫 Skipping locations for building ${buildingId} - no access via getUserBuildingRoles`);
           continue;
         }
         
@@ -408,7 +426,7 @@ const UserDetail = () => {
                 devices: devices
               });
               
-              console.log(`✅ Added location ${locationId} for building ${buildingId} via USERBUILDING logic`);
+              console.log(`✅ Added location ${locationId} for building ${buildingId} (validated via getUserBuildingRoles)`);
             }
           } catch (locationError) {
             console.error(`Error fetching location ${locationId}:`, locationError);
@@ -417,7 +435,7 @@ const UserDetail = () => {
       }
       
       setAssignedLocations(allLocations);
-      console.log('📍 User locations (filtered by USERBUILDING logic):', allLocations.length);
+      console.log(`📍 User locations (using getUserBuildingRoles): ${allLocations.length} locations`);
     } catch (error) {
       console.error('Error fetching user locations:', error);
     }
@@ -494,46 +512,38 @@ const UserDetail = () => {
     }
   };
 
-  // NEW: Handle completely deleting child from all parent buildings
+  // NEW: Handle completely deleting child from all parent buildings using getUserBuildingRoles
   const handleDeleteChild = async () => {
     try {
-      // First, get the buildings that will be affected for confirmation
-      const parentBuildingsQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', currentUserEmail),
-        where('Role', '==', 'parent')
-      );
-      const parentBuildingsSnapshot = await getDocs(parentBuildingsQuery);
+      // Use getUserBuildingRoles to get current user's parent buildings
+      const currentUserBuildingRoles = await getUserBuildingRoles(currentUserEmail);
+      const targetUserBuildingRoles = await getUserBuildingRoles(userId);
       
+      // Find buildings where current user is parent
       const parentBuildingIds = [];
-      parentBuildingsSnapshot.forEach(doc => {
-        const buildingId = doc.data().Building;
-        if (buildingId !== 'SystemAdmin') {
+      for (const [buildingId, role] of currentUserBuildingRoles) {
+        if (buildingId !== 'SystemAdmin' && role === 'parent') {
           parentBuildingIds.push(buildingId);
         }
-      });
+      }
       
       if (parentBuildingIds.length === 0) {
         setError('No buildings found where you are the parent.');
         return;
       }
       
-      // Get building names for confirmation
+      // Get building names for confirmation - only where target user is children
       const buildingNames = [];
+      const validRemovalBuildings = [];
+      
       for (const buildingId of parentBuildingIds) {
-        const childBuildingQuery = query(
-          collection(firestore, 'USERBUILDING'),
-          where('User', '==', userId),
-          where('Building', '==', buildingId),
-          where('Role', '==', 'children')
-        );
-        const childBuildingSnapshot = await getDocs(childBuildingQuery);
-        
-        if (!childBuildingSnapshot.empty) {
+        const targetUserRole = targetUserBuildingRoles.get(buildingId);
+        if (targetUserRole === 'children') {
           const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
           const buildingName = buildingDoc.exists() ? 
             (buildingDoc.data().BuildingName || buildingId) : buildingId;
           buildingNames.push(buildingName);
+          validRemovalBuildings.push(buildingId);
         }
       }
       
@@ -558,23 +568,26 @@ const UserDetail = () => {
       setRemoving(true);
       setError(null);
       
-      console.log('🗑️ Removing child from all parent buildings...');
+      console.log('🗑️ Removing child from all parent buildings using getUserBuildingRoles...');
       
-      // Remove child from all parent buildings
+      // Remove child from all valid parent buildings
       let removedCount = 0;
       const removedBuildings = [];
       
-      for (const buildingId of parentBuildingIds) {
-        const childBuildingQuery = query(
-          collection(firestore, 'USERBUILDING'),
-          where('User', '==', userId),
-          where('Building', '==', buildingId),
-          where('Role', '==', 'children')
-        );
-        const childBuildingSnapshot = await getDocs(childBuildingQuery);
+      // Get USERBUILDING documents to delete
+      const userBuildingsQuery = query(
+        collection(firestore, 'USERBUILDING'),
+        where('User', '==', userId)
+      );
+      const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
+      
+      for (const userBuildingDoc of userBuildingsSnapshot.docs) {
+        const data = userBuildingDoc.data();
+        const buildingId = data.Building;
+        const role = data.Role;
         
-        for (const childDoc of childBuildingSnapshot.docs) {
-          await deleteDoc(doc(firestore, 'USERBUILDING', childDoc.id));
+        if (validRemovalBuildings.includes(buildingId) && role === 'children') {
+          await deleteDoc(doc(firestore, 'USERBUILDING', userBuildingDoc.id));
           removedCount++;
           
           // Get building name for success message
@@ -632,7 +645,7 @@ const UserDetail = () => {
     }
   };
 
-  // UPDATED: Handle removing user from building with USERBUILDING validation
+  // UPDATED: Handle removing user from building with getUserBuildingRoles validation
   const handleRemoveFromBuilding = async (buildingId, buildingName, userBuildingId) => {
     // Additional validation: ensure current user can remove from this building
     if (!canRemoveFromBuildings) {
@@ -640,25 +653,15 @@ const UserDetail = () => {
       return;
     }
     
-    // Verify parent-child relationship in this specific building
+    // Verify parent-child relationship in this specific building using getUserBuildingRoles
     try {
-      const currentUserBuildingQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', currentUserEmail),
-        where('Building', '==', buildingId),
-        where('Role', '==', 'parent')
-      );
-      const currentUserBuildingSnapshot = await getDocs(currentUserBuildingQuery);
+      const currentUserBuildingRoles = await getUserBuildingRoles(currentUserEmail);
+      const targetUserBuildingRoles = await getUserBuildingRoles(userId);
       
-      const targetUserBuildingQuery = query(
-        collection(firestore, 'USERBUILDING'),
-        where('User', '==', userId),
-        where('Building', '==', buildingId),
-        where('Role', '==', 'children')
-      );
-      const targetUserBuildingSnapshot = await getDocs(targetUserBuildingQuery);
+      const currentUserRole = currentUserBuildingRoles.get(buildingId);
+      const targetUserRole = targetUserBuildingRoles.get(buildingId);
       
-      if (currentUserBuildingSnapshot.empty || targetUserBuildingSnapshot.empty) {
+      if (currentUserRole !== 'parent' || targetUserRole !== 'children') {
         setError('You can only remove children from buildings where you are the parent.');
         return;
       }
@@ -737,7 +740,7 @@ const UserDetail = () => {
     );
   }
 
-  // Prepare tabs content
+  // UPDATED: Prepare tabs content - Hide Location Access tab for SystemAdmin
   const tabs = [
     {
       label: 'User Info',
@@ -762,8 +765,12 @@ const UserDetail = () => {
           success={success}
         />
       )
-    },
-    {
+    }
+  ];
+
+  // UPDATED: Only add Location Access tab if not SystemAdmin
+  if (!isUserSystemAdmin) {
+    tabs.push({
       label: 'Location Access',
       content: (
         <LocationAccessTab
@@ -775,8 +782,8 @@ const UserDetail = () => {
           onManageLocations={handleManageLocations}
         />
       )
-    }
-  ];
+    });
+  }
 
   return (
     <div className="user-detail">
@@ -805,7 +812,7 @@ const UserDetail = () => {
   );
 };
 
-// UPDATED: User Info Tab Component - Shows delete button for parents viewing children
+// UPDATED: User Info Tab Component - SystemAdmin shows only parent buildings
 const UserInfoTab = ({ 
   user, 
   userBuildings, 
@@ -829,8 +836,8 @@ const UserInfoTab = ({
     {error && <div className="error-message">{error}</div>}
     {success && <div className="success-message">{success}</div>}
     
-    {/* Edit Controls - UPDATED: Show delete button for parents viewing children */}
-    {canManageThisUser && (
+    {/* UPDATED: Edit Controls - Hide edit button for SystemAdmin */}
+    {canManageThisUser && !isUserSystemAdmin && (
       <div className="user-actions">
         {currentUserRole === 'parent' ? (
           // Show delete all button for parents viewing children
@@ -842,7 +849,7 @@ const UserInfoTab = ({
             <MdPersonRemove /> {removing ? 'Removing...' : 'Remove from All Buildings'}
           </button>
         ) : (
-          // Show edit functionality for other roles (admin, systemadmin, self)
+          // Show edit functionality for other roles (admin, self) - but not systemadmin
           !isEditing ? (
             <button className="edit-button" onClick={onEditToggle}>
               <MdEdit /> Edit User
@@ -869,31 +876,13 @@ const UserInfoTab = ({
       </div>
     )}
     
-    {/* User Information Form - UPDATED: Show read-only for parents viewing children */}
+    {/* User Information Form - UPDATED: Show read-only for SystemAdmin */}
     <div className="user-info-form">
-      {/* <div className="info-group">
-        <label>User ID</label>
-        <p className="user-id">{user.id}</p>
-      </div> */}
-      
       <div className="info-group">
         <label>
           <MdPerson /> Name
         </label>
         <p className="user-name">{user.name || user.Name}</p>
-        {/* {isEditing && currentUserRole !== 'parent' ? (
-          <input
-            type="text"
-            name="Name"
-            value={editData.Name}
-            onChange={onInputChange}
-            placeholder="Enter user name"
-            disabled={saving}
-            className={editData.Name.trim() ? 'input-valid' : ''}
-          />
-        ) : (
-          <p>{user.Name || 'No name provided'}</p>
-        )} */}
       </div>
       
       <div className="info-group">
@@ -908,20 +897,7 @@ const UserInfoTab = ({
           <MdPhone /> Contact Number
         </label>
         <p className="user-phone">{user.ContactNo}</p>
-        {/* {isEditing && currentUserRole !== 'parent' ? (
-          <input
-            type="tel"
-            name="ContactNo"
-            value={editData.ContactNo}
-            onChange={onInputChange}
-            placeholder="Enter contact number"
-            disabled={saving}
-          />
-        ) : (
-          <p>{user.ContactNo || 'No contact number provided'}</p>
-        )} */}
       </div>
-      
       
       {user.LastModifiedBy && (
         <div className="info-group">
@@ -931,18 +907,21 @@ const UserInfoTab = ({
       )}
     </div>
     
-    {/* UPDATED: Building Access Section with USERBUILDING-based Filtering */}
+    {/* UPDATED: Building Access Section - SystemAdmin shows only parent buildings */}
     {userBuildings.length > 0 && (
       <div className="building-access-section">
         <h3>
           <MdBusiness /> Building Access ({userBuildings.length})
-          <span style={{ 
-            fontSize: '12px', 
-            fontWeight: '400', 
-            color: '#6b7280',
-            marginLeft: '8px'
-          }}>
-          </span>
+          {isUserSystemAdmin && (
+            <span style={{ 
+              fontSize: '12px', 
+              fontWeight: '400', 
+              color: '#6b7280',
+              marginLeft: '8px'
+            }}>
+              (Buildings where user is parent)
+            </span>
+          )}
         </h3>
         
         <div className="buildings-list">
@@ -956,12 +935,12 @@ const UserInfoTab = ({
                   </span>
                 )}
                 <span className="building-role-info">
-                  Locations: {building.assignedLocations?.length || 0} assigned
+                  Role: {building.userRole} | Locations: {building.assignedLocations?.length || 0} assigned
                 </span>
               </div>
               
-              {/* Remove from Building Button - Only if current user has parent role and target has children role */}
-              {canRemoveFromBuildings && building.userRole === 'children' && currentUserRole === 'parent' && (
+              {/* Remove from Building Button - Only if current user has parent role and target has children role and not SystemAdmin */}
+              {canRemoveFromBuildings && building.userRole === 'children' && currentUserRole === 'parent' && !isUserSystemAdmin && (
                 <button
                   className="remove-child-btn"
                   onClick={() => onRemoveFromBuilding(
@@ -997,7 +976,7 @@ const UserInfoTab = ({
       </div>
     )}
     
-    {/* UPDATED: Show message when no buildings are visible due to USERBUILDING filtering */}
+    {/* UPDATED: No buildings message - now filtered for SystemAdmin */}
     {userBuildings.length === 0 && (
       <div className="building-access-section">
         <h3>
@@ -1007,13 +986,20 @@ const UserInfoTab = ({
           <div className="no-data-content">
             <h4>No Building Access Visible</h4>
             <p>
-              {currentUserRole === 'parent' 
+              {isUserSystemAdmin 
+                ? "This user is not a parent of any buildings."
+                : currentUserRole === 'parent' 
                 ? "This user has no building access in buildings where you are assigned as parent."
                 : currentUserRole === 'admin'
                 ? "This user has no building access in buildings where you are admin."
                 : "This user has no building access or you don't have permission to view their building access."
               }
             </p>
+            {isUserSystemAdmin && (
+              <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
+                SystemAdmin view shows only buildings where user has parent role
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -1075,7 +1061,6 @@ const LocationAccessTab = ({
       <div className="devices-list">
         {assignedLocations.map(location => (
           <div key={location.id} className="device-item" style={{ position: 'relative' }}>
-            {/* <div className="device-name">{location.buildingName}</div> */}
             <div className="device-name">{location.name}</div>
             <div className="device-details">
               <div className="detail-item">

@@ -1,4 +1,5 @@
-// src/services/dataService.js - Enhanced with Firestore Timestamps and Device Runtime Warning System
+// src/services/dataService.js - UPDATED with unified AutomationService integration
+// Enhanced with Firestore Timestamps and Device Runtime Warning System + Event Logging
 
 import { firestore, database } from './firebase';
 import { 
@@ -16,7 +17,8 @@ import {
 } from 'firebase/firestore';
 import { ref, get, set, update, remove } from 'firebase/database';
 import { sendDeviceRuntimeWarning } from './notificationService';
-import automationService from './automationService';
+import AutomationService from './AutomationService'; // UPDATED IMPORT
+import { logDeviceEvent } from './AutomationService'; // UPDATED IMPORT
 
 // ================================
 // DEVICE RUNTIME WARNING SYSTEM (Updated for Firestore)
@@ -586,7 +588,7 @@ export const getUserAssignedLocations = async (userEmail, buildingId) => {
 };
 
 // ==============================================================================
-// ENHANCED DEVICE OPERATIONS (with Firestore Timestamp Integration)
+// ENHANCED DEVICE OPERATIONS (with eventHistory integration)
 // ==============================================================================
 
 /**
@@ -699,6 +701,15 @@ export const createDevice = async (deviceId, deviceData) => {
       locationId: deviceData.location || ''
     });
     
+    // 🔥 UPDATED: Log device creation event to eventHistory
+    await logDeviceEvent(
+      deviceId, 
+      'DEVICE_CREATED', 
+      'OFF', 
+      'system', 
+      deviceData.createdBy || 'system'
+    );
+    
     return { id: deviceId, ...firestoreData };
   } catch (error) {
     console.error('Error creating device:', error);
@@ -721,6 +732,10 @@ export const updateDevice = async (deviceId, deviceData) => {
       }
     }
     
+    // Check if location changed for event logging
+    const oldLocation = (await getDoc(doc(firestore, 'DEVICE', deviceId))).data()?.Location;
+    const newLocation = updateData.Location;
+    
     // Update in Firestore
     await updateDoc(doc(firestore, 'DEVICE', deviceId), updateData);
     
@@ -732,6 +747,17 @@ export const updateDevice = async (deviceId, deviceData) => {
       });
     }
     
+    // 🔥 UPDATED: Log location change event if location changed (to eventHistory)
+    if (oldLocation !== newLocation) {
+      await logDeviceEvent(
+        deviceId, 
+        'LOCATION_CHANGED', 
+        'OFF', 
+        'manual', 
+        localStorage.getItem('userEmail') || 'unknown'
+      );
+    }
+    
     return true;
   } catch (error) {
     console.error('Error updating device:', error);
@@ -741,6 +767,15 @@ export const updateDevice = async (deviceId, deviceData) => {
 
 export const deleteDevice = async (deviceId) => {
   try {
+    // 🔥 UPDATED: Log device deletion event before deleting (to eventHistory)
+    await logDeviceEvent(
+      deviceId, 
+      'DEVICE_DELETED', 
+      'OFF', 
+      'system', 
+      localStorage.getItem('userEmail') || 'system'
+    );
+    
     // Delete from Firestore
     await deleteDoc(doc(firestore, 'DEVICE', deviceId));
     
@@ -768,11 +803,12 @@ export const toggleDeviceStatus = async (deviceId) => {
     }
     
     const newStatus = currentStatus === 'ON' ? 'OFF' : 'ON';
+    const action = newStatus === 'ON' ? 'TURN_ON' : 'TURN_OFF';
     console.log(`🔄 Current status: ${currentStatus}, New status: ${newStatus}`);
     
-    // NEW: Validate device operation against automation lockdown
+    // NEW: Validate device operation against automation lockdown using unified service
     if (newStatus === 'ON') {
-      const validation = await automationService.validateDeviceOperation(deviceId, 'turn-on');
+      const validation = await AutomationService.validateDeviceOperation(deviceId, 'turn-on');
       
       if (!validation.allowed) {
         console.log(`🔒 Device operation blocked:`, validation);
@@ -798,6 +834,15 @@ export const toggleDeviceStatus = async (deviceId) => {
       status: newStatus
     });
 
+    // 🔥 UPDATED: Log device event to eventHistory subcollection
+    await logDeviceEvent(
+      deviceId, 
+      action, 
+      newStatus, 
+      'manual', 
+      localStorage.getItem('userEmail')
+    );
+
     // UPDATED: Handle timestamp tracking in Firestore
     const firestoreUpdateData = {
       lastSeen: serverTimestamp()
@@ -817,7 +862,7 @@ export const toggleDeviceStatus = async (deviceId) => {
     
     await updateDoc(doc(firestore, 'DEVICE', deviceId), firestoreUpdateData);
     
-    console.log(`✅ Device ${deviceId} toggled to ${newStatus}`);
+    console.log(`✅ Device ${deviceId} toggled to ${newStatus} and logged to eventHistory`);
     return newStatus;
   } catch (error) {
     console.error(`❌ Error toggling device ${deviceId}:`, error);
@@ -863,7 +908,16 @@ export const claimDevice = async (deviceId, locationId, deviceUpdates = {}) => {
       locationId: locationId
     });
     
-    console.log('✅ Device claimed successfully');
+    // 🔥 UPDATED: Log device claim event to eventHistory
+    await logDeviceEvent(
+      deviceId, 
+      'DEVICE_CLAIMED', 
+      'OFF', 
+      'manual', 
+      localStorage.getItem('userEmail')
+    );
+    
+    console.log('✅ Device claimed successfully and logged to eventHistory');
     return true;
   } catch (error) {
     console.error('Error claiming device:', error);
@@ -897,7 +951,16 @@ export const unclaimDevice = async (deviceId) => {
       locationId: ''
     });
     
-    console.log('✅ Device unclaimed successfully');
+    // 🔥 UPDATED: Log device unclaim event to eventHistory
+    await logDeviceEvent(
+      deviceId, 
+      'DEVICE_UNCLAIMED', 
+      'OFF', 
+      'manual', 
+      localStorage.getItem('userEmail')
+    );
+    
+    console.log('✅ Device unclaimed successfully and logged to eventHistory');
     return true;
   } catch (error) {
     console.error('Error unclaiming device:', error);
@@ -1026,7 +1089,16 @@ export const moveDeviceToLocation = async (deviceId, newLocationId) => {
       locationId: newLocationId || ''
     });
     
-    console.log('✅ Device moved successfully');
+    // 🔥 UPDATED: Log device move event to eventHistory
+    await logDeviceEvent(
+      deviceId, 
+      'DEVICE_MOVED', 
+      'OFF', 
+      'manual', 
+      localStorage.getItem('userEmail')
+    );
+    
+    console.log('✅ Device moved successfully and logged to eventHistory');
     return true;
   } catch (error) {
     console.error('Error moving device:', error);
@@ -1127,6 +1199,15 @@ export const assignDeviceToUser = async (deviceId, userEmail) => {
         AssignedTo: [...currentAssignedTo, userEmail],
         lastSeen: serverTimestamp()
       });
+      
+      // 🔥 UPDATED: Log assignment event to eventHistory
+      await logDeviceEvent(
+        deviceId, 
+        'USER_ASSIGNED', 
+        'OFF', 
+        'manual', 
+        localStorage.getItem('userEmail')
+      );
     }
     
     return true;
@@ -1152,6 +1233,15 @@ export const unassignDeviceFromUser = async (deviceId, userEmail) => {
       AssignedTo: updatedAssignedTo,
       lastSeen: serverTimestamp()
     });
+    
+    // 🔥 UPDATED: Log unassignment event to eventHistory
+    await logDeviceEvent(
+      deviceId, 
+      'USER_UNASSIGNED', 
+      'OFF', 
+      'manual', 
+      localStorage.getItem('userEmail')
+    );
     
     return true;
   } catch (error) {
@@ -1223,8 +1313,8 @@ export const getUserDevicesAndLocations = async (userEmail) => {
       }
     }
     
-    // UPDATED: Get all devices with Firestore timestamp checks
-    const devices = await getAllDevices(); // This now includes Firestore timestamp handling
+    // UPDATED: Get all devices with Firestore timestamp handling and event logging
+    const devices = await getAllDevices(); // This now includes Firestore timestamp handling and event logging
     
     console.log(`📱 Found ${devices.length} devices and ${locations.length} locations`);
     
@@ -1345,13 +1435,18 @@ export const migrateLegacyDeviceAssignments = async (buildingId) => {
   try {
     console.log(`🔄 Starting migration for building: ${buildingId}`);
     
-    // Get all devices in this building
+    // Get all locations in the building
     const locationsQuery = query(
       collection(firestore, 'LOCATION'),
       where('Building', '==', buildingId)
     );
     const locationsSnapshot = await getDocs(locationsQuery);
     const locationIds = locationsSnapshot.docs.map(doc => doc.id);
+    
+    if (locationIds.length === 0) {
+      console.log('No locations found for building');
+      return { devicesProcessed: 0, usersUpdated: 0, locationsAssigned: 0 };
+    }
     
     const devicesQuery = query(
       collection(firestore, 'DEVICE'),
@@ -1447,7 +1542,7 @@ export default {
   removeLocationFromUser,
   getUserAssignedLocations,
   
-  // UPDATED: Device operations (with Firestore timestamp integration)
+  // UPDATED: Device operations (with eventHistory integration)
   getAllDevices,
   getDevice,
   createDevice,
@@ -1472,7 +1567,7 @@ export default {
   assignDeviceToUser,
   unassignDeviceFromUser,
   
-  // UPDATED: Bulk operations (with Firestore timestamp integration)
+  // UPDATED: Bulk operations (with eventHistory integration)
   getUserDevicesAndLocations,
   
   // Validation

@@ -1,4 +1,4 @@
-// src/components/Devices/Devices.js - Updated for Firestore Timestamps
+// src/components/Devices/Devices.js - Fixed infinite loop issue
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
@@ -46,19 +46,20 @@ const Devices = () => {
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
   const [canManage, setCanManage] = useState(false);
 
+  // FIXED: Move filterAccessibleDevices inside fetchDevices to avoid circular dependency
   // Enhanced device filtering with strict security
-  const filterAccessibleDevices = useCallback(async (allDevices) => {
+  const filterAccessibleDevices = useCallback(async (allDevices, locationsData, isAdmin) => {
     const accessibleDevices = [];
     
     for (const device of allDevices) {
       let hasAccess = false;
       
       // SystemAdmin has access to all devices
-      if (isUserSystemAdmin) {
+      if (isAdmin) {
         hasAccess = true;
       } else if (device.Location) {
         // Device is claimed - check building access
-        const location = locations.find(loc => loc.id === device.Location);
+        const location = locationsData.find(loc => loc.id === device.Location);
         if (location && location.Building) {
           const roleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
           
@@ -81,7 +82,7 @@ const Devices = () => {
     
     console.log(`🔐 Filtered ${allDevices.length} devices to ${accessibleDevices.length} accessible devices`);
     return accessibleDevices;
-  }, [isUserSystemAdmin, userEmail, locations]);
+  }, [userEmail]); // Only depend on userEmail, not locations
 
   // Memoized filtered devices
   const filteredDevices = useMemo(() => {
@@ -112,7 +113,7 @@ const Devices = () => {
       
       return true;
     });
-  }, [devices, searchTerm, statusFilter, locationFilter]);
+  }, [devices, searchTerm, statusFilter, locationFilter, locations]); // Add locations dependency for getLocationName
 
   // Helper functions
   const getLocationName = useCallback((device) => {
@@ -198,7 +199,7 @@ const Devices = () => {
     };
   }, []);
 
-  // Fetch devices with runtime warning checks
+  // FIXED: Fetch devices with runtime warning checks
   const fetchDevices = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -230,10 +231,11 @@ const Devices = () => {
         buildingName: location.buildingName || location.Building || 'Unknown Building'
       }));
       
+      // FIXED: Set locations first
       setLocations(locationsWithBuildingNames);
 
-      // Use enhanced filtering with strict security
-      const accessibleDevices = await filterAccessibleDevices(allDevices);
+      // FIXED: Use the filterAccessibleDevices with current data, not state
+      const accessibleDevices = await filterAccessibleDevices(allDevices, locationsWithBuildingNames, isAdmin);
       
       console.log('📍 Fetching location details for accessible devices...');
       const devicesWithLocationDetails = await Promise.all(
@@ -257,7 +259,7 @@ const Devices = () => {
       setRefreshing(false);
       setLoading(false);
     }
-  }, [userEmail, fetchDeviceLocationDetails, filterAccessibleDevices]);
+  }, [userEmail, fetchDeviceLocationDetails, filterAccessibleDevices]); // Stable dependencies
 
   // Handle device click - navigate to device detail
   const handleDeviceClick = useCallback((deviceId) => {
@@ -318,7 +320,7 @@ const Devices = () => {
     }
   }, [location.state]);
 
-  // Initial load
+  // FIXED: Initial load - only run once per userEmail change
   useEffect(() => {
     if (userEmail) {
       fetchDevices();
@@ -326,7 +328,7 @@ const Devices = () => {
       setLoading(false);
       setError('User not authenticated');
     }
-  }, [userEmail, fetchDevices]);
+  }, [userEmail]); // Remove fetchDevices dependency to prevent loops
 
   if (loading) {
     return (
@@ -692,9 +694,11 @@ const DeviceCardDetails = ({
     {canViewSensitiveInfo && (
       <DeviceDetailItem label="ID:" value={device.id} />
     )}
-    <DeviceDetailItem label="Type:" value={device.DeviceType || 'Unknown'} />
-    <DeviceDetailItem label="Building:" value={getBuildingName(device)} />
-    <DeviceDetailItem label="Location:" value={getLocationName(device)} />
+    <DeviceDetailItem label="Type:" value={device.DeviceType || 'Unknown'}/>
+    <DeviceDetailItem label="Building:" value={getBuildingName(device)}/>
+    <DeviceDetailItem label="Location:" value={getLocationName(device)}/>
+    
+    
     
     {/* UPDATED: Show runtime info for long-running devices with Firestore timestamp handling */}
     {isLongRunning && device.onSince && (
@@ -721,7 +725,7 @@ const DeviceCardDetails = ({
     )}
     
     {/* Only show assigned count to users who can view sensitive info */}
-    {canViewSensitiveInfo && device.AssignedTo && device.AssignedTo.length > 0 && (
+    {canViewSensitiveInfo && device.AssignedTo && device.AssignedTo.length  > 0 && (
       <DeviceDetailItem 
         label="Assigned:" 
         value={`${device.AssignedTo.length} user(s)`} 

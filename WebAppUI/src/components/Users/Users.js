@@ -1,4 +1,4 @@
-// src/components/Users/Users.js - Updated to use USERBUILDING for parent-child relationships
+// src/components/Users/Users.js - Updated to hide SystemAdmin users and use USERBUILDING for parent-child relationships
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MdAdd, MdPerson, MdFamilyRestroom, MdHome, MdAdminPanelSettings, MdBusiness, MdLocationOn, MdEmail, MdPhone, MdRefresh, MdSearch, MdSettings } from 'react-icons/md';
@@ -78,7 +78,7 @@ const Users = () => {
       console.log('🔍 User access type:', accessType);
 
       if (accessType === 'systemadmin') {
-        console.log('🔧 SystemAdmin detected - fetching all parents via USERBUILDING');
+        console.log('🔧 SystemAdmin detected - fetching all users in the system (excluding SystemAdmins)');
         await fetchSystemAdminUsers(usersList, buildingsList);
         
       } else if (accessType === 'admin') {
@@ -140,59 +140,68 @@ const Users = () => {
     usersBuildingMap["potential"] = [];
   };
 
-  // Fetch users for SystemAdmin (all parents)
+  // UPDATED: Fetch ALL users for SystemAdmin (not just parents) but EXCLUDE SystemAdmins
   const fetchSystemAdminUsers = async (usersList, buildingsList) => {
-    // Get all parents in the system via USERBUILDING
-    const parentsQuery = query(
-      collection(firestore, 'USERBUILDING'),
-      where('Role', '==', 'parent')
-    );
+    // Get all users from the USER collection
+    const usersQuery = collection(firestore, 'USER');
+    const usersSnapshot = await getDocs(usersQuery);
     
-    const parentsSnapshot = await getDocs(parentsQuery);
-    const uniqueParentEmails = new Set();
-    
-    parentsSnapshot.forEach(doc => {
-      const userData = doc.data();
-      uniqueParentEmails.add(userData.User);
-    });
-    
-    // Fetch parent user details with building access
-    for (const email of uniqueParentEmails) {
-      const userDoc = await getDoc(doc(firestore, 'USER', email));
+    // Fetch all users with their building access
+    for (const userDoc of usersSnapshot.docs) {
+      const userId = userDoc.id;
+      const userData = userDoc.data();
       
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        
-        // Get user's building access via USERBUILDING
-        const userBuildingQuery = query(
-          collection(firestore, 'USERBUILDING'),
-          where('User', '==', email)
-        );
-        const userBuildingSnapshot = await getDocs(userBuildingQuery);
-        
-        const buildingAccess = [];
-        for (const ubDoc of userBuildingSnapshot.docs) {
-          const ubData = ubDoc.data();
-          if (ubData.Building === 'SystemAdmin') continue;
-          
-          const buildingDoc = await getDoc(doc(firestore, 'BUILDING', ubData.Building));
-          if (buildingDoc.exists()) {
-            buildingAccess.push({
-              id: ubData.Building,
-              name: buildingDoc.data().BuildingName || ubData.Building,
-              role: ubData.Role
-            });
-          }
+      // Get user's building access via USERBUILDING
+      const userBuildingQuery = query(
+        collection(firestore, 'USERBUILDING'),
+        where('User', '==', userId)
+      );
+      const userBuildingSnapshot = await getDocs(userBuildingQuery);
+      
+      const buildingAccess = [];
+      let primaryRole = 'user'; // Default role
+      let isSystemAdminUser = false; // Flag to identify SystemAdmin users
+      
+      for (const ubDoc of userBuildingSnapshot.docs) {
+        const ubData = ubDoc.data();
+        if (ubData.Building === 'SystemAdmin') {
+          primaryRole = 'systemadmin';
+          isSystemAdminUser = true; // Mark as SystemAdmin user
+          continue; // Skip adding SystemAdmin building to buildingAccess
         }
         
-        usersList.push({
-          id: email,
-          email: email,
-          ...userData,
-          role: 'parent',
-          buildingAccess: buildingAccess
-        });
+        const buildingDoc = await getDoc(doc(firestore, 'BUILDING', ubData.Building));
+        if (buildingDoc.exists()) {
+          buildingAccess.push({
+            id: ubData.Building,
+            name: buildingDoc.data().BuildingName || ubData.Building,
+            role: ubData.Role
+          });
+          
+          // Determine primary role based on highest privilege
+          if (ubData.Role === 'admin' && primaryRole !== 'systemadmin') {
+            primaryRole = 'admin';
+          } else if (ubData.Role === 'parent' && primaryRole === 'user') {
+            primaryRole = 'parent';
+          } else if (ubData.Role === 'children' && primaryRole === 'user') {
+            primaryRole = 'children';
+          }
+        }
       }
+      
+      // UPDATED: Skip SystemAdmin users - don't add them to usersList
+      if (isSystemAdminUser) {
+        console.log(`🚫 Skipping SystemAdmin user: ${userId}`);
+        continue;
+      }
+      
+      usersList.push({
+        id: userId,
+        email: userId,
+        ...userData,
+        role: primaryRole,
+        buildingAccess: buildingAccess
+      });
     }
     
     // Fetch all buildings for context
@@ -203,6 +212,8 @@ const Users = () => {
       id: doc.id,
       ...doc.data()
     })));
+    
+    console.log(`✅ SystemAdmin: Fetched ${usersList.length} total users (excluding SystemAdmins)`);
   };
 
   // Fetch users for building admins (parents in buildings they admin)
@@ -382,7 +393,7 @@ const Users = () => {
   const getPageTitle = () => {
     switch (currentUserType) {
       case 'systemadmin':
-        return `System Users (${users.length})`;
+        return `All System Users (${users.length})`;
       case 'admin':
         return `Managed Users (${users.length})`;
       case 'parent':
@@ -396,7 +407,7 @@ const Users = () => {
   const getSearchPlaceholder = () => {
     switch (currentUserType) {
       case 'systemadmin':
-        return 'Search all parents...';
+        return 'Search all users...';
       case 'admin':
         return 'Search parents...';
       case 'parent':
@@ -461,7 +472,7 @@ const UsersHeader = ({ currentUserType, isUserSystemAdmin, userCount, filteredCo
       return (
         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <MdAdminPanelSettings style={{ color: '#10b981' }} />
-          System Users ({userCount})
+          All System Users ({userCount})
         </span>
       );
     } else if (currentUserType === 'admin') {
@@ -501,7 +512,7 @@ const UsersHeader = ({ currentUserType, isUserSystemAdmin, userCount, filteredCo
         </button>
         {isUserSystemAdmin && (
           <Link to="/users/add" className="add-user-btn">
-            <MdAdd /> Add Parent
+            <MdAdd /> Add User
           </Link>
         )}
       </div>
@@ -528,7 +539,7 @@ const SearchControls = ({ searchTerm, onSearchChange, getSearchPlaceholder }) =>
 // Users Grid Component - Similar structure to Buildings Grid
 const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserSystemAdmin, searchTerm, onUserCardClick }) => {
   if (currentUserType === 'systemadmin') {
-    // SystemAdmin view - show all parents in simple grid
+    // SystemAdmin view - show all users in simple grid
     return (
       <div>
         <div className="users-stats">
@@ -538,10 +549,10 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
             </div>
             <div className="stat-content">
               <div className="stat-value">{users.length}</div>
-              <div className="stat-label">Total Parents</div>
+              <div className="stat-label">Total Users</div>
             </div>
           </div>
-          <div className="stat-card">
+          {/* <div className="stat-card">
             <div className="stat-icon">
               <MdHome />
             </div>
@@ -549,20 +560,20 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
               <div className="stat-value">{buildings.length}</div>
               <div className="stat-label">Buildings</div>
             </div>
-          </div>
+          </div> */}
         </div>
 
         {users.length === 0 ? (
           <div className="no-users">
             <div className="no-data-content">
               <h3>
-                {searchTerm ? 'No Users Found' : 'No Parents Available'}
+                {searchTerm ? 'No Users Found' : 'No Users Available'}
               </h3>
               <p>
                 {searchTerm ? (
-                  `No parents match "${searchTerm}". Try adjusting your search terms.`
+                  `No users match "${searchTerm}". Try adjusting your search terms.`
                 ) : (
-                  "No parent users exist in the system yet."
+                  "No users exist in the system yet."
                 )}
               </p>
             </div>
@@ -684,14 +695,6 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
 
 // User Card Component - Similar to Building Card structure
 const UserCard = ({ user, currentUserType, onClick }) => {
-  const getRoleBadgeClass = (role) => {
-    switch(role) {
-      case 'parent': return 'parent-badge';
-      case 'children': return 'children-badge';
-      case 'admin': return 'admin-badge';
-      default: return 'default-badge';
-    }
-  };
 
   return (
     <div className="user-card" onClick={onClick}>
@@ -700,7 +703,6 @@ const UserCard = ({ user, currentUserType, onClick }) => {
           <h3 className="user-name">
             {user.Name || user.email}
           </h3>
-          
         </div>
         
         <div className="user-details">
@@ -716,11 +718,12 @@ const UserCard = ({ user, currentUserType, onClick }) => {
             </div>
           )}
           
-          {/* UPDATED: Show building-specific role instead of legacy ParentEmail
-          {user.buildingRole && (
+          {/* {user.buildingAccess && user.buildingAccess.length > 0 && (
             <div className="detail-item">
-              <span className="detail-label">Building Role:</span>
-              <span className="detail-value">{user.buildingRole}</span>
+              <span className="detail-label">Buildings:</span>
+              <span className="detail-value">
+                {user.buildingAccess.length} building{user.buildingAccess.length > 1 ? 's' : ''}
+              </span>
             </div>
           )} */}
         </div>

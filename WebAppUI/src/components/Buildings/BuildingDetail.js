@@ -1,4 +1,4 @@
-// src/components/Buildings/BuildingDetail.js - Refactored without custom hooks
+// src/components/Buildings/BuildingDetail.js - Updated to hide locations and devices for SystemAdmin
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
@@ -23,7 +23,7 @@ import UserModal from '../common/UserModal';
 import BuildingAutomationTab from './BuildingAutomationTab';
 import buildingService from '../../services/buildingService';
 import energyUsageService from '../../services/energyUsageService';
-import automationService from '../../services/automationService';
+import automationService from '../../services/AutomationService';
 import { sendBuildingInvitation } from '../../services/notificationService';
 import { isSystemAdmin } from '../../utils/helpers';
 import './BuildingDetail.css';
@@ -196,8 +196,8 @@ const BuildingDetail = () => {
         
         console.log('🏢 Building data loaded:', buildingData.BuildingName);
         
-        // Fetch locations only for non-admin users
-        if (roleInBuilding !== 'admin') {
+        // UPDATED: Skip fetching locations and devices for SystemAdmin
+        if (roleInBuilding !== 'admin' || !isUserSystemAdmin) {
           const locationsData = await buildingService.getBuildingLocations(buildingId);
           setLocations(locationsData);
           console.log(`📍 Found ${locationsData.length} locations`);
@@ -214,8 +214,8 @@ const BuildingDetail = () => {
             );
             setDevices(accessibleDevices);
             console.log(`📱 Child can access ${accessibleDevices.length} devices in assigned locations`);
-          } else {
-            // For parents and other roles, fetch all devices
+          } else if (roleInBuilding === 'parent') {
+            // For parents, fetch all devices
             const devicesData = await buildingService.getBuildingDevices(buildingId);
             setDevices(devicesData);
             console.log(`📱 Found ${devicesData.length} total devices`);
@@ -547,9 +547,10 @@ const BuildingDetail = () => {
       setSuccess(`Building automation "${automationConfig.automationTitle}" applied successfully${energyInfo}`);
       setTimeout(() => setSuccess(null), 5000);
       
-    } catch (error) {
+    } 
+    catch (error) {
       console.error('❌ Error handling building automation:', error);
-      setError('Failed to apply building automation: ' + error.message);
+      //setError('Failed to apply building automation: ' + error.message);
       setTimeout(() => setError(null), 5000);
     }
   }, [buildingId]);
@@ -567,8 +568,9 @@ const BuildingDetail = () => {
     canDeleteBuilding: userRoleInBuilding === 'admin' || userRoleInBuilding === 'parent',
     canManageChildren: userRoleInBuilding === 'parent',
     canViewChildren: userRoleInBuilding === 'parent',
-    canViewLocations: userRoleInBuilding !== 'admin'
-  }), [userRoleInBuilding]);
+    // UPDATED: Hide locations view for SystemAdmin
+    canViewLocations: userRoleInBuilding !== 'admin' || !isUserSystemAdmin
+  }), [userRoleInBuilding, isUserSystemAdmin]);
 
   // Filter locations for children - moved before early returns
   const displayedLocations = useMemo(() => {
@@ -728,7 +730,8 @@ const BuildingDetail = () => {
         )}
       </div>
       
-      {permissions.canViewLocations && (
+      {/* UPDATED: Hide locations section for SystemAdmin */}
+      {permissions.canViewLocations && !isSystemAdmin (
         <div className="locations-section">
           <div className="locations-header">
             <h3>
@@ -1067,8 +1070,8 @@ const BuildingDetail = () => {
     }
   ];
 
-  // Add Devices tab only for non-admin users
-  if (permissions.canViewLocations) {
+  // UPDATED: Add Devices tab only for non-SystemAdmin users
+  if (permissions.canViewLocations && !isUserSystemAdmin) {
     tabs.push({
       label: 'Devices',
       content: <DevicesTab />

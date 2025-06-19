@@ -1,10 +1,13 @@
-// src/components/Reports/ReportPDFGenerator.js - PDF Generation Utility
+// src/components/Reports/ReportPDFGenerator.js - PDF Generation Utility with Methodology
 
 import html2pdf from 'html2pdf.js';
 import { 
   formatEnergyValue, 
   formatCurrency, 
-  formatPercentage 
+  formatPercentage,
+  calculateEfficiencyRating,
+  MALAYSIA_ENERGY_RATES,
+  MALAYSIA_CARBON_FACTOR
 } from './reportUtils';
 
 /**
@@ -92,6 +95,14 @@ const createPDFHTML = (data) => {
     savingsPotential
   } = data;
 
+  // Calculate efficiency rating for methodology
+  const totalDays = dateRange.totalDays || summary.totalDays || 30;
+  const efficiencyRating = calculateEfficiencyRating(
+    summary.totalUsage, 
+    summary.totalDevices || deviceAnalysis.totalDevices, 
+    totalDays
+  );
+
   return `
     <!DOCTYPE html>
     <html>
@@ -137,6 +148,10 @@ const createPDFHTML = (data) => {
             <div class="summary-value">${summary.activeDevices || 0}</div>
             <div class="summary-label">Active Devices</div>
           </div>
+          <!-- <div class="summary-item">
+            <div class="summary-value">${efficiencyRating.rating}</div>
+            <div class="summary-label">Efficiency Rating</div>
+          </div> -->
           ${isSystemAdmin ? `
           <div class="summary-item">
             <div class="summary-value">${summary.totalUsers || 0}</div>
@@ -238,19 +253,56 @@ const createPDFHTML = (data) => {
             <div class="env-value">${carbonFootprint.carMilesEquivalent.toFixed(0)} miles</div>
             <div class="env-label">Car Miles Equivalent</div>
           </div>
+          <!-- 
           ${savingsPotential ? `
           <div class="env-item">
             <div class="env-value">${formatPercentage(savingsPotential.percentage)}</div>
             <div class="env-label">Potential Savings</div>
           </div>
           ` : ''}
+          -->
         </div>
       </div>
 
-      <!-- Energy Efficiency -->
+      <!-- Energy Efficiency Assessment -->
+      <div class="section">
+        <h2 class="section-title">⚡ Energy Efficiency Assessment</h2>
+        <div class="efficiency-grid">
+          <div class="eff-item">
+            <div class="eff-value">${efficiencyRating.score}/100</div>
+            <div class="eff-label">Efficiency Score</div>
+          </div>
+          <div class="eff-item">
+            <div class="eff-value">${formatEnergyValue(efficiencyRating.usagePerDevicePerDay)}</div>
+            <div class="eff-label">Usage per Device/Day</div>
+          </div>
+          <div class="eff-item">
+            <div class="eff-value">${totalDays}</div>
+            <div class="eff-label">Days Analyzed</div>
+          </div>
+
+          <!-- ${savingsPotential ? `
+          <div class="eff-item">
+            <div class="eff-value">${formatCurrency(savingsPotential.costSavings)}</div>
+            <div class="eff-label">Potential Cost Savings</div>
+          </div> -->
+
+          <!-- <div class="eff-item">
+            <div class="eff-value">${savingsPotential.carbonSavings.toFixed(1)} kg CO₂</div>
+            <div class="eff-label">Potential Carbon Reduction</div>
+          </div> -->
+          ` : ''}
+        </div>
+        <div class="efficiency-note">
+          <p><strong>Efficiency Rating:</strong> ${efficiencyRating.rating} - ${efficiencyRating.description}</p>
+        </div>
+      </div>
+
+      <!-- Energy Savings Potential -->
+      <!--
       ${savingsPotential ? `
       <div class="section">
-        <h2 class="section-title">⚡ Energy Savings Potential</h2>
+        <h2 class="section-title">💡 Energy Savings Potential</h2>
         <div class="savings-grid">
           <div class="savings-item">
             <div class="savings-value">${formatEnergyValue(savingsPotential.energySavings)}</div>
@@ -267,17 +319,132 @@ const createPDFHTML = (data) => {
         </div>
       </div>
       ` : ''}
+      -->
 
-      <!-- Recommendations -->
-      <div class="section">
-        <h2 class="section-title">💡 Energy Optimization Recommendations</h2>
-        <div class="recommendations">
-          ${recommendations.map((rec, index) => `
-            <div class="recommendation-item">
-              <span class="rec-number">${index + 1}</span>
-              <span class="rec-text">${rec}</span>
+      <!-- Report Methodology Section -->
+      <div class="section methodology-section page-break">
+        <h2 class="section-title">📋 Report Methodology & Calculations</h2>
+        
+        <!-- Energy Cost Calculations -->
+        <!-- <div class="methodology-subsection">
+          <h3 class="methodology-subtitle">🏢 Energy Cost Calculations</h3>
+          <p class="methodology-text">
+            Energy costs are calculated using Malaysia's TNB (Tenaga Nasional Berhad) tiered tariff structure for residential and small office consumption:
+          </p>
+          <table class="methodology-table">
+            <thead>
+              <tr>
+                <th>Tier</th>
+                <th>Usage Range (kWh)</th>
+                <th>Rate (RM/kWh)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Tier 1</td><td>1 - 200</td><td>RM 0.218</td></tr>
+              <tr><td>Tier 2</td><td>201 - 300</td><td>RM 0.334</td></tr>
+              <tr><td>Tier 3</td><td>301 - 600</td><td>RM 0.516</td></tr>
+              <tr><td>Tier 4</td><td>601 - 900</td><td>RM 0.546</td></tr>
+              <tr><td>Tier 5</td><td>901+</td><td>RM 0.571</td></tr>
+            </tbody>
+          </table>
+          <p class="methodology-note">
+            Total cost is calculated by applying the appropriate rate to each tier's consumption and summing the results.
+          </p>
+        </div> -->
+
+        <!-- Carbon Footprint Calculations -->
+        <div class="methodology-subsection">
+          <h3 class="methodology-subtitle">🌱 Carbon Footprint Calculations</h3>
+          <p class="methodology-text">
+            Carbon emissions are calculated using Malaysia's electricity grid emission factor:
+          </p>
+          <div class="calculation-formulas">
+            <div class="formula-item">
+              <strong>CO₂ Emissions:</strong> Energy Usage (kWh) × ${MALAYSIA_CARBON_FACTOR} kg CO₂/kWh
             </div>
-          `).join('')}
+            <div class="formula-item">
+              <strong>Trees Equivalent:</strong> CO₂ Emissions ÷ 22 kg (average CO₂ absorbed by one tree per year)
+            </div>
+            <div class="formula-item">
+              <strong>Car Miles Equivalent:</strong> CO₂ Emissions ÷ 0.411 kg/mile (average car emissions)
+            </div>
+          </div>
+          <p class="methodology-note">
+            Grid emission factor reflects Malaysia's energy mix including coal, natural gas, hydro, and renewable sources 
+            based on data from Malaysia's Energy Commission.
+          </p>
+        </div>
+
+        <!-- Energy Efficiency Assessment -->
+        <div class="methodology-subsection">
+          <h3 class="methodology-subtitle">⚡ Energy Efficiency Assessment</h3>
+          <p class="methodology-text">
+            Efficiency rating is based on energy usage per device per day using the following calculation:
+          </p>
+          <div class="calculation-formulas">
+            <div class="formula-item">
+              <strong>Formula:</strong> Total Usage (kWh) ÷ (Number of Devices × Days in Period)
+            </div>
+          </div>
+          <table class="methodology-table">
+            <thead>
+              <tr>
+                <th>Rating</th>
+                <th>kWh per Device per Day</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Excellent</td><td>&lt; 0.5</td><td>Highly efficient usage</td></tr>
+              <tr><td>Good</td><td>0.5 - 1.0</td><td>Above average efficiency</td></tr>
+              <tr><td>Average</td><td>1.0 - 2.0</td><td>Standard efficiency level</td></tr>
+              <tr><td>Below Average</td><td>2.0 - 3.0</td><td>Room for improvement</td></tr>
+              <tr><td>Poor</td><td>&gt; 3.0</td><td>Significant inefficiencies</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Savings Potential -->
+        <!-- <div class="methodology-subsection">
+          <h3 class="methodology-subtitle">💡 Savings Potential Calculations</h3>
+          <p class="methodology-text">
+            Potential savings are estimated based on device efficiency improvements and industry best practices:
+          </p>
+          <table class="methodology-table">
+            <thead>
+              <tr>
+                <th>Device Category</th>
+                <th>Potential Savings</th>
+                <th>Method</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Air Conditioning</td><td>20%</td><td>Proper maintenance and smart scheduling</td></tr>
+              <tr><td>Lighting</td><td>50%</td><td>Upgrading to LED technology</td></tr>
+              <tr><td>Other Devices</td><td>10%</td><td>General efficiency improvements</td></tr>
+            </tbody>
+          </table>
+        </div> -->
+
+        <!-- Data Sources -->
+        <div class="methodology-subsection">
+          <h3 class="methodology-subtitle">📊 Data Sources & Accuracy</h3>
+          <ul class="methodology-list">
+            <li>Energy usage data collected from IoT central hub</li>
+            <li>Tariff rates updated according to TNB Malaysia official rates (current as of 2024)</li>
+            <li>Carbon emission factors based on Malaysia's Energy Commission latest grid data</li>
+            <li>Efficiency benchmarks follow international energy management standards (ISO 50001)</li>
+            <li>All calculations use full precision internally and are rounded only for display</li>
+            <li>Historical data analyzed over ${totalDays} day${totalDays !== 1 ? 's' : ''} for statistical accuracy</li>
+          </ul>
+          
+          <!-- <div class="accuracy-note">
+            <p><strong>Important Note:</strong> These calculations provide estimates based on industry standards and 
+            Malaysia-specific factors. Actual results may vary depending on specific equipment efficiency, 
+            usage patterns, local conditions, and individual device characteristics. The system provides 
+            guidance for energy optimization but should be supplemented with professional energy audits 
+            for critical applications.</p>
+          </div> -->
         </div>
       </div>
 
@@ -287,8 +454,9 @@ const createPDFHTML = (data) => {
           <p><strong>Report Details:</strong></p>
           <p>• Report generated on ${new Date().toLocaleDateString()} by SISEAO Energy Management System</p>
           <p>• Energy rates based on TNB Malaysia tariff structure for residential/small office consumption</p>
-          <!-- <p>• Carbon footprint calculated using Malaysia's grid emission factor (0.708 kg CO₂/kWh)</p>
-          <p>• Recommendations are based on industry best practices and energy efficiency standards</p> -->
+          <p>• Carbon footprint calculated using Malaysia's grid emission factor (${MALAYSIA_CARBON_FACTOR} kg CO₂/kWh)</p>
+          <p>• Analysis period: ${dateRange.formatted} (${totalDays} day${totalDays !== 1 ? 's' : ''})</p>
+          <p>• All recommendations follow industry best practices and energy efficiency standards</p>
         </div>
         <div class="footer-logo">
           <p><strong>SISEAO</strong> - Smart IoT System for Energy Optimization and Automation</p>
@@ -404,7 +572,8 @@ const getPDFStyles = () => `
 
   /* Tables */
   .cost-table,
-  .device-table {
+  .device-table,
+  .methodology-table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
@@ -414,7 +583,8 @@ const getPDFStyles = () => `
   }
 
   .cost-table th,
-  .device-table th {
+  .device-table th,
+  .methodology-table th {
     background-color: #f8fafc;
     padding: 10px;
     text-align: left;
@@ -425,7 +595,8 @@ const getPDFStyles = () => `
   }
 
   .cost-table td,
-  .device-table td {
+  .device-table td,
+  .methodology-table td {
     padding: 8px 10px;
     border-bottom: 1px solid #f1f5f9;
     font-size: 11px;
@@ -522,6 +693,45 @@ const getPDFStyles = () => `
     font-weight: 500;
   }
 
+  /* Efficiency Grid */
+  .efficiency-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+  }
+
+  .eff-item {
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    padding: 15px;
+    text-align: center;
+  }
+
+  .eff-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0369a1;
+    margin-bottom: 5px;
+  }
+
+  .eff-label {
+    font-size: 10px;
+    color: #1e40af;
+    font-weight: 500;
+  }
+
+  .efficiency-note {
+    margin-top: 15px;
+    padding: 12px;
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #0369a1;
+  }
+
   /* Savings Grid */
   .savings-grid {
     display: grid;
@@ -551,40 +761,90 @@ const getPDFStyles = () => `
     font-weight: 500;
   }
 
-  /* Recommendations */
-  .recommendations {
+  /* Methodology Section */
+  .methodology-section {
+    background-color: #fafafa;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 30px;
+  }
+
+  .methodology-subsection {
+    margin-bottom: 25px;
+  }
+
+  .methodology-subsection:last-child {
+    margin-bottom: 0;
+  }
+
+  .methodology-subtitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #d1d5db;
+  }
+
+  .methodology-text {
+    font-size: 11px;
+    color: #4b5563;
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+
+  .methodology-note {
+    font-size: 10px;
+    color: #64748b;
+    font-style: italic;
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+
+  .calculation-formulas {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 12px;
+    margin: 10px 0;
+  }
+
+  .formula-item {
+    font-size: 11px;
+    color: #374151;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+
+  .formula-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .methodology-list {
+    font-size: 11px;
+    color: #4b5563;
+    line-height: 1.4;
+    margin-left: 16px;
+  }
+
+  .methodology-list li {
+    margin-bottom: 4px;
+  }
+
+  .accuracy-note {
+    background-color: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 6px;
+    padding: 12px;
     margin-top: 15px;
   }
 
-  .recommendation-item {
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 12px;
-    padding: 10px;
-    background-color: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 6px;
-  }
-
-  .rec-number {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    background-color: #3b82f6;
-    color: white;
-    border-radius: 50%;
+  .accuracy-note p {
     font-size: 10px;
-    font-weight: 600;
-    margin-right: 10px;
-    flex-shrink: 0;
-  }
-
-  .rec-text {
-    font-size: 11px;
-    color: #1e40af;
+    color: #92400e;
     line-height: 1.4;
+    margin: 0;
   }
 
   /* Footer */
@@ -629,7 +889,12 @@ const getPDFStyles = () => `
     }
     
     .cost-table,
-    .device-table {
+    .device-table,
+    .methodology-table {
+      page-break-inside: avoid;
+    }
+
+    .methodology-section {
       page-break-inside: avoid;
     }
   }

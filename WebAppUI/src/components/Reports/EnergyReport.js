@@ -1,15 +1,19 @@
-// src/components/Reports/EnergyReport.js - Updated Energy Report Display Component
+// src/components/Reports/EnergyReport.js - Updated Energy Report Display Component with Methodology
 
-import React from 'react';
+import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { 
   formatEnergyValue, 
   formatCurrency, 
   formatPercentage,
-  calculateEfficiencyRating
+  calculateEfficiencyRating,
+  MALAYSIA_ENERGY_RATES,
+  MALAYSIA_CARBON_FACTOR
 } from './reportUtils';
 
 const EnergyReport = ({ reportData, buildingName, isSystemAdmin }) => {
+  const [showMethodology, setShowMethodology] = useState(false);
+
   if (!reportData) {
     return (
       <div className="no-report-state">
@@ -107,13 +111,6 @@ const EnergyReport = ({ reportData, buildingName, isSystemAdmin }) => {
                 {summary.activeDevices || 0}
               </div>
               <p className="summary-label">Active Devices</p>
-            </div>
-
-            <div className="summary-card">
-              <div className="summary-value">
-                {efficiencyRating.rating}
-              </div>
-              <p className="summary-label">Efficiency Rating</p>
             </div>
 
             {isSystemAdmin && (
@@ -267,15 +264,6 @@ const EnergyReport = ({ reportData, buildingName, isSystemAdmin }) => {
               </div>
               <p className="summary-label">Car Miles Equivalent</p>
             </div>
-
-            {savingsPotential && (
-              <div className="environmental-card">
-                <div className="summary-value">
-                  {formatPercentage(savingsPotential.percentage)}
-                </div>
-                <p className="summary-label">Potential Savings</p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -304,25 +292,6 @@ const EnergyReport = ({ reportData, buildingName, isSystemAdmin }) => {
               </div>
               <p className="summary-label">Days Analyzed</p>
             </div>
-
-            {savingsPotential && (
-              <>
-                <div className="summary-card">
-                  <div className="summary-value">
-                    {formatCurrency(savingsPotential.costSavings)}
-                  </div>
-                  <p className="summary-label">Potential Cost Savings</p>
-                </div>
-                
-                <div className="summary-card">
-                  <div className="summary-value">
-                    {savingsPotential.carbonSavings.toFixed(1)}
-                    <span className="summary-unit">kg CO₂</span>
-                  </div>
-                  <p className="summary-label">Potential Carbon Reduction</p>
-                </div>
-              </>
-            )}
           </div>
           
           <div style={{
@@ -336,6 +305,80 @@ const EnergyReport = ({ reportData, buildingName, isSystemAdmin }) => {
               <strong>Efficiency Rating:</strong> {efficiencyRating.rating} - {efficiencyRating.description}
             </p>
           </div>
+        </div>
+
+        {/* Report Methodology Section */}
+        <div className="methodology-section" style={{
+          marginTop: '2rem',
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          overflow: 'hidden'
+        }}>
+          <div 
+            style={{
+              backgroundColor: '#f8fafc',
+              padding: '1rem',
+              cursor: 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: showMethodology ? '1px solid #e2e8f0' : 'none'
+            }}
+            onClick={() => setShowMethodology(!showMethodology)}
+          >
+            <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600', color: '#1e293b' }}>
+              📋 Report Methodology & Calculations
+            </h3>
+            <span style={{ fontSize: '1.2rem', color: '#64748b' }}>
+              {showMethodology ? '−' : '+'}
+            </span>
+          </div>
+          
+          {showMethodology && (
+            <div style={{ padding: '1.5rem', backgroundColor: 'white' }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600', color: '#374151' }}>
+                  🌱 Carbon Footprint Calculations
+                </h4>
+                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: '#4b5563', lineHeight: '1.5' }}>
+                  Carbon emissions are calculated using Malaysia's electricity grid emission factor:
+                </p>
+                <ul style={{ margin: '0 0 0 1rem', fontSize: '0.875rem', color: '#4b5563', lineHeight: '1.4' }}>
+                  <li><strong>CO₂ Emissions:</strong> Energy Usage (kWh) × {MALAYSIA_CARBON_FACTOR} kg CO₂/kWh</li>
+                  <li><strong>Trees Equivalent:</strong> CO₂ Emissions ÷ 22 kg (average CO₂ absorbed by one tree per year)</li>
+                  <li><strong>Car Miles Equivalent:</strong> CO₂ Emissions ÷ 0.411 kg/mile (average car emissions)</li>
+                </ul>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600', color: '#374151' }}>
+                  ⚡ Energy Efficiency Assessment
+                </h4>
+                <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: '#4b5563', lineHeight: '1.5' }}>
+                  Efficiency rating is based on energy usage per device per day:
+                </p>
+                <ul style={{ margin: '0 0 0 1rem', fontSize: '0.875rem', color: '#4b5563', lineHeight: '1.4' }}>
+                  <li><strong>Formula:</strong> Total Usage (kWh) ÷ (Number of Devices × Days in Period)</li>
+                  <li><strong>Excellent:</strong> &lt; 0.5 kWh per device per day</li>
+                  <li><strong>Good:</strong> 0.5 - 1.0 kWh per device per day</li>
+                  <li><strong>Average:</strong> 1.0 - 2.0 kWh per device per day</li>
+                  <li><strong>Below Average:</strong> 2.0 - 3.0 kWh per device per day</li>
+                  <li><strong>Poor:</strong> &gt; 3.0 kWh per device per day</li>
+                </ul>
+              </div>
+              <div style={{ marginBottom: '0' }}>
+                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600', color: '#374151' }}>
+                  📊 Data Sources & Accuracy
+                </h4>
+                <ul style={{ margin: '0 0 0 1rem', fontSize: '0.875rem', color: '#4b5563', lineHeight: '1.4' }}>
+                  <li>Energy usage data collected from IoT central hub</li>
+                  <li>Tariff rates updated according to TNB Malaysia official rates</li>
+                  <li>Carbon emission factors based on Malaysia's Energy Commission data</li>
+                  <li>All calculations rounded for display but use full precision internally</li>
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Report Footer */}
