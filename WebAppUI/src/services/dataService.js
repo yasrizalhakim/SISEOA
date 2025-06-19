@@ -17,8 +17,10 @@ import {
 } from 'firebase/firestore';
 import { ref, get, set, update, remove } from 'firebase/database';
 import { sendDeviceRuntimeWarning } from './notificationService';
-import AutomationService from './AutomationService'; // UPDATED IMPORT
-import { logDeviceEvent } from './AutomationService'; // UPDATED IMPORT
+import AutomationService from './AutomationService'; 
+import { logDeviceEvent } from './AutomationService'; 
+// FIXED: Import validateDeviceOperation from deviceService
+import { validateDeviceOperation } from './deviceService';
 
 // ================================
 // DEVICE RUNTIME WARNING SYSTEM (Updated for Firestore)
@@ -806,9 +808,9 @@ export const toggleDeviceStatus = async (deviceId) => {
     const action = newStatus === 'ON' ? 'TURN_ON' : 'TURN_OFF';
     console.log(`🔄 Current status: ${currentStatus}, New status: ${newStatus}`);
     
-    // NEW: Validate device operation against automation lockdown using unified service
+    // FIXED: Use validateDeviceOperation from deviceService instead of AutomationService
     if (newStatus === 'ON') {
-      const validation = await AutomationService.validateDeviceOperation(deviceId, 'turn-on');
+      const validation = await validateDeviceOperation(deviceId, 'turn-on');
       
       if (!validation.allowed) {
         console.log(`🔒 Device operation blocked:`, validation);
