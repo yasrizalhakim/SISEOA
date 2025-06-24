@@ -123,7 +123,7 @@ const DeviceDetail = () => {
       
       return date.toLocaleString();
     } catch (error) {
-      console.error('Error formatting timestamp:', error);
+
       return 'Unknown';
     }
   }, []);
@@ -131,24 +131,24 @@ const DeviceDetail = () => {
   // Check if user has access to this device
   const checkDeviceAccess = useCallback(async (deviceData) => {
     try {
-      console.log('🔐 Checking device access for user:', userEmail);
+  
       
       const isAdmin = await isSystemAdmin(userEmail);
       if (isAdmin) {
-        console.log('✅ SystemAdmin access granted');
+
         return true;
       }
       
       // If device has no location (unclaimed), only SystemAdmin can access
       if (!deviceData.Location) {
-        console.log('❌ Device unclaimed - only SystemAdmin access allowed');
+
         return false;
       }
       
       // Get the building from device location
       const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
       if (!locationDoc.exists()) {
-        console.log('❌ Device location not found');
+    
         return false;
       }
       
@@ -159,7 +159,7 @@ const DeviceDetail = () => {
       const roleInBuilding = await getUserRoleInBuilding(userEmail, buildingId);
       
       if (roleInBuilding === 'parent') {
-        console.log('✅ Parent access granted to building device');
+  
         return true;
       }
       
@@ -167,15 +167,15 @@ const DeviceDetail = () => {
         // Check if child is assigned to this device
         const assignedTo = deviceData.AssignedTo || [];
         const hasAccess = assignedTo.includes(userEmail);
-        console.log(`${hasAccess ? '✅' : '❌'} Child access ${hasAccess ? 'granted' : 'denied'} - device assignment check`);
+      
         return hasAccess;
       }
       
-      console.log('❌ No access - user has no role in device building');
+ 
       return false;
       
     } catch (error) {
-      console.error('Error checking device access:', error);
+ 
       return false;
     }
   }, [userEmail]);
@@ -201,7 +201,7 @@ const DeviceDetail = () => {
                 buildingName = buildingData.BuildingName || locationData.Building;
               }
             } catch (buildingError) {
-              console.error('Error fetching building details:', buildingError);
+         
             }
           }
           
@@ -213,7 +213,6 @@ const DeviceDetail = () => {
           };
         }
       } catch (locationError) {
-        console.error('Error fetching location details:', locationError);
       }
     }
     
@@ -230,7 +229,7 @@ const DeviceDetail = () => {
         enrichedDevice.locationId = '';
       }
     } catch (rtdbError) {
-      console.error('Error getting RTDB status:', rtdbError);
+   
       enrichedDevice.status = 'OFF';
       enrichedDevice.locationId = '';
     }
@@ -274,7 +273,7 @@ const DeviceDetail = () => {
   // Fetch user's buildings and locations for device relocation
   const fetchUserBuildingsAndLocations = useCallback(async () => {
     try {
-      console.log('🏢 Fetching user buildings and locations...');
+ 
       
       let userBuildings = [];
       let userLocations = [];
@@ -342,18 +341,16 @@ const DeviceDetail = () => {
       setAllUserBuildings(userBuildings);
       setAllUserLocations(userLocations);
       
-      console.log('🏢 User buildings:', userBuildings.length);
-      console.log('📍 User locations:', userLocations.length);
       
     } catch (error) {
-      console.error('Error fetching user buildings and locations:', error);
+    
     }
   }, [isUserSystemAdmin, userEmail]);
 
   // Fetch children users from the device's building
   const fetchBuildingChildren = useCallback(async (buildingId, currentAssignedTo = []) => {
     try {
-      console.log('👶 Fetching children from building:', buildingId);
+    
       
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
@@ -383,21 +380,17 @@ const DeviceDetail = () => {
       setAssignedChildren(assigned);
       setAvailableChildren(available);
       
-      console.log('👶 Building children loaded:', {
-        total: allChildren.length,
-        assigned: assigned.length,
-        available: available.length
-      });
+      
       
     } catch (error) {
-      console.error('Error fetching building children:', error);
+     
     }
   }, []);
 
   // Device automation handler
   const handleDeviceAutomation = useCallback(async (automationConfig) => {
     try {
-      console.log('📱 Device automation applied:', automationConfig);
+    
       
       // Apply automation to device in RTDB
       await automationService.applyDeviceAutomation(deviceId, automationConfig);
@@ -418,10 +411,10 @@ const DeviceDetail = () => {
       
       setTimeout(() => setSuccess(null), 5000);
       
-      console.log('✅ Device automation state saved');
+     
       
     } catch (error) {
-      console.error('❌ Error applying device automation:', error);
+      
       setError('Failed to apply device automation: ' + error.message);
       setTimeout(() => setError(null), 5000);
     }
@@ -433,7 +426,7 @@ const DeviceDetail = () => {
       setLoading(true);
       setError(null);
       
-      console.log('🔍 Fetching device details for:', deviceId);
+     
       
       const isAdmin = await isSystemAdmin(userEmail);
       setIsUserSystemAdmin(isAdmin);
@@ -464,7 +457,7 @@ const DeviceDetail = () => {
         Location: enrichedDevice.Location || ''
       });
       
-      console.log('📱 Device data loaded:', enrichedDevice);
+     
       
       const permissions = await calculatePermissions(isAdmin, enrichedDevice);
       setUserRoleInBuilding(permissions.roleInDeviceBuilding);
@@ -473,7 +466,7 @@ const DeviceDetail = () => {
       setCanAssignUsers(permissions.canAssignDevice);
       setCanViewSensitiveInfo(permissions.canViewSensitiveInfo);
       
-      console.log('🔐 Permissions:', permissions);
+      
       
       if (permissions.canEditDevice) {
         await fetchUserBuildingsAndLocations();
@@ -484,7 +477,7 @@ const DeviceDetail = () => {
       }
       
     } catch (error) {
-      console.error('❌ Error fetching device data:', error);
+     
       setError('Failed to load device data');
     } finally {
       setLoading(false);
@@ -496,7 +489,7 @@ const DeviceDetail = () => {
     try {
       setError(null);
       
-      console.log('➕ Assigning user to device:', userId);
+    
       
       const currentAssignedTo = device?.AssignedTo || [];
       if (currentAssignedTo.includes(userId)) {
@@ -525,10 +518,10 @@ const DeviceDetail = () => {
       setSuccess('User assigned successfully');
       setTimeout(() => setSuccess(null), 3000);
       
-      console.log('✅ User assigned successfully');
+   
       
     } catch (error) {
-      console.error('❌ Error assigning user:', error);
+      
       setError('Failed to assign user to device');
     }
   }, [device?.AssignedTo, deviceId, availableChildren]);
@@ -538,7 +531,7 @@ const DeviceDetail = () => {
     try {
       setError(null);
       
-      console.log('➖ Unassigning user from device:', userId);
+    
       
       const currentAssignedTo = device?.AssignedTo || [];
       const updatedAssignedTo = currentAssignedTo.filter(id => id !== userId);
@@ -562,10 +555,10 @@ const DeviceDetail = () => {
       setSuccess('User unassigned successfully');
       setTimeout(() => setSuccess(null), 3000);
       
-      console.log('✅ User unassigned successfully');
+      
       
     } catch (error) {
-      console.error('❌ Error unassigning user:', error);
+      
       setError('Failed to unassign user from device');
     }
   }, [device?.AssignedTo, deviceId, assignedChildren]);
@@ -601,7 +594,7 @@ const DeviceDetail = () => {
       setSaving(true);
       setError(null);
       
-      console.log('💾 Saving device changes...');
+    
       
       if (!editData.DeviceName.trim()) {
         setError('Device name is required');
@@ -638,10 +631,10 @@ const DeviceDetail = () => {
       
       setTimeout(() => setSuccess(null), 3000);
       
-      console.log('✅ Device updated successfully');
+   
       
     } catch (error) {
-      console.error('❌ Error saving device:', error);
+      
       setError('Failed to save device changes');
     } finally {
       setSaving(false);
@@ -671,7 +664,7 @@ const DeviceDetail = () => {
       setDeleting(true);
       setError(null);
       
-      console.log('🗑️ Deleting device...');
+     
       
       // Send notifications before deleting the device
       if (device?.Location && device?.locationDetails) {
@@ -686,9 +679,9 @@ const DeviceDetail = () => {
             buildingName,
             userEmail
           );
-          console.log('📢 SystemAdmin device deletion notifications sent to building parents');
+          
         } catch (notificationError) {
-          console.error('❌ Failed to send SystemAdmin device deletion notifications:', notificationError);
+         
         }
       }
       
@@ -699,9 +692,9 @@ const DeviceDetail = () => {
           device?.id,
           userEmail
         );
-        console.log('📢 SystemAdmin notification sent about device deletion');
+
       } catch (notificationError) {
-        console.error('❌ Failed to send SystemAdmin notification:', notificationError);
+     
       }
       
       // Delete from Firestore
@@ -711,7 +704,7 @@ const DeviceDetail = () => {
       const rtdbRef = ref(database, `Devices/${deviceId}`);
       await remove(rtdbRef);
       
-      console.log('✅ Device deleted successfully');
+
       
       navigate('/devices', { 
         state: { 
@@ -720,7 +713,7 @@ const DeviceDetail = () => {
       });
       
     } catch (error) {
-      console.error('❌ Error deleting device:', error);
+ 
       setError('Failed to delete device: ' + error.message);
     } finally {
       setDeleting(false);
@@ -1072,7 +1065,7 @@ const DeviceInfoForm = ({
     )}
     
     {/* Only show Assigned To info to users who can view sensitive info */}
-    {canViewSensitiveInfo && device?.AssignedTo && device.AssignedTo.length > 0 && (
+    {canViewSensitiveInfo && !isSystemAdmin && device?.AssignedTo && device.AssignedTo.length > 0 && (
       <div className="info-group">
         <label>Assigned To</label>
         <div className="assigned-users">
@@ -1311,9 +1304,9 @@ const EnergyUsageTab = ({ deviceId, deviceName, locationName, buildingName }) =>
       <h4>
         <MdBolt /> Energy Usage Analytics
       </h4>
-      <p>
+      {/* <p>
         Monitor energy consumption for <strong>{deviceName}</strong> located in <strong>{locationName}</strong>, <strong>{buildingName}</strong>.
-      </p>
+      </p> */}
     </div>
     
     <EnergyChart

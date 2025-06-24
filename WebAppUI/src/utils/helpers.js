@@ -20,12 +20,12 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
  */
 export const isSystemAdmin = async (userEmail) => {
   if (!userEmail) {
-    console.log('❌ No email provided for SystemAdmin check');
+    console.log('No email provided for SystemAdmin check');
     return false;
   }
   
   try {
-    console.log(`🔍 Checking SystemAdmin status for: ${userEmail}`);
+
     
     const systemAdminQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -37,15 +37,9 @@ export const isSystemAdmin = async (userEmail) => {
     const systemAdminSnapshot = await getDocs(systemAdminQuery);
     const isAdmin = !systemAdminSnapshot.empty;
     
-    console.log(`🔧 SystemAdmin check result for ${userEmail}:`, isAdmin);
-    
-    if (isAdmin) {
-      console.log('✅ User is SystemAdmin - has full system access');
-    }
-    
     return isAdmin;
   } catch (error) {
-    console.error('❌ Error checking SystemAdmin status:', error);
+    console.error('Error checking SystemAdmin status:', error);
     return false;
   }
 };
@@ -64,8 +58,7 @@ export const getUserBuildingRoles = async (userEmail) => {
     // First check if user is SystemAdmin
     const isAdmin = await isSystemAdmin(userEmail);
     if (isAdmin) {
-      console.log('🔧 SystemAdmin detected - adding SystemAdmin role to map');
-      buildingRoles.set('SystemAdmin', 'admin');
+        buildingRoles.set('SystemAdmin', 'admin');
     }
     
     const userBuildingsQuery = query(
@@ -80,7 +73,7 @@ export const getUserBuildingRoles = async (userEmail) => {
       buildingRoles.set(data.Building, data.Role);
     });
     
-    console.log(`👤 Building roles for ${userEmail}:`, Object.fromEntries(buildingRoles));
+   
     return buildingRoles;
   } catch (error) {
     console.error('Error fetching user building roles:', error);
@@ -99,7 +92,6 @@ export const getUserRole = async (userEmail) => {
   try {
     // Check if SystemAdmin first - this takes precedence
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 User is SystemAdmin - returning admin role');
       return 'admin';
     }
     
@@ -131,7 +123,7 @@ export const getUserRoleInBuilding = async (userEmail, buildingId) => {
   try {
     // SystemAdmin has admin access to all buildings
     if (await isSystemAdmin(userEmail)) {
-      console.log(`🔧 SystemAdmin has admin access to building ${buildingId}`);
+
       return 'admin';
     }
     
@@ -145,11 +137,11 @@ export const getUserRoleInBuilding = async (userEmail, buildingId) => {
     
     if (!userBuildingSnapshot.empty) {
       const userBuildingData = userBuildingSnapshot.docs[0].data();
-      console.log(`👤 User role in building ${buildingId}:`, userBuildingData.Role);
+
       return userBuildingData.Role;
     }
     
-    console.log(`❌ User has no access to building ${buildingId}`);
+    console.log(` User has no access to building ${buildingId}`);
     return 'none';
   } catch (error) {
     console.error(`Error getting user role in building ${buildingId}:`, error);
@@ -200,7 +192,7 @@ export const canManageDevices = async (userEmail) => {
   try {
     // SystemAdmin can manage all devices
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 SystemAdmin can manage devices');
+ 
       return true;
     }
     
@@ -218,7 +210,7 @@ export const canManageDevices = async (userEmail) => {
     
     // ALL users can claim devices (children can become parents by claiming)
     const canManage = true; // Allow all users to attempt device claiming
-    console.log(`👤 Can manage devices (hasManagementRole: ${hasManagementRole}):`, canManage);
+  
     return canManage;
   } catch (error) {
     console.error('Error checking device management permission:', error);
@@ -235,7 +227,6 @@ export const canManageBuildings = async (userEmail) => {
   try {
     // SystemAdmin can manage all buildings
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 SystemAdmin can manage buildings');
       return true;
     }
     
@@ -254,7 +245,6 @@ export const canManageBuildings = async (userEmail) => {
     // ALL users (including children) can create buildings if they have a device ID
     // Children can become parents of new buildings
     const canManage = true; // Allow all users to attempt building creation
-    console.log(`👤 Can manage buildings (hasParentRole: ${hasParentRole}):`, canManage);
     return canManage;
   } catch (error) {
     console.error('Error checking building management permission:', error);
@@ -271,7 +261,6 @@ export const canManageUsers = async (userEmail) => {
   try {
     // SystemAdmin can manage all users
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 SystemAdmin can manage users');
       return true;
     }
     
@@ -286,8 +275,6 @@ export const canManageUsers = async (userEmail) => {
         break;
       }
     }
-    
-    console.log(`👤 Can manage users (hasManagementRole: ${hasManagementRole}):`, hasManagementRole);
     return hasManagementRole;
   } catch (error) {
     console.error('Error checking user management permission:', error);
@@ -308,48 +295,38 @@ export const canControlDevice = async (device, userEmail, locations) => {
   try {
     // SystemAdmin can control all devices
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 SystemAdmin can control all devices');
+  
       return true;
     }
     
     // Device must have a location
     if (!device.Location) {
-      console.log('❌ Device has no location assigned');
       return false;
     }
     
     // Find location and building
     const location = locations.find(loc => loc.id === device.Location);
     if (!location) {
-      console.log('❌ Device location not found');
       return false;
     }
     
     const userRoleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
     
     if (userRoleInBuilding === 'admin' || userRoleInBuilding === 'parent') {
-      console.log(`✅ User can control device (role: ${userRoleInBuilding})`);
       return true;
     } else if (userRoleInBuilding === 'children') {
       // Children can control devices if they have access to the device's location
       const assignedLocations = await getUserAssignedLocations(userEmail, location.Building);
       const hasLocationAccess = assignedLocations.includes(device.Location);
       
-      console.log(`👶 Child user location access check:`, {
-        deviceLocation: device.Location,
-        assignedLocations: assignedLocations,
-        hasAccess: hasLocationAccess
-      });
-      
+     
       // BACKWARD COMPATIBILITY: Also check legacy AssignedTo field
       const legacyAccess = device.AssignedTo && Array.isArray(device.AssignedTo) && device.AssignedTo.includes(userEmail);
       
       const canControl = hasLocationAccess || legacyAccess;
-      console.log(`👶 Child user device access (location-based: ${hasLocationAccess}, legacy: ${legacyAccess}):`, canControl);
       return canControl;
     }
     
-    console.log('❌ User cannot control device');
     return false;
   } catch (error) {
     console.error('Error checking device control permission:', error);
@@ -422,7 +399,6 @@ export const filterUserDevices = async (devices, userEmail, locations) => {
   try {
     // SystemAdmin sees all devices
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 SystemAdmin - returning all devices');
       return devices;
     }
     
@@ -456,7 +432,6 @@ export const filterUserDevices = async (devices, userEmail, locations) => {
       }
     }
     
-    console.log(`👤 User can access ${accessibleDevices.length} out of ${devices.length} devices`);
     return accessibleDevices;
   } catch (error) {
     console.error('Error filtering user devices:', error);
@@ -475,7 +450,7 @@ export const getUserBuildings = async (userEmail) => {
   try {
     // SystemAdmin sees all buildings
     if (await isSystemAdmin(userEmail)) {
-      console.log('🔧 SystemAdmin - fetching all buildings');
+ 
       const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
       return buildingsSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -505,7 +480,7 @@ export const getUserBuildings = async (userEmail) => {
       }
     }
     
-    console.log(`👤 User has access to ${buildings.length} buildings`);
+
     return buildings;
   } catch (error) {
     console.error('Error getting user buildings:', error);

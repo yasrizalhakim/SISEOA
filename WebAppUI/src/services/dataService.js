@@ -52,7 +52,7 @@ const checkDeviceRuntimeWarning = async (deviceId, deviceData, rtdbData) => {
         lastWarningAt: null,
         warningCount: 0
       });
-      console.log(`📝 Set onSince timestamp for device ${deviceId}`);
+    
       return false;
     }
 
@@ -85,17 +85,10 @@ const checkDeviceRuntimeWarning = async (deviceId, deviceData, rtdbData) => {
       return false;
     }
 
-    console.log(`⚠️ Device ${deviceId} runtime warning trigger:`, {
-      hoursOn,
-      warningCount,
-      nextWarningHour,
-      shouldWarn
-    });
-
     // Get location and building details
     const locationDoc = await getDoc(doc(firestore, 'LOCATION', deviceData.Location));
     if (!locationDoc.exists()) {
-      console.error(`❌ Location ${deviceData.Location} not found for device ${deviceId}`);
+      console.error(`Location ${deviceData.Location} not found for device ${deviceId}`);
       return false;
     }
 
@@ -128,11 +121,11 @@ const checkDeviceRuntimeWarning = async (deviceId, deviceData, rtdbData) => {
       lastSeen: serverTimestamp()
     });
 
-    console.log(`✅ Runtime warning sent for device ${deviceId} (${hoursOn}h on, warning #${warningCount + 1})`);
+
     return true;
 
   } catch (error) {
-    console.error(`❌ Error checking runtime warning for device ${deviceId}:`, error);
+    console.error(`Error checking runtime warning for device ${deviceId}:`, error);
     return false;
   }
 };
@@ -149,9 +142,8 @@ const resetDeviceRuntimeTracking = async (deviceId) => {
       warningCount: 0,
       lastSeen: serverTimestamp()
     });
-    console.log(`🔄 Reset runtime tracking for device ${deviceId}`);
   } catch (error) {
-    console.error(`❌ Error resetting runtime tracking for device ${deviceId}:`, error);
+    console.error(`Error resetting runtime tracking for device ${deviceId}:`, error);
   }
 };
 
@@ -160,8 +152,6 @@ const resetDeviceRuntimeTracking = async (deviceId) => {
  */
 const bulkCheckRuntimeWarnings = async (deviceIds = []) => {
   try {
-    console.log(`⚠️ Bulk checking runtime warnings for ${deviceIds.length} devices...`);
-    
     let checkedCount = 0;
     let warningsSent = 0;
     
@@ -180,15 +170,15 @@ const bulkCheckRuntimeWarnings = async (deviceIds = []) => {
         if (warningSent) warningsSent++;
         
       } catch (error) {
-        console.error(`❌ Error checking device ${deviceId}:`, error);
+        console.error(`Error checking device ${deviceId}:`, error);
       }
     }
     
-    console.log(`✅ Bulk runtime check completed: ${checkedCount} devices checked, ${warningsSent} warnings sent`);
+ 
     return { checkedCount, warningsSent };
     
   } catch (error) {
-    console.error('❌ Error in bulk runtime warning check:', error);
+    console.error('Error in bulk runtime warning check:', error);
     return { checkedCount: 0, warningsSent: 0 };
   }
 };
@@ -455,7 +445,7 @@ export const deleteLocation = async (locationId) => {
  */
 export const assignUserToLocations = async (userEmail, buildingId, locationIds) => {
   try {
-    console.log(`📍 Assigning user ${userEmail} to locations:`, locationIds);
+
     
     // Get user's building relationship
     const userBuildingQuery = query(
@@ -480,7 +470,6 @@ export const assignUserToLocations = async (userEmail, buildingId, locationIds) 
     console.log('✅ User assigned to locations successfully');
     return true;
   } catch (error) {
-    console.error('Error assigning user to locations:', error);
     throw error;
   }
 };
@@ -794,7 +783,6 @@ export const deleteDevice = async (deviceId) => {
 
 export const toggleDeviceStatus = async (deviceId) => {
   try {
-    console.log(`🔄 Toggling device ${deviceId}...`);
     
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     const snapshot = await get(rtdbRef);
@@ -806,14 +794,13 @@ export const toggleDeviceStatus = async (deviceId) => {
     
     const newStatus = currentStatus === 'ON' ? 'OFF' : 'ON';
     const action = newStatus === 'ON' ? 'TURN_ON' : 'TURN_OFF';
-    console.log(`🔄 Current status: ${currentStatus}, New status: ${newStatus}`);
     
     // FIXED: Use validateDeviceOperation from deviceService instead of AutomationService
     if (newStatus === 'ON') {
       const validation = await validateDeviceOperation(deviceId, 'turn-on');
       
       if (!validation.allowed) {
-        console.log(`🔒 Device operation blocked:`, validation);
+  
         
         // Throw a user-friendly error based on the validation code
         switch (validation.code) {
@@ -828,7 +815,6 @@ export const toggleDeviceStatus = async (deviceId) => {
         }
       }
       
-      console.log(`✅ Device operation validated - turning on device ${deviceId}`);
     }
     
     // Proceed with status update if validation passed (or if turning off)
@@ -864,10 +850,10 @@ export const toggleDeviceStatus = async (deviceId) => {
     
     await updateDoc(doc(firestore, 'DEVICE', deviceId), firestoreUpdateData);
     
-    console.log(`✅ Device ${deviceId} toggled to ${newStatus} and logged to eventHistory`);
+
     return newStatus;
   } catch (error) {
-    console.error(`❌ Error toggling device ${deviceId}:`, error);
+
     throw error;
   }
 };
@@ -884,7 +870,7 @@ export const toggleDeviceStatus = async (deviceId) => {
  */
 export const claimDevice = async (deviceId, locationId, deviceUpdates = {}) => {
   try {
-    console.log(`📍 Claiming device ${deviceId} to location ${locationId}`);
+  
     
     // Update device with location and any other updates
     const updateData = {
@@ -919,7 +905,7 @@ export const claimDevice = async (deviceId, locationId, deviceUpdates = {}) => {
       localStorage.getItem('userEmail')
     );
     
-    console.log('✅ Device claimed successfully and logged to eventHistory');
+
     return true;
   } catch (error) {
     console.error('Error claiming device:', error);
@@ -934,7 +920,7 @@ export const claimDevice = async (deviceId, locationId, deviceUpdates = {}) => {
  */
 export const unclaimDevice = async (deviceId) => {
   try {
-    console.log(`📍 Unclaiming device ${deviceId}`);
+
     
     // UPDATED: Update device to remove location and reset timestamps
     await updateDoc(doc(firestore, 'DEVICE', deviceId), {
@@ -961,8 +947,6 @@ export const unclaimDevice = async (deviceId) => {
       'manual', 
       localStorage.getItem('userEmail')
     );
-    
-    console.log('✅ Device unclaimed successfully and logged to eventHistory');
     return true;
   } catch (error) {
     console.error('Error unclaiming device:', error);
@@ -1068,7 +1052,6 @@ export const getDevicesByLocation = async (locationId) => {
  */
 export const moveDeviceToLocation = async (deviceId, newLocationId) => {
   try {
-    console.log(`📍 Moving device ${deviceId} to location ${newLocationId}`);
     
     // UPDATED: Update device location in Firestore with timestamp reset
     const updateData = {
@@ -1100,7 +1083,7 @@ export const moveDeviceToLocation = async (deviceId, newLocationId) => {
       localStorage.getItem('userEmail')
     );
     
-    console.log('✅ Device moved successfully and logged to eventHistory');
+
     return true;
   } catch (error) {
     console.error('Error moving device:', error);
@@ -1261,7 +1244,7 @@ export const unassignDeviceFromUser = async (deviceId, userEmail) => {
  */
 export const getUserDevicesAndLocations = async (userEmail) => {
   try {
-    console.log('🔍 Fetching devices and locations for user:', userEmail);
+    
 
     // Get user's building roles
     const userBuildingsQuery = query(
@@ -1318,7 +1301,7 @@ export const getUserDevicesAndLocations = async (userEmail) => {
     // UPDATED: Get all devices with Firestore timestamp handling and event logging
     const devices = await getAllDevices(); // This now includes Firestore timestamp handling and event logging
     
-    console.log(`📱 Found ${devices.length} devices and ${locations.length} locations`);
+  
     
     return { devices, locations, buildingIds, userLocationAssignments };
   } catch (error) {
@@ -1435,7 +1418,7 @@ export const validateUserHasLocationAccess = async (userEmail, locationId) => {
  */
 export const migrateLegacyDeviceAssignments = async (buildingId) => {
   try {
-    console.log(`🔄 Starting migration for building: ${buildingId}`);
+
     
     // Get all locations in the building
     const locationsQuery = query(
@@ -1506,7 +1489,6 @@ export const migrateLegacyDeviceAssignments = async (buildingId) => {
       // await updateDoc(deviceDoc.ref, { AssignedTo: [] });
     }
     
-    console.log(`✅ Migration completed:`, migrationResults);
     return migrationResults;
   } catch (error) {
     console.error('Error during migration:', error);

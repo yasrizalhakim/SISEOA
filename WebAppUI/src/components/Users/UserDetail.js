@@ -78,7 +78,7 @@ const UserDetail = () => {
         setLoading(true);
         setError(null);
         
-        console.log('🔍 Fetching user details for:', userId);
+      
         
         // Check if current user is SystemAdmin
         const isAdmin = await isSystemAdmin(currentUserEmail);
@@ -101,8 +101,7 @@ const UserDetail = () => {
           ContactNo: userData.ContactNo || ''
         });
         
-        console.log('👤 User data loaded:', userData);
-        
+      
         // Check if current user can manage this user
         const canManage = await checkUserManagementPermission(userId, currentUserEmail);
         setCanManageThisUser(canManage);
@@ -120,7 +119,7 @@ const UserDetail = () => {
         }
         
       } catch (error) {
-        console.error('❌ Error fetching user data:', error);
+       
         setError('Failed to load user data');
       } finally {
         setLoading(false);
@@ -183,7 +182,7 @@ const UserDetail = () => {
       setCurrentUserRole('user');
       return false;
     } catch (error) {
-      console.error('Error checking user management permission:', error);
+   
       return false;
     }
   };
@@ -212,7 +211,7 @@ const UserDetail = () => {
       
       return false;
     } catch (error) {
-      console.error('Error checking remove permission:', error);
+    
       return false;
     }
   };
@@ -220,18 +219,16 @@ const UserDetail = () => {
   // UPDATED: Fetch user's building relationships - SystemAdmin shows only parent buildings
   const fetchUserBuildings = async (targetUserId, targetUserData) => {
     try {
-      console.log('🔍 Fetching buildings using getUserBuildingRoles for user:', targetUserId);
-      console.log('🔍 Current user is SystemAdmin:', isUserSystemAdmin);
-      
+     
       // Use getUserBuildingRoles helper to get user's building roles
       const targetUserBuildingRoles = await getUserBuildingRoles(targetUserId);
-      console.log(`📋 Found ${targetUserBuildingRoles.size} building roles for user ${targetUserId}:`, Object.fromEntries(targetUserBuildingRoles));
+     
       
       // Get current user's building roles for permission checking (only if not SystemAdmin)
       let currentUserBuildingRoles = new Map();
       if (!isUserSystemAdmin) {
         currentUserBuildingRoles = await getUserBuildingRoles(currentUserEmail);
-        console.log(`📋 Current user building roles:`, Object.fromEntries(currentUserBuildingRoles));
+    
       }
       
       const buildingsList = [];
@@ -251,34 +248,32 @@ const UserDetail = () => {
         });
       });
       
-      console.log(`📋 USERBUILDING documents for ${targetUserId}:`, Array.from(userBuildingMap.keys()));
+    
       
       for (const [buildingId, userRole] of targetUserBuildingRoles) {
         // Skip SystemAdmin building
         if (buildingId === 'SystemAdmin') {
-          console.log(`🚫 Skipping SystemAdmin building`);
           continue;
         }
         
-        console.log(`🔍 Processing building: ${buildingId}, Role: ${userRole}`);
-        
+       
         // Determine if this building should be shown based on current user's permissions
         let shouldShowBuilding = false;
         
         if (isUserSystemAdmin) {
           // UPDATED: SystemAdmin can only see buildings where target user has 'parent' role
-          console.log(`🔧 SystemAdmin checking building ${buildingId} where target user has role: ${userRole}`);
+        
           
           if (userRole === 'parent') {
             shouldShowBuilding = true;
-            console.log(`✅ SystemAdmin viewing - target user is PARENT of building ${buildingId}`);
+          
           } else {
-            console.log(`🚫 SystemAdmin skipping - target user has role ${userRole} in building ${buildingId} (only showing parent buildings)`);
+           
           }
         } else if (currentUserEmail === targetUserId) {
           // Users can see their own building access
           shouldShowBuilding = true;
-          console.log(`✅ Self-view - showing own building access for ${buildingId}`);
+          
         } else {
           // For non-SystemAdmin users, check parent-child or admin relationships
           const currentUserRoleInBuilding = currentUserBuildingRoles.get(buildingId);
@@ -287,17 +282,17 @@ const UserDetail = () => {
             // Show building if current user is parent and target user is children in same building
             if (currentUserRoleInBuilding === 'parent' && userRole === 'children') {
               shouldShowBuilding = true;
-              console.log(`✅ Parent-child relationship found in building ${buildingId}`);
+              
             }
             // Show building if current user is admin (admin can see all users in building)
             else if (currentUserRoleInBuilding === 'admin') {
               shouldShowBuilding = true;
-              console.log(`✅ Admin access to building ${buildingId}`);
+             
             } else {
-              console.log(`🚫 No valid relationship in building ${buildingId} (current: ${currentUserRoleInBuilding}, target: ${userRole})`);
+              console.log(` No valid relationship in building ${buildingId} (current: ${currentUserRoleInBuilding}, target: ${userRole})`);
             }
           } else {
-            console.log(`🚫 Current user has no role in building ${buildingId}`);
+            console.log(`Current user has no role in building ${buildingId}`);
           }
         }
         
@@ -316,29 +311,28 @@ const UserDetail = () => {
               assignedLocations: userBuildingInfo?.assignedLocations || []
             });
             
-            console.log(`✅ Added building to list: ${buildingData.BuildingName || buildingId} (target user role: ${userRole})`);
           } else {
-            console.log(`⚠️ Building document not found for ID: ${buildingId}`);
+            console.log(`Building document not found for ID: ${buildingId}`);
           }
         }
       }
       
       setUserBuildings(buildingsList);
-      console.log(`🏢 Final building list (SystemAdmin filtered to parent only): ${buildingsList.length} buildings`);
+    
       
       if (isUserSystemAdmin) {
-        console.log(`👑 SystemAdmin view: Showing ${buildingsList.length} buildings where user is parent`);
+        
       }
       
     } catch (error) {
-      console.error('Error fetching user buildings using getUserBuildingRoles:', error);
+    
     }
   };
 
   // UPDATED: Fetch user's assigned locations using getUserBuildingRoles helper for access validation
   const fetchUserLocations = async (targetUserId) => {
     try {
-      console.log('🔍 Fetching user locations using getUserBuildingRoles');
+      
       
       // Use getUserBuildingRoles helper to get user's building roles
       const targetUserBuildingRoles = await getUserBuildingRoles(targetUserId);
@@ -364,14 +358,14 @@ const UserDetail = () => {
         const assignedLocationIds = userBuildingMap.get(buildingId) || [];
         if (assignedLocationIds.length === 0) continue;
         
-        console.log(`🏢 Checking location access for building ${buildingId} (target role: ${targetUserRole})`);
+      
         
         // Check if current user can see locations in this building using getUserBuildingRoles
         let canSeeBuilding = false;
         
         if (isUserSystemAdmin || currentUserEmail === targetUserId) {
           canSeeBuilding = true;
-          console.log(`✅ Location access granted - SystemAdmin or self-view`);
+         
         } else {
           // Validate current user's role in this building using getUserBuildingRoles
           const currentUserRole = currentUserBuildingRoles.get(buildingId);
@@ -381,17 +375,16 @@ const UserDetail = () => {
             if ((currentUserRole === 'parent' && targetUserRole === 'children') || 
                 currentUserRole === 'admin') {
               canSeeBuilding = true;
-              console.log(`✅ Location access granted - Role relationship (current: ${currentUserRole}, target: ${targetUserRole})`);
+              
             } else {
-              console.log(`🚫 Location access denied - No valid role relationship (current: ${currentUserRole}, target: ${targetUserRole})`);
+              console.log(`Location access denied - No valid role relationship (current: ${currentUserRole}, target: ${targetUserRole})`);
             }
           } else {
-            console.log(`🚫 Location access denied - Current user has no role in building ${buildingId}`);
+            console.log(`Location access denied - Current user has no role in building ${buildingId}`);
           }
         }
         
         if (!canSeeBuilding) {
-          console.log(`🚫 Skipping locations for building ${buildingId} - no access via getUserBuildingRoles`);
           continue;
         }
         
@@ -426,7 +419,6 @@ const UserDetail = () => {
                 devices: devices
               });
               
-              console.log(`✅ Added location ${locationId} for building ${buildingId} (validated via getUserBuildingRoles)`);
             }
           } catch (locationError) {
             console.error(`Error fetching location ${locationId}:`, locationError);
@@ -435,7 +427,6 @@ const UserDetail = () => {
       }
       
       setAssignedLocations(allLocations);
-      console.log(`📍 User locations (using getUserBuildingRoles): ${allLocations.length} locations`);
     } catch (error) {
       console.error('Error fetching user locations:', error);
     }
@@ -471,7 +462,6 @@ const UserDetail = () => {
       setSaving(true);
       setError(null);
       
-      console.log('💾 Saving user changes...');
       
       // Validate required fields
       if (!editData.Name.trim()) {
@@ -502,10 +492,9 @@ const UserDetail = () => {
       
       setTimeout(() => setSuccess(null), 3000);
       
-      console.log('✅ User updated successfully');
       
     } catch (error) {
-      console.error('❌ Error saving user:', error);
+      console.error('Error saving user:', error);
       setError('Failed to save user changes');
     } finally {
       setSaving(false);
@@ -568,8 +557,6 @@ const UserDetail = () => {
       setRemoving(true);
       setError(null);
       
-      console.log('🗑️ Removing child from all parent buildings using getUserBuildingRoles...');
-      
       // Remove child from all valid parent buildings
       let removedCount = 0;
       const removedBuildings = [];
@@ -596,7 +583,7 @@ const UserDetail = () => {
             (buildingDoc.data().BuildingName || buildingId) : buildingId;
           removedBuildings.push(buildingName);
           
-          console.log(`✅ Removed child from building ${buildingId}`);
+          console.log(`Removed child from building ${buildingId}`);
         }
       }
       
@@ -609,8 +596,6 @@ const UserDetail = () => {
         `Successfully removed ${user.Name || user.email} from ${removedCount} building(s): ${removedBuildings.join(', ')}`
       );
       
-      console.log(`✅ Child removed from ${removedCount} buildings successfully`);
-      
       // Redirect to users page after a short delay
       setTimeout(() => {
         navigate('/users', {
@@ -621,7 +606,7 @@ const UserDetail = () => {
       }, 2000);
       
     } catch (error) {
-      console.error('❌ Error removing child:', error);
+      console.error('Error removing child:', error);
       setError('Failed to remove child: ' + error.message);
     } finally {
       setRemoving(false);
@@ -666,7 +651,6 @@ const UserDetail = () => {
         return;
       }
     } catch (validationError) {
-      console.error('Error validating removal permission:', validationError);
       setError('Failed to validate removal permissions.');
       return;
     }
@@ -686,9 +670,6 @@ const UserDetail = () => {
     try {
       setRemoving(true);
       setError(null);
-      
-      console.log('🗑️ Removing user from building via USERBUILDING...');
-      
       // Delete the user-building relationship
       await deleteDoc(doc(firestore, 'USERBUILDING', userBuildingId));
       
@@ -697,8 +678,6 @@ const UserDetail = () => {
       setAssignedLocations(prev => prev.filter(location => location.buildingId !== buildingId));
       
       setSuccess(`User removed from building "${buildingName}" successfully`);
-      
-      console.log('✅ User removed from building successfully');
       
       // Redirect to building page after a short delay
       setTimeout(() => {
@@ -710,7 +689,6 @@ const UserDetail = () => {
       }, 2000);
       
     } catch (error) {
-      console.error('❌ Error removing user from building:', error);
       setError('Failed to remove user from building: ' + error.message);
     } finally {
       setRemoving(false);

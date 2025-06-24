@@ -1,8 +1,8 @@
-// src/components/Devices/Devices.js - Fixed infinite loop issue
+// src/components/Devices/Devices.js - Enhanced with Pi Device Refresh Integration
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { MdAdd, MdRefresh, MdSearch, MdDevices } from 'react-icons/md';
+import { MdAdd, MdRefresh, MdSearch, MdDevices, MdMemory } from 'react-icons/md';
 import { database } from '../../services/firebase';
 import { ref, update } from 'firebase/database';
 import dataService from '../../services/dataService';
@@ -14,6 +14,61 @@ import {
   getUserRoleInBuilding
 } from '../../utils/helpers';
 import './Devices.css';
+
+// ==============================================================================
+// PI DEVICE REFRESH SERVICE
+// ==============================================================================
+
+/**
+ * Service to communicate with Raspberry Pi for device refresh operations
+ */
+const PiDeviceRefreshService = {
+  /**
+   * Trigger Pi to refresh its device mappings
+   * @returns {Promise<Object>} Refresh result
+   */
+  triggerPiDeviceRefresh: async () => {
+    try {
+      console.log('🔄 Triggering Pi device mappings refresh...');
+      
+      const timestamp = new Date().toISOString();
+      const refreshTrigger = {
+        action: 'REFRESH_DEVICES',
+        triggeredAt: timestamp,
+        triggeredBy: localStorage.getItem('userEmail') || 'system',
+        status: 'PENDING'
+      };
+      
+      // Import Firebase functions
+      const { firestore } = await import('../../services/firebase');
+      const { doc, setDoc } = await import('firebase/firestore');
+      
+      // Create unique trigger ID
+      const triggerId = `REFRESH_${Date.now()}`;
+      
+      // Send trigger to Pi
+      await setDoc(
+        doc(firestore, 'DEVICE_REFRESH_TRIGGERS', triggerId), 
+        refreshTrigger
+      );
+      
+      console.log(`✅ Device refresh trigger sent to Pi: ${triggerId}`);
+      
+      return {
+        success: true,
+        message: 'Pi device refresh triggered successfully',
+        triggerId: triggerId
+      };
+      
+    } catch (error) {
+      console.error('❌ Error triggering Pi device refresh:', error);
+      return {
+        success: false,
+        message: 'Failed to trigger Pi device refresh: ' + error.message
+      };
+    }
+  }
+};
 
 // Filter options
 const STATUS_FILTERS = [
@@ -40,13 +95,13 @@ const Devices = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [refreshStatus, setRefreshStatus] = useState(null);
   
   // User permissions
   const [userRole, setUserRole] = useState('none');
   const [isUserSystemAdmin, setIsUserSystemAdmin] = useState(false);
   const [canManage, setCanManage] = useState(false);
 
-  // FIXED: Move filterAccessibleDevices inside fetchDevices to avoid circular dependency
   // Enhanced device filtering with strict security
   const filterAccessibleDevices = useCallback(async (allDevices, locationsData, isAdmin) => {
     const accessibleDevices = [];
@@ -80,9 +135,8 @@ const Devices = () => {
       }
     }
     
-    console.log(`🔐 Filtered ${allDevices.length} devices to ${accessibleDevices.length} accessible devices`);
     return accessibleDevices;
-  }, [userEmail]); // Only depend on userEmail, not locations
+  }, [userEmail]);
 
   // Memoized filtered devices
   const filteredDevices = useMemo(() => {
@@ -113,7 +167,7 @@ const Devices = () => {
       
       return true;
     });
-  }, [devices, searchTerm, statusFilter, locationFilter, locations]); // Add locations dependency for getLocationName
+  }, [devices, searchTerm, statusFilter, locationFilter, locations]);
 
   // Helper functions
   const getLocationName = useCallback((device) => {
@@ -175,7 +229,7 @@ const Devices = () => {
               buildingName = buildingData.BuildingName || locationData.Building;
             }
           } catch (buildingError) {
-            console.error('Error fetching building details:', buildingError);
+            console.error('Error fetching building data:', buildingError);
           }
         }
         
@@ -190,7 +244,7 @@ const Devices = () => {
         };
       }
     } catch (error) {
-      console.error(`Error fetching location details for device ${device.id}:`, error);
+      console.error('Error fetching location details:', error);
     }
 
     return {
@@ -199,13 +253,14 @@ const Devices = () => {
     };
   }, []);
 
-  // FIXED: Fetch devices with runtime warning checks
+  // ENHANCED: Fetch devices with Pi refresh integration
   const fetchDevices = useCallback(async () => {
     try {
       setRefreshing(true);
       setError(null);
+      setRefreshStatus(null);
 
-      console.log('🚀 Fetching devices for user:', userEmail);
+      console.log('🔄 Starting device refresh...');
 
       const isAdmin = await isSystemAdmin(userEmail);
       setIsUserSystemAdmin(isAdmin);
@@ -216,13 +271,9 @@ const Devices = () => {
       const canManageDevs = await canManageDevices(userEmail);
       setCanManage(canManageDevs);
 
-      console.log('👤 User permissions:', { 
-        isSystemAdmin: isAdmin, 
-        role: role, 
-        canManageDevices: canManageDevs 
-      });
+      console.log('📱 Fetching device data from web app...');
 
-      // Now includes automatic runtime warning checks
+      // Fetch devices and locations from web app
       const { devices: allDevices, locations: allLocations } = await dataService.getUserDevicesAndLocations(userEmail);
       
       const locationsWithBuildingNames = allLocations.map(location => ({
@@ -231,35 +282,65 @@ const Devices = () => {
         buildingName: location.buildingName || location.Building || 'Unknown Building'
       }));
       
-      // FIXED: Set locations first
       setLocations(locationsWithBuildingNames);
 
-      // FIXED: Use the filterAccessibleDevices with current data, not state
       const accessibleDevices = await filterAccessibleDevices(allDevices, locationsWithBuildingNames, isAdmin);
       
-      console.log('📍 Fetching location details for accessible devices...');
+      console.log(`📊 Found ${accessibleDevices.length} accessible devices`);
+      
       const devicesWithLocationDetails = await Promise.all(
         accessibleDevices.map(device => fetchDeviceLocationDetails(device))
       );
       
       setDevices(devicesWithLocationDetails);
 
-      console.log('📱 Accessible devices with location details:', devicesWithLocationDetails.length);
-
-      // Check for any devices that may need runtime warnings
-      const onDevices = devicesWithLocationDetails.filter(device => device.status === 'ON');
-      if (onDevices.length > 0) {
-        console.log(`⚠️ Found ${onDevices.length} devices currently ON - runtime warnings checked automatically`);
+      // ENHANCED: Trigger Pi device refresh for SystemAdmin users
+      if (isAdmin) {
+        console.log('👑 SystemAdmin detected - triggering Pi device refresh...');
+        setRefreshStatus({
+          type: 'info',
+          message: '🤖 Syncing with Raspberry Pi...'
+        });
+        
+        const piRefreshResult = await PiDeviceRefreshService.triggerPiDeviceRefresh();
+        
+        if (piRefreshResult.success) {
+          setRefreshStatus({
+            type: 'success',
+            message: '✅ Web app and Pi device mappings refreshed successfully'
+          });
+          console.log('✅ Pi device refresh triggered successfully');
+        } else {
+          setRefreshStatus({
+            type: 'warning',
+            message: '⚠️ Web app refreshed, but Pi sync failed: ' + piRefreshResult.message
+          });
+          console.warn('⚠️ Pi device refresh failed:', piRefreshResult.message);
+        }
+      } else {
+        setRefreshStatus({
+          type: 'success',
+          message: '✅ Device list refreshed successfully'
+        });
       }
+      
+      // Auto-hide refresh status after 5 seconds
+      setTimeout(() => {
+        setRefreshStatus(null);
+      }, 5000);
 
     } catch (error) {
-      console.error('❌ Error fetching devices:', error);
+      console.error('❌ Error in fetchDevices:', error);
       setError('Failed to load devices');
+      setRefreshStatus({
+        type: 'error',
+        message: '❌ Failed to refresh devices: ' + error.message
+      });
     } finally {
       setRefreshing(false);
       setLoading(false);
     }
-  }, [userEmail, fetchDeviceLocationDetails, filterAccessibleDevices]); // Stable dependencies
+  }, [userEmail, fetchDeviceLocationDetails, filterAccessibleDevices]);
 
   // Handle device click - navigate to device detail
   const handleDeviceClick = useCallback((deviceId) => {
@@ -290,22 +371,19 @@ const Devices = () => {
           d.id === device.id ? { 
             ...d, 
             status: newStatus,
-            // UPDATED: Reset runtime tracking info when toggled (Firestore timestamps)
             onSince: newStatus === 'ON' ? new Date() : null,
             warningCount: 0
           } : d
         )
       );
 
-      console.log(`🔄 Device ${device.id} toggled to ${newStatus} with runtime tracking updated`);
-
     } catch (error) {
-      console.error('Error toggling device:', error);
+      console.error('Device toggle error:', error);
       alert('Failed to toggle device status');
     }
   }, [isUserSystemAdmin, userEmail, locations]);
 
-  // Handle refresh
+  // Enhanced refresh handler
   const handleRefresh = useCallback(() => {
     fetchDevices();
   }, [fetchDevices]);
@@ -314,13 +392,11 @@ const Devices = () => {
   useEffect(() => {
     if (location.state?.message) {
       setError(null);
-      console.log('Navigation message:', location.state.message);
-      
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
-  // FIXED: Initial load - only run once per userEmail change
+  // Initial load
   useEffect(() => {
     if (userEmail) {
       fetchDevices();
@@ -328,7 +404,7 @@ const Devices = () => {
       setLoading(false);
       setError('User not authenticated');
     }
-  }, [userEmail]); // Remove fetchDevices dependency to prevent loops
+  }, [userEmail, fetchDevices]);
 
   if (loading) {
     return (
@@ -353,6 +429,14 @@ const Devices = () => {
         <ErrorMessage 
           message={error} 
           onRetry={handleRefresh} 
+        />
+      )}
+
+      {/* Enhanced Refresh Status Display */}
+      {refreshStatus && (
+        <RefreshStatusMessage 
+          status={refreshStatus}
+          onDismiss={() => setRefreshStatus(null)}
         />
       )}
 
@@ -383,7 +467,11 @@ const Devices = () => {
   );
 };
 
-// Component definitions
+// ==============================================================================
+// ENHANCED COMPONENT DEFINITIONS
+// ==============================================================================
+
+// Enhanced Devices Header with Pi sync indication
 const DevicesHeader = ({ 
   canManage, 
   onRefresh, 
@@ -410,7 +498,7 @@ const DevicesHeader = ({
         onClick={onRefresh}
         className={`refresh-btn ${refreshing ? 'spinning' : ''}`}
         disabled={refreshing}
-        title="Refresh devices"
+        title={isSystemAdmin ? "Refresh devices and sync with Pi" : "Refresh devices"}
       >
         <MdRefresh />
       </button>
@@ -428,6 +516,21 @@ const ErrorMessage = ({ message, onRetry }) => (
     {message}
     <button onClick={onRetry} className="retry-btn">
       Try Again
+    </button>
+  </div>
+);
+
+// NEW: Refresh Status Message Component
+const RefreshStatusMessage = ({ status, onDismiss }) => (
+  <div className={`refresh-status-message ${status.type}`}>
+    <span className="status-text">{status.message}</span>
+    <button 
+      onClick={onDismiss} 
+      className="dismiss-btn"
+      type="button"
+      aria-label="Dismiss message"
+    >
+      ×
     </button>
   </div>
 );
@@ -553,7 +656,7 @@ const NoDevicesMessage = ({ searchTerm, userRole, isSystemAdmin }) => {
   );
 };
 
-// UPDATED: Device Card Component with Firestore timestamp handling
+// Device Card Component with runtime warning indicators
 const DeviceCard = ({ 
   device, 
   userEmail, 
@@ -566,7 +669,6 @@ const DeviceCard = ({
 }) => {
   const [userRoleInBuilding, setUserRoleInBuilding] = React.useState('user');
   
-  // Get user's role in device building for display logic
   React.useEffect(() => {
     const fetchRole = async () => {
       const role = await getUserRoleInDeviceBuilding(device);
@@ -580,20 +682,16 @@ const DeviceCard = ({
   const isClaimed = !!device.Location;
   const canViewSensitiveInfo = isSystemAdmin || userRoleInBuilding === 'parent';
 
-  // UPDATED: Runtime warning indicators with Firestore timestamp handling
+  // Runtime warning indicators
   const isLongRunning = useMemo(() => {
     if (deviceStatus !== 'ON' || !device.onSince) return false;
     
-    // UPDATED: Handle Firestore Timestamp objects
     let onSince;
     if (device.onSince && typeof device.onSince.toDate === 'function') {
-      // Firestore Timestamp object
       onSince = device.onSince.toDate();
     } else if (device.onSince instanceof Date) {
-      // JavaScript Date object
       onSince = device.onSince;
     } else if (typeof device.onSince === 'string') {
-      // ISO string (fallback for compatibility)
       onSince = new Date(device.onSince);
     } else {
       return false;
@@ -602,7 +700,7 @@ const DeviceCard = ({
     const now = new Date();
     const hoursOn = Math.floor((now - onSince) / (1000 * 60 * 60));
     
-    return hoursOn >= 5; // Show warning indicator if device has been on for 5+ hours
+    return hoursOn >= 5;
   }, [deviceStatus, device.onSince]);
 
   const warningCount = device.warningCount || 0;
@@ -639,7 +737,7 @@ const DeviceCard = ({
   );
 };
 
-// Device Card Header Component with runtime warning indicators
+// Device Card Header Component
 const DeviceCardHeader = ({ 
   device, 
   isAssigned, 
@@ -664,7 +762,6 @@ const DeviceCardHeader = ({
           Assigned
         </span>
       )}
-      {/* Runtime warning indicator */}
       {isLongRunning && (
         <span 
           className="status-badge" 
@@ -681,7 +778,7 @@ const DeviceCardHeader = ({
   </div>
 );
 
-// UPDATED: Device Card Details Component with Firestore timestamp info
+// Device Card Details Component
 const DeviceCardDetails = ({ 
   device, 
   canViewSensitiveInfo, 
@@ -690,30 +787,20 @@ const DeviceCardDetails = ({
   isLongRunning 
 }) => (
   <div className="device-details">
-    {/* Only show Device ID to users who can view sensitive info */}
-    {canViewSensitiveInfo && (
-      <DeviceDetailItem label="ID:" value={device.id} />
-    )}
     <DeviceDetailItem label="Type:" value={device.DeviceType || 'Unknown'}/>
     <DeviceDetailItem label="Building:" value={getBuildingName(device)}/>
     <DeviceDetailItem label="Location:" value={getLocationName(device)}/>
     
-    
-    
-    {/* UPDATED: Show runtime info for long-running devices with Firestore timestamp handling */}
     {isLongRunning && device.onSince && (
       <DeviceDetailItem 
         label="On Since:" 
         value={(() => {
           let onSince;
           if (device.onSince && typeof device.onSince.toDate === 'function') {
-            // Firestore Timestamp object
             onSince = device.onSince.toDate();
           } else if (device.onSince instanceof Date) {
-            // JavaScript Date object
             onSince = device.onSince;
           } else if (typeof device.onSince === 'string') {
-            // ISO string (fallback for compatibility)
             onSince = new Date(device.onSince);
           } else {
             return 'Unknown';
@@ -724,8 +811,7 @@ const DeviceCardDetails = ({
       />
     )}
     
-    {/* Only show assigned count to users who can view sensitive info */}
-    {canViewSensitiveInfo && device.AssignedTo && device.AssignedTo.length  > 0 && (
+    {canViewSensitiveInfo && device.AssignedTo && device.AssignedTo.length > 0 && (
       <DeviceDetailItem 
         label="Assigned:" 
         value={`${device.AssignedTo.length} user(s)`} 
@@ -734,7 +820,7 @@ const DeviceCardDetails = ({
   </div>
 );
 
-// Device Detail Item Component with optional styling
+// Device Detail Item Component
 const DeviceDetailItem = ({ label, value, style = {} }) => (
   <div className="detail-item" style={style}>
     <span className="detail-label">{label}</span>

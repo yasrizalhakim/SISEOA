@@ -25,8 +25,7 @@ import {
  * @returns {Promise<Array>} Array of energy usage data
  */
 export const getDeviceEnergyUsage = async (deviceId, startDate, endDate) => {
-  try {
-    console.log(`📊 Fetching energy usage for device ${deviceId}, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+  try { 
     
     const usageData = [];
     
@@ -73,7 +72,7 @@ export const getDeviceEnergyUsage = async (deviceId, startDate, endDate) => {
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    console.log(`📊 Found ${usageData.length} energy data points for device ${deviceId}`);
+    
     return usageData;
   } catch (error) {
     console.error('Error fetching device energy usage:', error);
@@ -91,7 +90,7 @@ export const getDeviceEnergyUsage = async (deviceId, startDate, endDate) => {
  */
 export const getBuildingEnergyUsage = async (buildingId, deviceIds, startDate, endDate) => {
   try {
-    console.log(`🏢 Fetching building energy usage for ${deviceIds.length} devices, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+     
     
     if (!deviceIds || deviceIds.length === 0) {
       console.log('No devices found for building');
@@ -160,7 +159,7 @@ export const getBuildingEnergyUsage = async (buildingId, deviceIds, startDate, e
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    console.log(`🏢 Aggregated ${aggregatedData.length} data points for building ${buildingId}`);
+ 
     return aggregatedData;
   } catch (error) {
     console.error('Error fetching building energy usage:', error);
@@ -175,8 +174,7 @@ export const getBuildingEnergyUsage = async (buildingId, deviceIds, startDate, e
  */
 export const getBuildingDeviceIds = async (buildingId) => {
   try {
-    console.log(`🔍 Getting device IDs for building: ${buildingId}`);
-    
+     
     // Get all locations in the building
     const locationsQuery = query(
       collection(firestore, 'LOCATION'),
@@ -189,11 +187,7 @@ export const getBuildingDeviceIds = async (buildingId) => {
       console.log('No locations found for building');
       return [];
     }
-    
-    console.log(`📍 Found ${locationIds.length} locations in building: ${locationIds}`);
-    
-    // Get all devices in these locations
-    // Handle Firestore 'in' query limitation (max 10 values)
+      
     const deviceIds = [];
     const batches = [];
     
@@ -211,7 +205,7 @@ export const getBuildingDeviceIds = async (buildingId) => {
       deviceIds.push(...batchDeviceIds);
     }
     
-    console.log(`📱 Found ${deviceIds.length} devices in building ${buildingId}: ${deviceIds}`);
+ 
     return deviceIds;
   } catch (error) {
     console.error('Error getting building device IDs:', error);
@@ -354,10 +348,7 @@ export const getBuildingEnergyUsageSummary = async (buildingId, startDate, endDa
  */
 export const getDeviceEnergyStatusHistory = async (deviceId, startDate, endDate) => {
   try {
-    console.log(`📊 Fetching energy status history for device ${deviceId}, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
-    
-    // Get all energy status documents in the date range
-    // Path: ENERGYUSAGE/{deviceId}/DeviceEnergyStatus/{timestamp}
+ 
     const energyStatusQuery = query(
       collection(firestore, 'ENERGYUSAGE', deviceId, 'DeviceEnergyStatus')
     );
@@ -385,7 +376,7 @@ export const getDeviceEnergyStatusHistory = async (deviceId, startDate, endDate)
     // Sort by timestamp
     statusEvents.sort((a, b) => a.timestamp - b.timestamp);
     
-    console.log(`📊 Found ${statusEvents.length} energy status events for device ${deviceId}`);
+
     return statusEvents;
   } catch (error) {
     console.error('Error fetching device energy status history:', error);
@@ -402,7 +393,7 @@ export const getDeviceEnergyStatusHistory = async (deviceId, startDate, endDate)
  */
 export const getDeviceStatusHistory = async (deviceId, startDate, endDate) => {
   try {
-    console.log(`📊 Fetching device status history for device ${deviceId}, range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    
     
     // Get all device status documents in the date range
     // Path: ENERGYUSAGE/{deviceId}/DeviceStatusUsage/{timestamp}
@@ -432,7 +423,6 @@ export const getDeviceStatusHistory = async (deviceId, startDate, endDate) => {
     // Sort by timestamp
     statusEvents.sort((a, b) => a.timestamp - b.timestamp);
     
-    console.log(`📊 Found ${statusEvents.length} status events for device ${deviceId}`);
     return statusEvents;
   } catch (error) {
     console.error('Error fetching device status history:', error);

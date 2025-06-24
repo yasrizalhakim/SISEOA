@@ -68,7 +68,7 @@ const MainLayout = ({ handleLogout }) => {
 
       return false;
     } catch (error) {
-      console.error('Error checking users access:', error);
+
       return false;
     }
   };
@@ -108,9 +108,9 @@ const MainLayout = ({ handleLogout }) => {
     try {
       const isAdmin = await isSystemAdmin(userEmail);
       setIsUserSystemAdmin(isAdmin);
-      console.log('🔧 SystemAdmin status:', isAdmin);
+
     } catch (error) {
-      console.error('Error checking SystemAdmin status:', error);
+  
       setIsUserSystemAdmin(false);
     }
   };
@@ -120,9 +120,9 @@ const MainLayout = ({ handleLogout }) => {
     try {
       const hasAccess = await checkUsersAccess(userEmail);
       setHasUsersAccess(hasAccess);
-      console.log('👥 Users page access:', hasAccess);
+
     } catch (error) {
-      console.error('Error checking user access:', error);
+
       setHasUsersAccess(false);
     }
   };

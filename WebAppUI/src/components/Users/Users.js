@@ -75,22 +75,14 @@ const Users = () => {
       let buildingsList = [];
       let usersBuildingMap = {};
       
-      console.log('🔍 User access type:', accessType);
 
       if (accessType === 'systemadmin') {
-        console.log('🔧 SystemAdmin detected - fetching all users in the system (excluding SystemAdmins)');
         await fetchSystemAdminUsers(usersList, buildingsList);
-        
       } else if (accessType === 'admin') {
-        console.log('🏢 Building admin detected - fetching parents in managed buildings via USERBUILDING');
         await fetchBuildingAdminUsers(usersList, buildingsList, usersBuildingMap);
-        
       } else if (accessType === 'parent') {
-        console.log('👨‍👩‍👧‍👦 Parent user detected - fetching children via USERBUILDING');
-        await fetchParentUsers(usersList, buildingsList, usersBuildingMap);
-        
+        await fetchParentUsers(usersList, buildingsList, usersBuildingMap); 
       } else if (accessType === 'user') {
-        console.log('👤 Basic user detected - showing their own info');
         await fetchBasicUserInfo(usersList, buildingsList, usersBuildingMap);
         
       } else {
@@ -103,13 +95,6 @@ const Users = () => {
       setBuildings(buildingsList);
       setUsersByBuilding(usersBuildingMap);
       setError(null);
-      
-      console.log('📊 Final stats:', {
-        totalUsers: usersList.length,
-        totalBuildings: buildingsList.length,
-        accessType: accessType
-      });
-      
     } catch (error) {
       console.error('Error fetching users:', error);
       setError('Failed to load users');
@@ -191,7 +176,7 @@ const Users = () => {
       
       // UPDATED: Skip SystemAdmin users - don't add them to usersList
       if (isSystemAdminUser) {
-        console.log(`🚫 Skipping SystemAdmin user: ${userId}`);
+
         continue;
       }
       
@@ -212,8 +197,6 @@ const Users = () => {
       id: doc.id,
       ...doc.data()
     })));
-    
-    console.log(`✅ SystemAdmin: Fetched ${usersList.length} total users (excluding SystemAdmins)`);
   };
 
   // Fetch users for building admins (parents in buildings they admin)
@@ -354,15 +337,9 @@ const Users = () => {
           if (!usersList.find(u => u.id === childEmail)) {
             usersList.push(childUser);
           }
-          
-          console.log(`✅ Added ${childEmail} as child in building ${buildingId} via USERBUILDING logic`);
         }
       }
     }
-    
-    // UPDATED: Handle unassigned children - users who have building access but not in buildings where current user is parent
-    // Since we're using USERBUILDING only, we won't show "unassigned" children as parent-child is building-specific
-    console.log('ℹ️ Parent-child relationships are now building-specific via USERBUILDING');
   };
   
   // Initial load
@@ -409,9 +386,9 @@ const Users = () => {
       case 'systemadmin':
         return 'Search all users...';
       case 'admin':
-        return 'Search parents...';
+        return 'Search users...';
       case 'parent':
-        return 'Search children...';
+        return 'Search users...';
       default:
         return 'Search users...';
     }
@@ -480,9 +457,9 @@ const UsersHeader = ({ currentUserType, isUserSystemAdmin, userCount, filteredCo
     } else if (currentUserType === 'parent') {
       return (
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          <span>My Users (Children) ({userCount})</span>
+          <span>My Users ({userCount})</span>
           <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '400' }}>
-            Children in buildings owned
+            Users in buildings owned
           </span>
         </span>
       );
@@ -552,15 +529,6 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
               <div className="stat-label">Total Users</div>
             </div>
           </div>
-          {/* <div className="stat-card">
-            <div className="stat-icon">
-              <MdHome />
-            </div>
-            <div className="stat-content">
-              <div className="stat-value">{buildings.length}</div>
-              <div className="stat-label">Buildings</div>
-            </div>
-          </div> */}
         </div>
 
         {users.length === 0 ? (
@@ -605,7 +573,7 @@ const UsersGrid = ({ users, buildings, usersByBuilding, currentUserType, isUserS
           <div className="stat-content">
             <div className="stat-value">{users.length}</div>
             <div className="stat-label">
-              {currentUserType === 'admin' ? 'Parents' : 'Children'}
+              {currentUserType === 'admin' ? 'Users' : 'Users'}
             </div>
           </div>
         </div>

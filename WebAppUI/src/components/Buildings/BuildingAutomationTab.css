@@ -755,18 +755,30 @@
 }
 
 /* Responsive Design */
-@media (max-width: 768px) {
+@media (max-width: 30rem) { /* 480px */
   .building-automation-tab,
   .device-automation-tab {
-    padding: 1rem;
+    padding: 0.75rem;
   }
   
   .automation-header {
     padding: 1rem;
+    margin-bottom: 1rem;
   }
   
   .automation-header .header-content h3 {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .automation-header .header-icon {
+    font-size: 1.5rem;
+  }
+  
+  .automation-header p {
+    font-size: 0.875rem;
   }
   
   .building-status-info,
@@ -774,6 +786,41 @@
     grid-template-columns: 1fr;
     gap: 0.75rem;
     padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .status-label {
+    font-size: 0.8125rem;
+  }
+  
+  .status-value {
+    font-size: 0.9375rem;
+  }
+  
+  .devices-preview {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .devices-preview h4 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .device-preview-item {
+    padding: 0.75rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .device-name {
+    font-size: 0.875rem;
+  }
+  
+  .device-status {
+    align-self: flex-start;
+    font-size: 0.8125rem;
   }
   
   .automation-option {
@@ -781,6 +828,26 @@
     align-items: stretch;
     gap: 1rem;
     padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .option-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .option-header h5 {
+    font-size: 1rem;
+  }
+  
+  .energy-badge {
+    align-self: flex-start;
+    font-size: 0.6875rem;
+  }
+  
+  .option-description {
+    font-size: 0.875rem;
   }
   
   .option-toggle {
@@ -788,28 +855,138 @@
     align-self: center;
   }
   
+  .toggle-text {
+    min-width: auto;
+    font-size: 0.875rem;
+  }
+  
+  .custom-schedule-section {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .schedule-header h4 {
+    font-size: 1.125rem;
+  }
+  
+  .schedule-description {
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  
+  .schedule-description p {
+    font-size: 0.875rem;
+  }
+  
   .time-inputs-container {
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .time-input-group {
+    width: 100%;
+  }
+  
+  .time-input-group label {
+    font-size: 0.8125rem;
+  }
+  
+  .time-input {
+    padding: 0.875rem;
+    font-size: 0.875rem;
   }
   
   .time-separator {
     margin: 0;
     text-align: center;
+    font-size: 1rem;
+  }
+  
+  .schedule-preview {
+    padding: 0.75rem;
+  }
+  
+  .schedule-preview h6 {
+    font-size: 0.9375rem;
   }
   
   .preview-timeline {
     flex-direction: column;
     gap: 0.5rem;
+    align-items: stretch;
+  }
+  
+  .timeline-item {
+    min-width: auto;
+    padding: 0.5rem;
+    width: 100%;
+  }
+  
+  .timeline-item .time {
+    font-size: 0.8125rem;
+  }
+  
+  .timeline-item .status {
+    font-size: 0.6875rem;
   }
   
   .automation-actions {
     flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
   }
   
   .apply-button,
   .clear-button {
     width: 100%;
+    padding: 0.875rem;
+    font-size: 0.9375rem;
+  }
+  
+  .automation-help {
+    padding: 1rem;
+  }
+  
+  .automation-help h4 {
+    font-size: 1rem;
+  }
+  
+  .automation-help ul {
+    padding-left: 1.25rem;
+  }
+  
+  .automation-help li {
+    font-size: 0.875rem;
+    margin-bottom: 0.375rem;
+  }
+  
+  .automation-help p {
+    font-size: 0.8125rem;
+  }
+  
+  .no-devices-message {
+    padding: 2rem 1rem;
+  }
+  
+  .no-devices-message svg {
+    font-size: 1.75rem;
+  }
+  
+  .automation-unavailable {
+    padding: 3rem 1rem;
+  }
+  
+  .unavailable-icon {
+    font-size: 2.5rem;
+  }
+  
+  .automation-unavailable h3 {
+    font-size: 1.25rem;
+  }
+  
+  .automation-unavailable p {
+    font-size: 0.875rem;
   }
 }

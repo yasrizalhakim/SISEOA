@@ -47,7 +47,7 @@ const Login = ({ setIsAuthenticated }) => {
       navigate('/dashboard');
       
     } catch (error) {
-      console.error('Login error:', error);
+
       setError(error.message || 'Login failed');
     } finally {
       setLoading(false);

@@ -604,15 +604,20 @@
 }
 
 /* Mobile Responsive */
-@media (max-width: 24.5625rem) {
+@media (max-width: 30rem) { /* 480px */
+  .building-detail {
+    padding: 0.5rem;
+  }
+  
   .detail-header {
     flex-direction: column;
     align-items: stretch;
     gap: 0.5rem;
+    margin-bottom: 0.75rem;
   }
   
   .back-button {
-    padding: 0.375rem 0.625rem;
+    padding: 0.5rem 0.75rem;
     font-size: 0.75rem;
     align-self: flex-start;
   }
@@ -620,17 +625,21 @@
   .detail-header h2 {
     font-size: 1rem;
     text-align: center;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: initial;
   }
   
   .building-actions {
     padding: 0.75rem;
     flex-direction: column;
-    align-items: stretch;
+    margin-bottom: 0.75rem;
   }
   
   .edit-actions {
     flex-direction: column;
     width: 100%;
+    gap: 0.5rem;
   }
   
   .edit-button,
@@ -639,6 +648,8 @@
   .delete-button {
     justify-content: center;
     width: 100%;
+    padding: 0.75rem;
+    font-size: 0.875rem;
   }
   
   .building-info-form {
@@ -652,83 +663,91 @@
   .info-group p,
   .info-group input,
   .info-group textarea {
-    padding: 0.625rem;
-    font-size: 0.8125rem;
+    padding: 0.75rem;
+    font-size: 0.875rem;
   }
   
-  .locations-section h3, 
-  .devices-tab h3,
-  .children-tab h3,
-  .children-header h3,
-  .locations-header h3 {
-    font-size: 0.9375rem;
+  /* Locations and Children sections */
+  .locations-header,
+  .children-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
   }
   
-  .location-name,
-  .device-name,
-  .child-name {
-    font-size: 0.8125rem;
+  .locations-header h3,
+  .children-header h3 {
+    font-size: 1rem;
   }
   
-  .location-details,
-  .device-details,
-  .child-details {
-    font-size: 0.6875rem;
-  }
-  
-  .location-id,
-  .location-date {
-    font-size: 0.6875rem;
-  }
-  
-  .add-location-btn,
-  .confirm-add-btn,
-  .add-child-btn,
-  .cancel-add-btn {
-    font-size: 0.75rem;
-    padding: 0.3125rem 0.5rem;
+  .location-actions,
+  .children-actions {
+    justify-content: flex-start;
   }
   
   .add-location-form,
   .add-child-form {
     flex-direction: column;
     gap: 0.5rem;
+    padding: 0.75rem;
   }
   
   .add-location-form input,
   .add-child-form input {
-    padding: 0.375rem 0.625rem;
-    font-size: 0.8125rem;
     min-width: auto;
+    padding: 0.75rem;
+    font-size: 0.875rem;
   }
   
-  .no-data-message {
-    font-size: 0.8125rem;
+  .confirm-add-btn,
+  .cancel-add-btn,
+  .add-location-btn,
+  .add-child-btn {
     padding: 0.75rem;
+    font-size: 0.875rem;
+    justify-content: center;
+  }
+  
+  /* List items */
+  .location-item,
+  .device-item,
+  .child-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .location-name,
+  .device-name,
+  .child-name {
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .location-details,
+  .device-details,
+  .child-details {
+    font-size: 0.75rem;
   }
   
   .remove-location-btn,
   .remove-child-btn {
-    width: 1.5rem;
-    height: 1.5rem;
+    width: 2rem;
+    height: 2rem;
+    right: 0.5rem;
   }
   
-  .click-hint {
-    font-size: 0.625rem !important;
+  .child-item {
+    padding-right: 3rem;
+    padding-bottom: 0.75rem;
   }
   
-  .children-header,
-  .locations-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.625rem;
-  }
-  
-  .children-actions,
-  .location-actions {
-    justify-content: flex-start;
+  .no-data-message {
+    font-size: 0.875rem;
+    padding: 1rem;
   }
 }
+
 
 /* Tablet and Desktop */
 @media (min-width: 48rem) {

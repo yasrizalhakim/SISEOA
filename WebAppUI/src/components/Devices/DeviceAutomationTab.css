@@ -1,11 +1,13 @@
-/* DeviceAutomationTab.css - Enhanced styling for multi-stage automation */
+/* DeviceAutomationTab.css - FIXED VERSION - Enhanced styling for multi-stage automation */
 
 .device-automation-tab {
   padding: 24px;
-  max-width: 1200px;
+  max-width: 100%; /* CHANGED: From 1200px to 100% to prevent overflow */
+  width: 100%; /* ADDED: Ensure full width usage */
   margin: 0 auto;
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  min-height: 100vh;
+  min-height: auto; /* CHANGED: From 100vh to auto to prevent forced height */
+  box-sizing: border-box; /* ADDED: Ensure padding is included in width calculations */
 }
 
 /* Header Styling */
@@ -16,6 +18,8 @@
   margin-bottom: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(226, 232, 240, 0.8);
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .header-title {
@@ -23,11 +27,13 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 8px;
+  flex-wrap: wrap; /* ADDED: Allow wrapping on small screens */
 }
 
 .header-icon {
   font-size: 28px;
   color: #10b981;
+  flex-shrink: 0; /* ADDED: Prevent icon from shrinking */
 }
 
 .header-title h2 {
@@ -35,12 +41,14 @@
   font-size: 24px;
   font-weight: 700;
   color: #1e293b;
+  word-break: break-word; /* ADDED: Prevent long text overflow */
 }
 
 .header-subtitle {
   color: #64748b;
   font-size: 14px;
   margin-left: 40px;
+  word-break: break-word; /* ADDED */
 }
 
 /* Tab Navigation */
@@ -52,9 +60,12 @@
   margin-bottom: 24px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(226, 232, 240, 0.6);
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
+  overflow-x: auto; /* ADDED: Allow horizontal scrolling if needed */
 }
 
-/* .tab-button {
+.tab-button {
   flex: 1;
   display: flex;
   align-items: center;
@@ -69,18 +80,20 @@
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 14px;
-} */
+  white-space: nowrap; /* ADDED: Prevent text wrapping in tabs */
+  min-width: fit-content; /* ADDED: Ensure minimum width */
+}
 
-/* .tab-button:hover {
+.tab-button:hover {
   background: #f1f5f9;
   color: #10b981;
-} */
+}
 
-/* .tab-button.active {
+.tab-button.active {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
-} */
+}
 
 /* Loading and Error States */
 .device-automation-loading,
@@ -94,6 +107,8 @@
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .loading-icon {
@@ -121,11 +136,15 @@
   border-radius: 12px;
   color: #dc2626;
   margin-bottom: 24px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
+  word-break: break-word; /* ADDED */
 }
 
 .error-icon {
   font-size: 20px;
   color: #dc2626;
+  flex-shrink: 0; /* ADDED */
 }
 
 /* Tab Content */
@@ -135,10 +154,14 @@
   padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(226, 232, 240, 0.8);
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
+  overflow-x: auto; /* ADDED: Allow horizontal scrolling if content overflows */
 }
 
 .automation-section {
   margin-bottom: 24px;
+  width: 100%; /* ADDED */
 }
 
 .section-header {
@@ -152,11 +175,13 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 4px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .section-icon {
   font-size: 24px;
   color: #10b981;
+  flex-shrink: 0; /* ADDED */
 }
 
 .section-title h3 {
@@ -164,11 +189,13 @@
   font-size: 20px;
   font-weight: 600;
   color: #1e293b;
+  word-break: break-word; /* ADDED */
 }
 
 .section-subtitle {
   color: #64748b;
   font-size: 14px;
+  word-break: break-word; /* ADDED */
 }
 
 /* Current Rule Display - Enhanced for Multi-Stage */
@@ -178,10 +205,12 @@
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 24px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .rule-info {
-  space-y: 16px;
+  width: 100%; /* ADDED */
 }
 
 .rule-header {
@@ -189,12 +218,16 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  gap: 12px; /* ADDED */
+  flex-wrap: wrap; /* ADDED: Allow wrapping on small screens */
 }
 
 .rule-title {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap; /* ADDED */
+  min-width: 0; /* ADDED: Allow shrinking */
 }
 
 .rule-status {
@@ -204,6 +237,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .rule-status.enabled {
@@ -223,10 +258,17 @@
   color: #64748b;
   font-size: 14px;
   font-weight: 500;
+  flex-wrap: wrap; /* ADDED */
+  min-width: 0; /* ADDED */
 }
 
 .rule-type .icon {
   font-size: 16px;
+  flex-shrink: 0; /* ADDED */
+}
+
+.rule-actions {
+  flex-shrink: 0; /* ADDED */
 }
 
 .toggle-button {
@@ -237,6 +279,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 14px;
+  white-space: nowrap; /* ADDED */
 }
 
 .toggle-button.on {
@@ -263,6 +306,7 @@
 /* Schedule Display - Enhanced for Multi-Stage */
 .rule-schedule {
   margin-bottom: 16px;
+  width: 100%; /* ADDED */
 }
 
 .rule-schedule h4 {
@@ -277,10 +321,13 @@
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 12px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
+  overflow-x: auto; /* ADDED: Allow horizontal scrolling if needed */
 }
 
 .multi-stage-display {
-  space-y: 8px;
+  width: 100%; /* ADDED */
 }
 
 .day-schedule {
@@ -289,6 +336,7 @@
   gap: 8px;
   padding: 4px 0;
   border-bottom: 1px solid #f3f4f6;
+  flex-wrap: wrap; /* ADDED: Allow wrapping on small screens */
 }
 
 .day-schedule:last-child {
@@ -299,6 +347,7 @@
   min-width: 80px;
   color: #374151;
   font-size: 14px;
+  flex-shrink: 0; /* ADDED */
 }
 
 .stage-time {
@@ -309,6 +358,8 @@
   font-size: 12px;
   font-weight: 500;
   margin-right: 4px;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .no-stages {
@@ -324,26 +375,30 @@
   font-size: 16px;
   font-weight: 500;
   color: #374151;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .simple-schedule-display .icon {
   color: #10b981;
+  flex-shrink: 0; /* ADDED */
 }
 
 .active-days {
   margin-top: 4px;
   font-size: 14px;
   color: #64748b;
+  word-break: break-word; /* ADDED */
 }
 
 /* Rule Metadata */
 .rule-metadata {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* CHANGED: auto-fit instead of auto-fill */
   gap: 8px;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #e5e7eb;
+  width: 100%; /* ADDED */
 }
 
 .metadata-row {
@@ -351,16 +406,22 @@
   justify-content: space-between;
   align-items: center;
   font-size: 14px;
+  gap: 8px; /* ADDED */
+  min-width: 0; /* ADDED */
 }
 
 .metadata-label {
   color: #64748b;
   font-weight: 500;
+  flex-shrink: 0; /* ADDED */
 }
 
 .metadata-value {
   color: #374151;
   font-weight: 600;
+  text-align: right;
+  word-break: break-word; /* ADDED */
+  min-width: 0; /* ADDED */
 }
 
 /* No Rule Info */
@@ -369,6 +430,7 @@
   align-items: center;
   gap: 16px;
   text-align: left;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .info-icon {
@@ -398,17 +460,22 @@
   border: 1px solid #bbf7d0;
   border-radius: 12px;
   padding: 16px;
+  gap: 16px; /* ADDED */
+  flex-wrap: wrap; /* ADDED */
 }
 
 .learning-info {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1; /* ADDED */
+  min-width: 0; /* ADDED */
 }
 
 .learning-info .icon {
   font-size: 24px;
   color: #059669;
+  flex-shrink: 0; /* ADDED */
 }
 
 .learning-info h4 {
@@ -421,6 +488,7 @@
   margin: 0;
   color: #64748b;
   font-size: 14px;
+  word-break: break-word; /* ADDED */
 }
 
 .learn-button {
@@ -435,6 +503,8 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .learn-button:hover {
@@ -453,6 +523,7 @@
   display: flex;
   gap: 12px;
   margin-bottom: 24px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .type-button {
@@ -467,6 +538,8 @@
   transition: all 0.3s ease;
   font-weight: 500;
   color: #64748b;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .type-button:hover {
@@ -482,24 +555,27 @@
 
 .type-button .icon {
   font-size: 18px;
+  flex-shrink: 0; /* ADDED */
 }
 
 /* Simple Rule Builder */
 .simple-rule-builder {
-  space-y: 20px;
+  width: 100%; /* ADDED */
 }
 
 .time-inputs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* CHANGED: auto-fit instead of auto-fill */
   gap: 16px;
   margin-bottom: 20px;
+  width: 100%; /* ADDED */
 }
 
 .input-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0; /* ADDED */
 }
 
 .input-group label {
@@ -514,6 +590,8 @@
   border-radius: 8px;
   font-size: 14px;
   transition: border-color 0.3s ease;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .input-group input[type="time"]:focus {
@@ -527,6 +605,8 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 16px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .rule-preview h4 {
@@ -540,11 +620,12 @@
   margin: 0;
   color: #64748b;
   font-size: 14px;
+  word-break: break-word; /* ADDED */
 }
 
 /* Multi-Stage Rule Builder */
 .multi-stage-rule-builder {
-  space-y: 24px;
+  width: 100%; /* ADDED */
 }
 
 .builder-header {
@@ -552,12 +633,16 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  gap: 16px; /* ADDED */
+  flex-wrap: wrap; /* ADDED */
 }
 
 .builder-header h4 {
   margin: 0;
   font-size: 18px;
   color: #374151;
+  flex: 1; /* ADDED */
+  min-width: 0; /* ADDED */
 }
 
 .add-day-button {
@@ -572,6 +657,8 @@
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 14px;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .add-day-button:hover {
@@ -586,6 +673,8 @@
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .day-header {
@@ -593,6 +682,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+  gap: 12px; /* ADDED */
+  flex-wrap: wrap; /* ADDED */
 }
 
 .day-header select {
@@ -603,11 +694,14 @@
   font-size: 14px;
   font-weight: 500;
   color: #374151;
+  min-width: 120px; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .day-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .add-stage-button,
@@ -623,6 +717,8 @@
   transition: all 0.3s ease;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .add-stage-button {
@@ -656,7 +752,7 @@
 
 /* Stages List */
 .stages-list {
-  space-y: 8px;
+  width: 100%; /* ADDED */
 }
 
 .stage-config {
@@ -667,6 +763,10 @@
   background: white;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
+  margin-bottom: 8px; /* ADDED */
+  flex-wrap: wrap; /* ADDED */
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .stage-label {
@@ -674,6 +774,7 @@
   font-size: 12px;
   font-weight: 500;
   color: #64748b;
+  flex-shrink: 0; /* ADDED */
 }
 
 .stage-config input[type="time"] {
@@ -681,11 +782,14 @@
   border: 1px solid #d1d5db;
   border-radius: 4px;
   font-size: 12px;
+  flex-shrink: 0; /* ADDED */
+  min-width: 100px; /* ADDED */
 }
 
 .stage-config span {
   font-size: 12px;
   color: #64748b;
+  flex-shrink: 0; /* ADDED */
 }
 
 .remove-stage-button {
@@ -696,6 +800,7 @@
   color: #dc2626;
   cursor: pointer;
   transition: all 0.3s ease;
+  flex-shrink: 0; /* ADDED */
 }
 
 .remove-stage-button:hover {
@@ -713,6 +818,8 @@
   border-radius: 8px;
   padding: 16px;
   margin-top: 16px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .multi-stage-preview h4 {
@@ -733,6 +840,7 @@
   font-size: 12px;
   margin-bottom: 4px;
   color: #374151;
+  word-break: break-word; /* ADDED */
 }
 
 .preview-day strong {
@@ -746,6 +854,8 @@
   border-radius: 8px;
   font-size: 11px;
   margin-left: 4px;
+  white-space: nowrap; /* ADDED */
+  display: inline-block; /* ADDED */
 }
 
 /* Validation Messages */
@@ -754,6 +864,8 @@
   padding: 12px;
   border-radius: 8px;
   margin-top: 16px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .validation-errors {
@@ -784,6 +896,7 @@
 .validation-warnings li {
   margin-bottom: 2px;
   font-size: 12px;
+  word-break: break-word; /* ADDED */
 }
 
 /* Rule Actions */
@@ -793,6 +906,7 @@
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid #e5e7eb;
+  width: 100%; /* ADDED */
 }
 
 .create-rule-button {
@@ -805,6 +919,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 14px;
+  white-space: nowrap; /* ADDED */
 }
 
 .create-rule-button:hover {
@@ -828,17 +943,21 @@
   border-radius: 8px;
   padding: 12px;
   margin-top: 16px;
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .rule-note .icon {
   font-size: 16px;
   color: #059669;
+  flex-shrink: 0; /* ADDED */
 }
 
 .rule-note p {
   margin: 0;
   font-size: 12px;
   color: #166534;
+  word-break: break-word; /* ADDED */
 }
 
 /* Analytics Specific Styles */
@@ -851,18 +970,24 @@
   background: #f8fafc;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
+  gap: 16px; /* ADDED */
+  flex-wrap: wrap; /* ADDED */
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .control-group {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .control-group label {
   font-weight: 500;
   color: #374151;
   font-size: 14px;
+  white-space: nowrap; /* ADDED */
 }
 
 .control-group select {
@@ -871,6 +996,7 @@
   border-radius: 6px;
   background: white;
   font-size: 14px;
+  min-width: 120px; /* ADDED */
 }
 
 .refresh-analytics-button {
@@ -886,6 +1012,8 @@
   transition: all 0.3s ease;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .refresh-analytics-button:hover {
@@ -895,7 +1023,7 @@
 
 /* Analytics Results */
 .analytics-results {
-  space-y: 20px;
+  width: 100%; /* ADDED */
 }
 
 .analytics-card {
@@ -905,6 +1033,8 @@
   padding: 20px;
   margin-bottom: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .analytics-card h4 {
@@ -915,13 +1045,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 /* Summary Grid */
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* CHANGED: auto-fit instead of auto-fill */
   gap: 16px;
+  width: 100%; /* ADDED */
 }
 
 .summary-item {
@@ -932,6 +1064,7 @@
   background: #f9fafb;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
+  min-width: 0; /* ADDED */
 }
 
 .summary-label {
@@ -944,13 +1077,15 @@
   font-size: 18px;
   color: #374151;
   font-weight: 700;
+  word-break: break-word; /* ADDED */
 }
 
 /* Multi-Stage Metrics */
 .multi-stage-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); /* CHANGED: auto-fit instead of auto-fill */
   gap: 12px;
+  width: 100%; /* ADDED */
 }
 
 .metric {
@@ -961,18 +1096,23 @@
   background: #f0fdf4;
   border-radius: 6px;
   border: 1px solid #bbf7d0;
+  gap: 8px; /* ADDED */
+  min-width: 0; /* ADDED */
 }
 
 .metric-label {
   font-size: 12px;
   color: #059669;
   font-weight: 500;
+  flex-shrink: 0; /* ADDED */
 }
 
 .metric-value {
   font-size: 14px;
   color: #166534;
   font-weight: 700;
+  word-break: break-word; /* ADDED */
+  text-align: right; /* ADDED */
 }
 
 .analysis-recommendation {
@@ -986,16 +1126,18 @@
   border-radius: 6px;
   font-size: 12px;
   color: #047857;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .analysis-recommendation .icon {
   font-size: 14px;
   color: #059669;
+  flex-shrink: 0; /* ADDED */
 }
 
 /* Patterns List */
 .patterns-list {
-  space-y: 12px;
+  width: 100%; /* ADDED */
 }
 
 .pattern-item {
@@ -1004,6 +1146,9 @@
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   border-left: 4px solid #10b981;
+  margin-bottom: 12px; /* ADDED */
+  width: 100%; /* ADDED */
+  box-sizing: border-box; /* ADDED */
 }
 
 .pattern-header {
@@ -1011,6 +1156,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  gap: 8px; /* ADDED */
+  flex-wrap: wrap; /* ADDED */
 }
 
 .pattern-type {
@@ -1022,12 +1169,15 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  white-space: nowrap; /* ADDED */
+  flex-shrink: 0; /* ADDED */
 }
 
 .pattern-confidence {
   font-size: 11px;
   color: #64748b;
   font-weight: 500;
+  flex-shrink: 0; /* ADDED */
 }
 
 .pattern-title {
@@ -1035,6 +1185,7 @@
   font-weight: 600;
   color: #374151;
   margin-bottom: 4px;
+  word-break: break-word; /* ADDED */
 }
 
 .pattern-description {
@@ -1042,6 +1193,7 @@
   color: #64748b;
   line-height: 1.4;
   margin-bottom: 8px;
+  word-break: break-word; /* ADDED */
 }
 
 .pattern-recommendation {
@@ -1051,10 +1203,12 @@
   font-size: 12px;
   color: #059669;
   font-weight: 500;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .pattern-recommendation .icon {
   font-size: 14px;
+  flex-shrink: 0; /* ADDED */
 }
 
 /* No Patterns */
@@ -1064,6 +1218,7 @@
   gap: 16px;
   text-align: left;
   padding: 20px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .no-patterns .info-icon {
@@ -1082,17 +1237,19 @@
   margin: 0;
   color: #64748b;
   font-size: 14px;
+  word-break: break-word; /* ADDED */
 }
 
 /* Learning Status */
 .learning-status {
-  space-y: 12px;
+  width: 100%; /* ADDED */
 }
 
 .progress-info {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%; /* ADDED */
 }
 
 .progress-info span {
@@ -1124,16 +1281,19 @@
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   border-radius: 6px;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .learning-tips .icon {
   font-size: 14px;
   color: #059669;
+  flex-shrink: 0; /* ADDED */
 }
 
 .learning-tips span {
   font-size: 12px;
   color: #166534;
+  word-break: break-word; /* ADDED */
 }
 
 /* Analytics Error */
@@ -1146,6 +1306,7 @@
   border: 1px solid #fecaca;
   border-radius: 8px;
   color: #dc2626;
+  flex-wrap: wrap; /* ADDED */
 }
 
 .analytics-error .error-icon {
@@ -1161,6 +1322,7 @@
 .analytics-error p {
   margin: 0;
   font-size: 12px;
+  word-break: break-word; /* ADDED */
 }
 
 /* Analytics Empty */
@@ -1183,47 +1345,154 @@
 .analytics-empty p {
   margin: 0;
   font-size: 14px;
+  word-break: break-word; /* ADDED */
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
+/* UPDATED: Enhanced Responsive Design for Mobile */
+@media (max-width: 30rem) { /* 480px */
   .device-automation-tab {
-    padding: 16px;
+    padding: 0.75rem;
+    background: #f8fafc;
+    min-height: auto;
+  }
+  
+  .automation-header {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 12px;
+  }
+  
+  .header-title {
+    flex-direction: column; /* CHANGED: Stack vertically on mobile */
+    align-items: flex-start; /* CHANGED */
+    gap: 0.5rem;
+  }
+  
+  .header-title h2 {
+    font-size: 1.25rem;
+  }
+  
+  .header-icon {
+    font-size: 1.5rem;
+  }
+  
+  .header-subtitle {
+    font-size: 0.8125rem;
+    margin-left: 0;
+    margin-top: 0.5rem;
   }
   
   .automation-tabs {
     flex-direction: column;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
   }
   
-  /* .tab-button {
-    justify-content: flex-start;
-  } */
+  .tab-button {
+    justify-content: flex-start; /* CHANGED */
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.25rem; /* ADDED */
+  }
+  
+  .automation-tab-content {
+    padding: 1rem;
+    border-radius: 12px;
+  }
   
   .rule-header {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: stretch;
+    gap: 0.75rem;
   }
   
-  .time-inputs {
-    grid-template-columns: 1fr;
+  .rule-title {
+    flex-direction: column; /* CHANGED */
+    align-items: flex-start; /* CHANGED */
+    gap: 0.5rem;
+  }
+  
+  .toggle-button {
+    width: 100%; /* ADDED */
+    justify-content: center; /* ADDED */
+  }
+  
+  .day-schedule {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+  }
+  
+  .stage-config {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+  
+  .stage-config input[type="time"] {
+    min-width: auto; /* CHANGED */
+    width: 100%; /* ADDED */
+  }
+  
+  .learning-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .learn-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .rule-type-selector {
+    flex-direction: column;
+  }
+  
+  .type-button {
+    justify-content: center;
+  }
+  
+  .builder-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .add-day-button {
+    justify-content: center;
   }
   
   .day-header {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: stretch;
+    gap: 0.75rem;
   }
   
-  .stage-config {
-    flex-wrap: wrap;
-    gap: 8px;
+  .day-actions {
+    justify-content: space-between;
+  }
+  
+  .add-stage-button,
+  .remove-day-button {
+    flex: 1;
+    justify-content: center;
   }
   
   .analytics-controls {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  
+  .control-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .refresh-analytics-button {
+    justify-content: center;
   }
   
   .summary-grid {
@@ -1233,75 +1502,89 @@
   .multi-stage-metrics {
     grid-template-columns: 1fr;
   }
-}
-
-@media (max-width: 480px) {
-  .automation-header {
-    padding: 16px;
-  }
-  
-  .header-title h2 {
-    font-size: 20px;
-  }
-  
-  .automation-tab-content {
-    padding: 16px;
-  }
-  
-  .learning-section {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
   
   .pattern-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
   }
   
-  .no-patterns,
-  .no-rule-info {
+  .no-patterns {
     flex-direction: column;
     text-align: center;
   }
 }
 
-/* Dark mode support (optional)
-@media (prefers-color-scheme: dark) {
+/* Medium screens */
+@media (min-width: 30rem) and (max-width: 48rem) { /* 480px - 768px */
   .device-automation-tab {
-    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-    color: #f9fafb;
-  }
-  
-  .automation-header,
-  .automation-tab-content,
-  .analytics-card {
-    background: #374151;
-    border-color: #4b5563;
-  }
-  
-  .header-title h2,
-  .section-title h3 {
-    color: #f9fafb;
-  }
-  
-  .header-subtitle,
-  .section-subtitle {
-    color: #d1d5db;
-  }
-  
-  .automation-tabs {
-    background: #374151;
-    border-color: #4b5563;
+    padding: 1rem;
   }
   
   .tab-button {
-    color: #d1d5db;
+    font-size: 0.875rem;
+    padding: 0.75rem 1rem;
   }
   
-  .tab-button:hover {
-    background: #4b5563;
-    color: #60a5fa;
+  .time-inputs {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
-} */
+  
+  .summary-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+  
+  .multi-stage-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+/* Large screens optimization */
+@media (min-width: 64rem) { /* 1024px+ */
+  .device-automation-tab {
+    padding: 2rem;
+    max-width: 1200px; /* ADDED: Restore max-width on large screens */
+  }
+  
+  .automation-header {
+    padding: 2rem;
+  }
+  
+  .automation-tab-content {
+    padding: 2rem;
+  }
+}
+
+/* Focus states for accessibility */
+.tab-button:focus,
+.toggle-button:focus,
+.learn-button:focus,
+.type-button:focus,
+.create-rule-button:focus,
+.refresh-analytics-button:focus {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .device-automation-tab {
+    padding: 0;
+    background: white;
+    min-height: auto;
+  }
+  
+  .automation-header,
+  .automation-tabs,
+  .toggle-button,
+  .learn-button,
+  .create-rule-button,
+  .refresh-analytics-button {
+    display: none;
+  }
+  
+  .automation-tab-content {
+    padding: 0;
+    box-shadow: none;
+    border: 1px solid #d1d5db;
+  }
+}

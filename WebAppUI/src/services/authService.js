@@ -46,7 +46,7 @@ export const loginUser = async (email, password) => {
       parentEmail: userData.ParentEmail || null
     };
   } catch (error) {
-    console.error('Login error:', error);
+    
     throw error;
   }
 };
@@ -155,7 +155,7 @@ export const registerParentUser = async (userData) => {
       locationId
     };
   } catch (error) {
-    console.error('Error registering parent user:', error);
+   
     throw error;
   }
 };
@@ -226,7 +226,7 @@ export const registerChildUser = async (userData) => {
       parentEmail
     };
   } catch (error) {
-    console.error('Error registering child user:', error);
+
     throw error;
   }
 };
@@ -262,7 +262,7 @@ export const loginWithDevice = async (deviceId) => {
       description: deviceData.DeviceDescription
     };
   } catch (error) {
-    console.error('Error logging in with device:', error);
+   
     throw error;
   }
 };
@@ -285,7 +285,7 @@ export const logoutUser = () => {
     
     userKeys.forEach(key => localStorage.removeItem(key));
     
-    console.log('User logged out successfully');
+   
   } catch (error) {
     console.error('Error logging out:', error);
     throw error;
@@ -385,7 +385,6 @@ export const validateUserCredentials = async (email, password) => {
     const userData = userDoc.data();
     return userData.Password === password;
   } catch (error) {
-    console.error('Error validating user credentials:', error);
     return false;
   }
 };

@@ -50,8 +50,6 @@ const EnergyOverview = ({
           };
         }
       } else {
-        // No data available - show empty state
-        console.log('📊 No building or device IDs provided for energy overview');
         setEnergyData([]);
         setSummary(null);
         setLoading(false);
@@ -69,8 +67,7 @@ const EnergyOverview = ({
       setSummary(summaryData);
       
     } catch (error) {
-      console.error('Error fetching energy overview:', error);
-      
+     
       // Show empty state on error
       setEnergyData([]);
       setSummary(null);

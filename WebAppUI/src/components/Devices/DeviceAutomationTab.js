@@ -92,7 +92,7 @@ const DeviceAutomationTab = ({ device, userEmail, onAutomationApply }) => {
       setCanControl(!userBuildingSnapshot.empty);
       
     } catch (error) {
-      console.error('Error checking permissions:', error);
+
       setCanControl(false);
     } finally {
       setCheckingPermissions(false);
@@ -119,7 +119,7 @@ const DeviceAutomationTab = ({ device, userEmail, onAutomationApply }) => {
       setEventHistoryCount(historyCount);
       
     } catch (err) {
-      console.error('Error loading automation data:', err);
+
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -137,7 +137,7 @@ const DeviceAutomationTab = ({ device, userEmail, onAutomationApply }) => {
       setAnalyticsData(patternResult);
       
     } catch (err) {
-      console.error('Error loading analytics data:', err);
+ 
       setAnalyticsData({ error: err.message });
     } finally {
       setLoadingAnalytics(false);
@@ -181,7 +181,7 @@ const DeviceAutomationTab = ({ device, userEmail, onAutomationApply }) => {
       setPiRule(prev => ({ ...prev, enabled }));
       
     } catch (error) {
-      console.error('Error updating Pi rule:', error);
+ 
       alert('Failed to update automation. Please try again.');
     } finally {
       setUpdatingPiRule(false);
@@ -259,7 +259,7 @@ const DeviceAutomationTab = ({ device, userEmail, onAutomationApply }) => {
       }
       
     } catch (error) {
-      console.error('Error creating manual rule:', error);
+ 
       alert('Failed to create automation rule. Please try again.');
     } finally {
       setUpdatingPiRule(false);
@@ -295,7 +295,7 @@ const DeviceAutomationTab = ({ device, userEmail, onAutomationApply }) => {
       alert(`Pattern learning reset! Cleared ${clearedCount} events. Pi will start learning new patterns from your usage.`);
       
     } catch (error) {
-      console.error('Error learning new pattern:', error);
+
       alert('Failed to reset pattern learning. Please try again.');
     } finally {
       setUpdatingPiRule(false);

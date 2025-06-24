@@ -114,7 +114,7 @@ const AddDevice = () => {
       const isAdmin = await isSystemAdmin(userEmail);
       setIsUserSystemAdmin(isAdmin);
       
-      console.log('🔍 Initializing add device for user:', userEmail, { isSystemAdmin: isAdmin });
+  
       
       await fetchUserBuildingsAndLocations(isAdmin);
       
@@ -123,7 +123,7 @@ const AddDevice = () => {
       }
       
     } catch (error) {
-      console.error('Error initializing add device:', error);
+     
       setError('Failed to load user data');
     } finally {
       setLoadingLocations(false);
@@ -137,7 +137,7 @@ const AddDevice = () => {
       let locations = [];
       
       if (isAdmin) {
-        console.log('🔧 SystemAdmin - fetching all buildings and locations');
+       
         
         const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
         buildings = buildingsSnapshot.docs.map(doc => ({
@@ -160,7 +160,7 @@ const AddDevice = () => {
         });
         
       } else {
-        console.log('👤 Regular user - fetching accessible buildings and locations');
+       
         
         const buildingRoles = await getUserBuildingRoles(userEmail);
         
@@ -200,7 +200,7 @@ const AddDevice = () => {
               locations.push(...buildingLocations);
               
             } catch (buildingError) {
-              console.error(`Error fetching building ${buildingId}:`, buildingError);
+             
             }
           }
         }
@@ -212,8 +212,7 @@ const AddDevice = () => {
       setUserBuildings(buildings);
       setUserLocations(locations);
       
-      console.log('🏢 Available buildings:', buildings.length);
-      console.log('📍 Available locations:', locations.length);
+     
       
       if (locations.length === 0) {
         setError(
@@ -224,7 +223,7 @@ const AddDevice = () => {
       }
       
     } catch (error) {
-      console.error('Error fetching buildings and locations:', error);
+     
       setError('Failed to load buildings and locations');
     }
   }, [userEmail]);
@@ -250,7 +249,6 @@ const AddDevice = () => {
       
       setRegisteredDevices(devicesList);
     } catch (error) {
-      console.error('Error fetching registered devices:', error);
     }
   }, []);
 
@@ -298,7 +296,7 @@ const AddDevice = () => {
       }));
       
     } catch (error) {
-      console.error('Error checking device status:', error);
+      
       setDeviceStatus({
         checking: false,
         exists: false,
@@ -361,7 +359,7 @@ const AddDevice = () => {
       setLoading(true);
       setError(null);
       
-      console.log('💾 Processing device...');
+     
       
       const deviceId = formData.deviceId.trim();
       
@@ -372,7 +370,7 @@ const AddDevice = () => {
       }
       
     } catch (error) {
-      console.error('❌ Error processing device:', error);
+     
       setError('Failed to process device: ' + error.message);
     } finally {
       setLoading(false);
@@ -381,8 +379,7 @@ const AddDevice = () => {
 
   // Claim existing device
   const claimDevice = useCallback(async (deviceId) => {
-    console.log('📱 Claiming device...');
-    
+   
     await updateDoc(doc(firestore, 'DEVICE', deviceId), {
       Location: formData.location,
       DeviceName: formData.deviceName.trim(),
@@ -397,7 +394,7 @@ const AddDevice = () => {
       locationId: formData.location
     });
     
-    console.log('✅ Device claimed successfully');
+   
     setSuccess(true);
 
     try {
@@ -413,10 +410,8 @@ const AddDevice = () => {
       locationName,
       buildingName
     );
-    console.log('📢 Device claim notification sent to parent');
+ 
   } catch (notificationError) {
-    console.error('❌ Failed to send device claim notification:', notificationError);
-    // Don't fail the device claim if notification fails
   }
   
   setTimeout(() => {
@@ -430,7 +425,6 @@ const AddDevice = () => {
 
   // UPDATED: Register new device with Firestore timestamps
   const registerDevice = useCallback(async (deviceId) => {
-    console.log('📱 Registering new device...');
     
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
     if (deviceDoc.exists()) {
@@ -473,10 +467,8 @@ const AddDevice = () => {
         deviceId,
         userEmail
       );
-      console.log('📢 SystemAdmin notification sent for device registration');
+  
     } catch (notificationError) {
-      console.error('❌ Failed to send notification:', notificationError);
-      // Don't fail the device registration if notification fails
     }
 
     if (isUserSystemAdmin) {
@@ -486,10 +478,9 @@ const AddDevice = () => {
           deviceId,
           userEmail
         );
-        console.log('📢 Admin device addition notification sent');
+
       } catch (notificationError) {
-        console.error('❌ Failed to send admin device addition notification:', notificationError);
-        // Don't fail the device registration if notification fails
+
       }
     }
     
@@ -498,13 +489,13 @@ const AddDevice = () => {
     setFormData(INITIAL_FORM_DATA);
     
     setTimeout(() => setSuccess(null), 3000);
-    console.log('✅ New device registered successfully');
+
   }, [formData, fetchRegisteredDevices, userEmail, isUserSystemAdmin]);
 
   // Create empty energy usage document for new device
   const createEnergyUsageDocument = useCallback(async (deviceId) => {
     try {
-      console.log(`📊 Creating energy usage structure for device ${deviceId}`);
+
       
       // Create today's date document in the new structure
       const today = new Date();
@@ -516,9 +507,9 @@ const AddDevice = () => {
         //timestamp: new Date().toISOString()
       });
       
-      console.log(`✅ Energy usage structure created for device ${deviceId} at DailyUsage/${dateStr}`);
+    
     } catch (error) {
-      console.error(`❌ Error creating energy usage structure:`, error);
+   
       // Don't throw error as device registration was successful
     }
   }, []);
@@ -560,7 +551,6 @@ const AddDevice = () => {
       setTimeout(() => setSuccess(null), 3000);
       
     } catch (error) {
-      console.error('Error deleting device:', error);
       setError('Failed to delete device: ' + error.message);
     }
   }, [fetchRegisteredDevices]);
@@ -568,7 +558,7 @@ const AddDevice = () => {
   // Remove all energy usage documents for a device
   const removeEnergyUsageDocuments = useCallback(async (deviceId) => {
     try {
-      console.log(`📊 Removing energy usage structure for device ${deviceId}`);
+
       
       // Get all daily usage documents for this device
       const dailyUsageSnapshot = await getDocs(collection(firestore, 'ENERGYUSAGE', deviceId, 'DailyUsage'));
@@ -576,10 +566,9 @@ const AddDevice = () => {
       // Delete all daily usage documents
       const deletePromises = dailyUsageSnapshot.docs.map(doc => deleteDoc(doc.ref));
       await Promise.all(deletePromises);
-      
-      console.log(`✅ Energy usage structure removed for device ${deviceId}`);
+
     } catch (error) {
-      console.error(`❌ Error removing energy usage structure:`, error);
+
     }
   }, []);
 

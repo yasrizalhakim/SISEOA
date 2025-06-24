@@ -1,7 +1,7 @@
 // src/components/Buildings/BuildingAutomationTab.js - Fixed with proper service usage
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { MdBolt, MdNightlight, MdEco, MdPowerOff, MdWarning, MdMemory, MdLock } from 'react-icons/md';
+import { MdBolt, MdEco, MdPowerOff, MdWarning, MdMemory, MdLock } from 'react-icons/md';
 import buildingService from '../../services/buildingService'; // Import buildingService for building operations
 import { firestore } from '../../services/firebase'; // Import for direct Firestore operations
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -11,7 +11,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
   const [automationModes, setAutomationModes] = useState({
     'turn-off-all': false,
     'eco-mode': false,
-    'night-mode': false
   });
   
   const [isApplying, setIsApplying] = useState(false);
@@ -25,7 +24,7 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
     {
       id: 'turn-off-all',
       title: 'Lockdown',
-      description: 'Raspberry Pi will immediately shut down and lock all connected devices.',
+      description: 'Smart hub will immediately shut down and lock all connected devices.',
       icon: MdLock,
       color: '#dc2626',
       energySaving: 'Maximum'
@@ -33,38 +32,24 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
     {
       id: 'eco-mode',
       title: 'Eco Mode',
-      description: 'Pi automatically turns off high-energy devices (AC units) for energy savings.',
+      description: 'Smart hub automatically turns off high-energy devices (AC units) for energy savings.',
       icon: MdEco,
       color: '#16a34a',
       energySaving: 'High'
-    },
-    {
-      id: 'night-mode',
-      title: 'Night Mode',
-      description: 'Pi keeps only lighting active and turns off comfort devices (Fan, AC).',
-      icon: MdNightlight,
-      color: '#1e40af',
-      energySaving: 'Medium'
     }
   ];
 
   // Helper function to load automation state from Firestore
   const loadAutomationState = async (buildingId) => {
     try {
-      console.log(`🔍 Loading automation state for building: ${buildingId}`);
-      
       const automationDoc = await getDoc(doc(firestore, 'BUILDINGAUTOMATION', buildingId));
-      
       if (automationDoc.exists()) {
         const data = automationDoc.data();
-        console.log(`✅ Found automation state:`, data);
         return data;
       } else {
-        console.log(`ℹ️ No automation state found for building ${buildingId}`);
         return null;
       }
     } catch (error) {
-      console.error('❌ Error loading automation state:', error);
       return null;
     }
   };
@@ -72,8 +57,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
   // Helper function to set automation mode in Firestore
   const setAutomationMode = async (buildingId, mode, userEmail) => {
     try {
-      console.log(`🤖 Setting automation mode for building ${buildingId}: ${mode}`);
-      
       const automationData = {
         buildingId: buildingId,
         mode: mode,
@@ -83,16 +66,12 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
         modes: {
           'turn-off-all': mode === 'turn-off-all',
           'eco-mode': mode === 'eco-mode',
-          'night-mode': mode === 'night-mode'
+
         }
       };
-      
       await setDoc(doc(firestore, 'BUILDINGAUTOMATION', buildingId), automationData);
-      console.log(`✅ Automation mode set successfully`);
-      
       return automationData;
     } catch (error) {
-      console.error('❌ Error setting automation mode:', error);
       throw error;
     }
   };
@@ -100,8 +79,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
   // Helper function to get automation statistics
   const getAutomationStatistics = async (buildingId) => {
     try {
-      console.log(`📊 Getting automation statistics for building: ${buildingId}`);
-      
       const devices = await buildingService.getBuildingDevices(buildingId);
       const automationState = await loadAutomationState(buildingId);
       
@@ -109,8 +86,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
       const onlineDevices = devices.filter(device => 
         device.Status === 'ON' || device.status === 'ON'
       ).length;
-      
-      // For demonstration - in real implementation, this would come from Pi status
       const lockedDevices = automationState?.enabled ? totalDevices : 0;
       
       let modeTitle = 'No Automation';
@@ -121,9 +96,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
             break;
           case 'eco-mode':
             modeTitle = 'Eco Mode';
-            break;
-          case 'night-mode':
-            modeTitle = 'Night Mode';
             break;
           default:
             modeTitle = 'Custom Mode';
@@ -138,7 +110,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
         lastUpdate: new Date().toISOString()
       };
     } catch (error) {
-      console.error('❌ Error getting automation statistics:', error);
       return {
         totalDevices: 0,
         onlineDevices: 0,
@@ -156,8 +127,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
         setLoadingDevices(true);
         setError(null);
         
-        console.log(`🏢 Loading automation data for building: ${building.id}`);
-        
         // Use buildingService to get devices
         const devices = await buildingService.getBuildingDevices(building.id);
         setBuildingDevices(devices);
@@ -168,7 +137,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
           setAutomationModes({
             'turn-off-all': automationState.modes?.['turn-off-all'] || false,
             'eco-mode': automationState.modes?.['eco-mode'] || false,
-            'night-mode': automationState.modes?.['night-mode'] || false
           });
         }
         
@@ -177,7 +145,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
         setAutomationStats(stats);
         
       } catch (error) {
-        console.error('❌ Error loading building data:', error);
         setError('Failed to load building data: ' + error.message);
       } finally {
         setLoadingDevices(false);
@@ -214,14 +181,12 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
           return {
             'turn-off-all': false,
             'eco-mode': false,
-            'night-mode': false
           };
         } else {
           // Turning on - set only this mode
           return {
             'turn-off-all': optionId === 'turn-off-all',
             'eco-mode': optionId === 'eco-mode',
-            'night-mode': optionId === 'night-mode'
           };
         }
       });
@@ -230,17 +195,14 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
       if (!wasActive) {
         switch (optionId) {
           case 'turn-off-all':
-            setSuccess(`🤖 Raspberry Pi will turn off and lock all devices`);
+            setSuccess(`Smart hub will turn off and lock all devices`);
             break;
           case 'eco-mode':
-            setSuccess(`🌱 Raspberry Pi will activate Eco Mode`);
-            break;
-          case 'night-mode':
-            setSuccess(`🌙 Raspberry Pi will activate Night Mode`);
+            setSuccess(`Smart hub will activate Eco Mode`);
             break;
         }
       } else {
-        setSuccess('🤖 Raspberry Pi will disable automation and unlock devices');
+        setSuccess('Smart hub will disable automation and unlock devices');
       }
       
       // Refresh stats after a short delay to allow Pi to process
@@ -249,7 +211,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
           const updatedStats = await getAutomationStatistics(building.id);
           setAutomationStats(updatedStats);
         } catch (error) {
-          console.error('❌ Error refreshing stats:', error);
         }
       }, 2000);
       
@@ -270,9 +231,7 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
       setTimeout(() => setSuccess(null), 5000);
       
     } catch (error) {
-      console.error('❌ Error applying building automation:', error);
       setError(`Failed to update automation mode: ${error.message}`);
-      
       // Revert state on error
       setAutomationModes(prev => {
         if (wasActive) {
@@ -281,7 +240,7 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
           return {
             'turn-off-all': false,
             'eco-mode': false,
-            'night-mode': false
+            
           };
         }
       });
@@ -313,12 +272,7 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
           <h3>
             <MdBolt className="header-icon" />
             Smart Building Automation
-            {/* <span className="pi-badge">
-              <MdMemory className="pi-icon" />
-              Pi-Controlled
-            </span> */}
           </h3>
-          <p>Configure automated behavior for all devices in <strong>{building.BuildingName || building.id}</strong></p>
         </div>
       </div>
 
@@ -334,52 +288,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
           ✅ {success}
         </div>
       )}
-
-      {/* Building Status Info */}
-      {/* <div className="building-status-info">
-        <div className="status-item">
-          <span className="status-label">Building</span>
-          <span className="status-value">{building.BuildingName || building.id}</span>
-        </div>
-        <div className="status-item">
-          <span className="status-label">Your Role</span>
-          <span className="status-value role-parent">Parent</span>
-        </div>
-        <div className="status-item">
-          <span className="status-label">Total Devices</span>
-          <span className="status-value">{buildingDevices.length}</span>
-        </div>
-        <div className="status-item">
-          <span className="status-label">Automation</span>
-          <span className="status-value">
-            {Object.values(automationModes).some(Boolean) ? 'Active' : 'Inactive'}
-          </span>
-        </div>
-      </div> */}
-
-      {/* Devices Preview */}
-      {/* {buildingDevices.length > 0 && (
-        <div className="devices-preview">
-          <h4>Connected Devices ({buildingDevices.length})</h4>
-          <div className="devices-list">
-            {buildingDevices.slice(0, 3).map(device => (
-              <div key={device.id} className="device-preview-item">
-                <span className="device-name">
-                  {device.DeviceName || device.id} - {device.locationName}
-                </span>
-                <span className={`device-status ${(device.Status || device.status || 'unknown').toLowerCase()}`}>
-                  {device.Status || device.status || 'Unknown'}
-                </span>
-              </div>
-            ))}
-            {buildingDevices.length > 3 && (
-              <div className="device-preview-item more">
-                +{buildingDevices.length - 3} more devices
-              </div>
-            )}
-          </div>
-        </div>
-      )} */}
 
       {/* Automation Options */}
       <div className="automation-options-section">
@@ -407,9 +315,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
                         style={{ color: option.color }}
                       />
                       <h5>{option.title}</h5>
-                      {/* <span className={`energy-badge ${option.energySaving.toLowerCase()}`}>
-                        {option.energySaving} Energy Saving
-                      </span> */}
                     </div>
                     <p className="option-description">{option.description}</p>
                     {isActive && (
@@ -442,42 +347,6 @@ const BuildingAutomationTab = ({ building, userRole, onAutomationApply }) => {
         )}
       </div>
 
-      {/* Automation Statistics */}
-      {automationStats && (
-        <div className="automation-stats">
-          <h4>debug</h4>
-          <div className="stats-grid">
-            <div className="stat-item">
-              <span className="stat-label">Total Devices:</span>
-              <span className="stat-value">{automationStats.totalDevices}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Online:</span>
-              <span className="stat-value">{automationStats.onlineDevices}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Locked:</span>
-              <span className="stat-value">{automationStats.lockedDevices}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Mode:</span>
-              <span className="stat-value">{automationStats.modeTitle}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Help Section
-      <div className="automation-help">
-        <h4>Pi-Controlled Automation</h4>
-        <ul>
-          <li><strong>🤖 Raspberry Pi Control:</strong> All automation is handled directly by the Raspberry Pi</li>
-          <li><strong>🔄 Automatic Application:</strong> Changes are applied immediately to connected devices</li>
-          <li><strong>🔒 Hardware Locking:</strong> Pi prevents manual device control when automation is active</li>
-          <li><strong>⚡ Real-time Response:</strong> No delays - devices respond instantly to automation changes</li>
-        </ul>
-        <p><em>Note: The Raspberry Pi monitors this building's automation mode and applies changes automatically. Device status will update in real-time.</em></p>
-      </div> */}
     </div>
   );
 };

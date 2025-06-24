@@ -52,7 +52,7 @@ const Profile = () => {
           setError('User data not found');
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
+
         setError('Failed to load user data. Please try again.');
       } finally {
         setLoading(false);
@@ -126,7 +126,7 @@ const Profile = () => {
         setSuccess(null);
       }, 3000);
     } catch (error) {
-      console.error('Error updating profile:', error);
+ 
       setError('Failed to update profile: ' + error.message);
     } finally {
       setSaving(false);

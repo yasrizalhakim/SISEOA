@@ -82,13 +82,11 @@ const formatMultiStageSchedule = (schedules) => {
  */
 export const getPiAutomationRule = async (deviceId) => {
   try {
-    console.log(`🤖 Getting Pi automation rule for device: ${deviceId}`);
     
     const ruleDoc = await getDoc(doc(firestore, 'AUTOMATIONRULE', deviceId));
     
     if (ruleDoc.exists()) {
       const ruleData = ruleDoc.data();
-      console.log(`✅ Found Pi automation rule for ${deviceId}:`, ruleData);
       
       // Enhanced rule object with multi-stage support
       const enhancedRule = {
@@ -118,11 +116,10 @@ export const getPiAutomationRule = async (deviceId) => {
       return enhancedRule;
     }
     
-    console.log(`ℹ️ No Pi automation rule found for device ${deviceId}`);
+
     return null;
     
   } catch (error) {
-    console.error('❌ Error getting Pi automation rule:', error);
     return null;
   }
 };
@@ -162,8 +159,6 @@ const generateRuleSummary = (ruleData) => {
  */
 export const createManualPiRule = async (deviceId, ruleData, userEmail) => {
   try {
-    console.log(`🤖 Creating manual Pi rule for device: ${deviceId}`, ruleData);
-    
     const { 
       startTime, 
       endTime, 
@@ -217,11 +212,11 @@ export const createManualPiRule = async (deviceId, ruleData, userEmail) => {
     const ruleRef = doc(firestore, 'AUTOMATIONRULE', deviceId);
     await setDoc(ruleRef, manualRule); // setDoc overwrites existing rule
     
-    console.log(`✅ Manual Pi rule created for ${deviceId} (DISABLED by default):`, manualRule);
+
     return manualRule;
     
   } catch (error) {
-    console.error('❌ Error creating manual Pi rule:', error);
+    console.error('Error creating manual rule:', error);
     throw error;
   }
 };
@@ -235,7 +230,6 @@ export const createManualPiRule = async (deviceId, ruleData, userEmail) => {
  */
 export const updatePiAutomationRule = async (deviceId, updates, userEmail) => {
   try {
-    console.log(`🤖 Updating Pi rule for device: ${deviceId}`, updates);
     
     const updateData = {
       ...updates,
@@ -245,12 +239,10 @@ export const updatePiAutomationRule = async (deviceId, updates, userEmail) => {
     
     const ruleRef = doc(firestore, 'AUTOMATIONRULE', deviceId);
     await updateDoc(ruleRef, updateData);
-    
-    console.log(`✅ Pi rule updated for ${deviceId}`);
     return updateData;
     
   } catch (error) {
-    console.error('❌ Error updating Pi rule:', error);
+    console.error(' Error updating rule:', error);
     throw error;
   }
 };
@@ -262,15 +254,15 @@ export const updatePiAutomationRule = async (deviceId, updates, userEmail) => {
  */
 export const deletePiAutomationRule = async (deviceId) => {
   try {
-    console.log(`🤖 Deleting Pi rule for device: ${deviceId}`);
+
     
     await deleteDoc(doc(firestore, 'AUTOMATIONRULE', deviceId));
     
-    console.log(`✅ Pi rule deleted for ${deviceId}`);
+
     return true;
     
   } catch (error) {
-    console.error('❌ Error deleting Pi rule:', error);
+    console.error('Error deleting rule:', error);
     throw error;
   }
 };
@@ -286,8 +278,6 @@ export const deletePiAutomationRule = async (deviceId) => {
  */
 export const clearDeviceEventHistory = async (deviceId) => {
   try {
-    console.log(`🧹 Clearing event history for device: ${deviceId}`);
-    
     const eventsRef = collection(firestore, 'DEVICE', deviceId, 'eventHistory');
     const allEvents = await getDocs(eventsRef);
     
@@ -301,11 +291,11 @@ export const clearDeviceEventHistory = async (deviceId) => {
     
     await Promise.all(deletePromises);
     
-    console.log(`✅ Cleared ${clearedCount} events from ${deviceId} history`);
+  
     return clearedCount;
     
   } catch (error) {
-    console.error('❌ Error clearing event history:', error);
+    console.error('Error clearing event history:', error);
     throw error;
   }
 };
@@ -321,7 +311,7 @@ export const getEventHistoryCount = async (deviceId) => {
     const eventsSnapshot = await getDocs(eventsRef);
     return eventsSnapshot.size;
   } catch (error) {
-    console.error('❌ Error getting event history count:', error);
+    console.error(' Error getting event history count:', error);
     return 0;
   }
 };
@@ -361,17 +351,17 @@ export const logDeviceEvent = async (deviceId, action, status, source = 'manual'
           await deleteDoc(currentEvents.docs[i].ref);
         }
       }
-      console.log(`🧹 Deleted ${eventsToDelete} old events for ${deviceId} (rolling limit)`);
+
     }
     
     // Add new event
     const docRef = await addDoc(historyRef, eventData);
     
-    console.log(`📝 Logged device event: ${deviceId} ${action} at ${now.toISOString()}`);
+
     return docRef.id;
     
   } catch (error) {
-    console.error('❌ Error logging device event:', error);
+    console.error('Error logging device event:', error);
     return null;
   }
 };
@@ -385,7 +375,7 @@ export const logDeviceEvent = async (deviceId, action, status, source = 'manual'
  */
 export const getDeviceEventHistory = async (deviceId, startDate, endDate) => {
   try {
-    console.log(`📊 Getting device history for ${deviceId}`);
+
     
     const startTimestamp = Timestamp.fromDate(startDate);
     const endTimestamp = Timestamp.fromDate(endDate);
@@ -415,11 +405,11 @@ export const getDeviceEventHistory = async (deviceId, startDate, endDate) => {
       });
     });
     
-    console.log(`📊 Retrieved ${events.length} events from eventHistory`);
+
     return events;
     
   } catch (error) {
-    console.error('❌ Error getting device event history:', error);
+    console.error('Error getting device event history:', error);
     return [];
   }
 };
@@ -474,7 +464,7 @@ const groupEventsIntoSessions = (events, gapMinutes = MINIMUM_STAGE_GAP_MINUTES)
  */
 export const detectDevicePatterns = async (deviceId, analysisWindow = 14) => {
   try {
-    console.log(`🔍 Analyzing patterns for device ${deviceId} (${analysisWindow} days)`);
+
     
     const endDate = new Date();
     const startDate = new Date();
@@ -505,7 +495,7 @@ export const detectDevicePatterns = async (deviceId, analysisWindow = 14) => {
     const insights = analyzeUsageInsights(turnOnEvents, analysisWindow);
     const summary = generateUsageSummary(allEvents, analysisWindow);
     
-    console.log(`🎯 Multi-stage pattern analysis completed: ${insights.length} insights generated`);
+  
     
     return {
       hasPatterns: insights.length > 0 || multiStageAnalysis.sessionsDetected > 0,
@@ -518,7 +508,7 @@ export const detectDevicePatterns = async (deviceId, analysisWindow = 14) => {
     };
     
   } catch (error) {
-    console.error('❌ Error analyzing patterns:', error);
+    console.error('Error analyzing patterns:', error);
     return { 
       hasPatterns: false, 
       patterns: [], 
@@ -574,7 +564,7 @@ const analyzeMultiStagePatterns = (allEvents, totalDays) => {
         'Device primarily used in single sessions'
     };
   } catch (error) {
-    console.error('❌ Error analyzing multi-stage patterns:', error);
+    console.error('Error analyzing multi-stage patterns:', error);
     return {
       sessionsDetected: 0,
       avgSessionsPerDay: 0,

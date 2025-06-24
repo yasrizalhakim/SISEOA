@@ -1,4 +1,4 @@
-// src/components/Dashboard/Dashboard.js - COMPLETELY FIXED SystemAdmin Access
+// src/components/Dashboard/Dashboard.js - FIXED undefined length errors
 
 import React, { useState, useEffect } from 'react';
 import { MdDevices, MdBolt, MdLocationOn, MdWarning, MdAdd, MdRefresh, MdAdminPanelSettings, MdBusiness } from 'react-icons/md';
@@ -39,18 +39,15 @@ const Dashboard = () => {
   // Get current user
   const userEmail = localStorage.getItem('userEmail') || '';
 
-  // COMPLETELY FIXED: Main data fetcher with guaranteed SystemAdmin access
+  
   const fetchDashboardData = async () => {
     try {
       setRefreshing(true);
       setError(null);
 
-      console.log('🚀 DASHBOARD: Fetching data for user:', userEmail);
-
       // Step 1: Check SystemAdmin status
       const isAdmin = await isSystemAdmin(userEmail);
       setIsUserSystemAdmin(isAdmin);
-      console.log('🔧 DASHBOARD: SystemAdmin status:', isAdmin);
 
       // Step 2: Get user role and permissions
       const role = await getUserRole(userEmail);
@@ -59,40 +56,26 @@ const Dashboard = () => {
       const canManageDevs = await canManageDevices(userEmail);
       setCanManage(canManageDevs);
 
-      console.log('👤 DASHBOARD: User info:', { 
-        isSystemAdmin: isAdmin, 
-        role: role, 
-        canManageDevices: canManageDevs 
-      });
-
       // Step 3: CRITICAL - Fetch data based on user type
-      let allDevices, allLocations;
+      let allDevices = [], allLocations = [];
 
       if (isAdmin) {
-        // SystemAdmin: Get ALL system data directly - NO FILTERING
-        console.log('🔧 DASHBOARD: SystemAdmin detected - fetching ALL system data');
-        
         try {
-          allDevices = await dataService.getAllDevices();
-          console.log(`🔧 DASHBOARD: getAllDevices() returned ${allDevices.length} devices`);
-          
-          allLocations = await dataService.getAllLocations();
-          console.log(`🔧 DASHBOARD: getAllLocations() returned ${allLocations.length} locations`);
+          const fetchedDevices = await dataService.getAllDevices();
+          const fetchedLocations = await dataService.getAllLocations();
+          allDevices = Array.isArray(fetchedDevices) ? fetchedDevices : [];
+          allLocations = Array.isArray(fetchedLocations) ? fetchedLocations : [];
         } catch (fetchError) {
-          console.error('❌ DASHBOARD: Error fetching system data:', fetchError);
+          console.error('SystemAdmin data fetch error:', fetchError);
           throw fetchError;
         }
       } else {
-        // Regular user: Get filtered data
-        console.log('🔧 DASHBOARD: Regular user - fetching user-specific data');
-        
         try {
           const { devices: userDevices, locations: userLocations } = await dataService.getUserDevicesAndLocations(userEmail);
-          allDevices = userDevices;
-          allLocations = userLocations;
-          console.log(`🔧 DASHBOARD: Regular user fetched ${allDevices.length} devices, ${allLocations.length} locations`);
+          allDevices = Array.isArray(userDevices) ? userDevices : [];
+          allLocations = Array.isArray(userLocations) ? userLocations : [];
         } catch (fetchError) {
-          console.error('❌ DASHBOARD: Error fetching user data:', fetchError);
+          console.error('User data fetch error:', fetchError);
           throw fetchError;
         }
       }
@@ -104,26 +87,24 @@ const Dashboard = () => {
       let finalDevices;
       if (isAdmin) {
         // SystemAdmin: NO FILTERING AT ALL
-        console.log('🔧 DASHBOARD: SystemAdmin - using ALL devices without any filtering');
         finalDevices = allDevices;
       } else {
         // Regular user: Apply security filtering
-        console.log('🔧 DASHBOARD: Regular user - applying security filtering');
         finalDevices = await applyUserDeviceFiltering(allDevices, allLocations, userEmail);
       }
 
-      console.log(`🔧 DASHBOARD: Final devices to display: ${finalDevices.length}`);
+      // Ensure finalDevices is always an array
+      finalDevices = Array.isArray(finalDevices) ? finalDevices : [];
       
       // Step 6: Set devices state
       setDevices(finalDevices);
-      console.log(`🔧 DASHBOARD: Devices state set to ${finalDevices.length} devices`);
 
       // Step 7: Get accessible buildings
       const userAccessibleBuildings = await getAccessibleBuildings(allLocations, isAdmin);
       setAccessibleBuildings(userAccessibleBuildings);
 
       // Step 8: Set device IDs for energy overview
-      const deviceIds = finalDevices.map(device => device.id);
+      const deviceIds = finalDevices.map(device => device.id).filter(id => id);
       setAccessibleDeviceIds(deviceIds);
 
       // Step 9: Calculate dashboard stats
@@ -152,7 +133,6 @@ const Dashboard = () => {
           activeSystemDevices: allDevices.filter(device => device.status === 'ON').length,
           totalSystemBuildings: userAccessibleBuildings.length
         };
-        console.log('🔧 DASHBOARD: SystemAdmin stats calculated:', systemStats);
       }
 
       setDashboardData({
@@ -164,16 +144,8 @@ const Dashboard = () => {
         ...systemStats
       });
 
-      console.log('📊 DASHBOARD: Final stats:', { 
-        totalDevices, 
-        activeDevices, 
-        uniqueLocations,
-        uniqueBuildings,
-        isSystemAdmin: isAdmin
-      });
-
     } catch (error) {
-      console.error('❌ DASHBOARD: Error in fetchDashboardData:', error);
+      console.error('Dashboard fetch error:', error);
       setError('Failed to load dashboard data: ' + error.message);
     } finally {
       setRefreshing(false);
@@ -183,6 +155,8 @@ const Dashboard = () => {
 
   // Helper: Apply user-based device filtering (for non-SystemAdmin)
   const applyUserDeviceFiltering = async (allDevices, allLocations, userEmail) => {
+    if (!Array.isArray(allDevices)) return [];
+    
     const accessibleDevices = [];
     
     for (const device of allDevices) {
@@ -209,7 +183,6 @@ const Dashboard = () => {
       }
     }
     
-    console.log(`🔐 DASHBOARD: Filtered ${allDevices.length} devices to ${accessibleDevices.length} accessible devices`);
     return accessibleDevices;
   };
 
@@ -219,20 +192,26 @@ const Dashboard = () => {
     
     if (isAdmin) {
       // SystemAdmin can see all buildings
-      const { getDocs, collection } = await import('firebase/firestore');
-      const { firestore } = await import('../../services/firebase');
-      
-      const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
-      buildingsSnapshot.docs.forEach(doc => {
-        buildings.add(doc.id);
-      });
+      try {
+        const { getDocs, collection } = await import('firebase/firestore');
+        const { firestore } = await import('../../services/firebase');
+        
+        const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
+        buildingsSnapshot.docs.forEach(doc => {
+          buildings.add(doc.id);
+        });
+      } catch (error) {
+        console.error('Error fetching buildings:', error);
+      }
     } else {
       // Regular users - only buildings they have access to
-      for (const location of allLocations) {
-        if (location.Building) {
-          const roleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
-          if (roleInBuilding === 'parent' || roleInBuilding === 'children') {
-            buildings.add(location.Building);
+      if (Array.isArray(allLocations)) {
+        for (const location of allLocations) {
+          if (location.Building) {
+            const roleInBuilding = await getUserRoleInBuilding(userEmail, location.Building);
+            if (roleInBuilding === 'parent' || roleInBuilding === 'children') {
+              buildings.add(location.Building);
+            }
           }
         }
       }
@@ -253,14 +232,11 @@ const Dashboard = () => {
 
   // Manual refresh handler
   const handleRefresh = () => {
-    console.log('🔄 DASHBOARD: Manual refresh triggered');
     fetchDashboardData();
   };
 
   // Device update handler
   const handleDeviceUpdate = (deviceId, updatedDevice) => {
-    console.log(`🔄 DASHBOARD: Updating device ${deviceId}:`, updatedDevice);
-    
     setDevices(prevDevices => 
       prevDevices.map(device => 
         device.id === deviceId ? { ...device, ...updatedDevice } : device
@@ -315,16 +291,7 @@ const Dashboard = () => {
           fontWeight: '500'
         }}>
           <MdAdminPanelSettings size={20} />
-          <span>SystemAdmin View - Full System Access</span>
-          {dashboardData.totalSystemDevices > 0 && (
-            <span style={{ 
-              marginLeft: 'auto', 
-              fontSize: '12px', 
-              opacity: 0.9 
-            }}>
-              System Total: {dashboardData.totalSystemDevices} devices, {dashboardData.totalSystemBuildings} buildings
-            </span>
-          )}
+          <span>System Admin View - Full System Access</span>
         </div>
       )}
       
@@ -332,25 +299,25 @@ const Dashboard = () => {
       <div className="stats-container">
         <StatCard
           icon={<MdDevices />}
-          value={isUserSystemAdmin ? dashboardData.totalSystemDevices || dashboardData.totalDevices : dashboardData.totalDevices}
+          value={isUserSystemAdmin ? (dashboardData.totalSystemDevices || dashboardData.totalDevices || 0) : (dashboardData.totalDevices || 0)}
           label={isUserSystemAdmin ? "System Devices" : "My Devices"}
           color="blue"
         />
         <StatCard
           icon={<MdBolt />}
-          value={isUserSystemAdmin ? dashboardData.activeSystemDevices || dashboardData.activeDevices : dashboardData.activeDevices}
+          value={isUserSystemAdmin ? (dashboardData.activeSystemDevices || dashboardData.activeDevices || 0) : (dashboardData.activeDevices || 0)}
           label={isUserSystemAdmin ? "Active System Devices" : "Active Devices"}
           color="green"
         />
         <StatCard
           icon={<MdBusiness />}
-          value={isUserSystemAdmin ? dashboardData.totalSystemBuildings || dashboardData.buildings : dashboardData.buildings}
+          value={isUserSystemAdmin ? (dashboardData.totalSystemBuildings || dashboardData.buildings || 0) : (dashboardData.buildings || 0)}
           label={isUserSystemAdmin ? "System Buildings" : "My Buildings"}
           color="purple"
         />
         <StatCard
           icon={<MdLocationOn />}
-          value={isUserSystemAdmin ? dashboardData.totalSystemLocations || dashboardData.locations : dashboardData.locations}
+          value={isUserSystemAdmin ? (dashboardData.totalSystemLocations || dashboardData.locations || 0) : (dashboardData.locations || 0)}
           label={isUserSystemAdmin ? "System Locations" : "My Locations"}
           color="red"
         />
@@ -387,7 +354,7 @@ const StatCard = ({ icon, value, label, color }) => (
       {icon}
     </div>
     <div className="stat-content">
-      <div className="stat-value">{value}</div>
+      <div className="stat-value">{value || 0}</div>
       <div className="stat-label">{label}</div>
     </div>
   </div>
@@ -425,7 +392,7 @@ const DeviceToggle = ({ device, onDeviceUpdate, userEmail, locations, isSystemAd
       }
 
     } catch (error) {
-      console.error('Error toggling device:', error);
+      console.error('Toggle error:', error);
       setError('Failed to toggle');
       setTimeout(() => setError(null), 3000);
     } finally {
@@ -452,8 +419,8 @@ const DeviceToggle = ({ device, onDeviceUpdate, userEmail, locations, isSystemAd
 
 // COMPLETELY FIXED: Device Overview Panel
 const DeviceOverviewPanel = ({ 
-  devices, 
-  locations, 
+  devices = [], // Default to empty array
+  locations = [], // Default to empty array
   userEmail, 
   userRole,
   isSystemAdmin,
@@ -473,6 +440,7 @@ const DeviceOverviewPanel = ({
   }, [isSystemAdmin]);
 
   const getLocationName = (locationId) => {
+    if (!Array.isArray(locations)) return locationId || 'No Location';
     const location = locations.find(loc => loc.id === locationId);
     return location ? location.LocationName || locationId : locationId || 'No Location';
   };
@@ -489,8 +457,6 @@ const DeviceOverviewPanel = ({
     
     return true;
   });
-
-  console.log(`🔍 DASHBOARD DeviceOverviewPanel: Input devices: ${devices.length}, Filtered: ${filteredDevices.length} (filter: ${filter}, location: ${isSystemAdmin ? 'N/A (SystemAdmin)' : locationFilter}, isSystemAdmin: ${isSystemAdmin})`);
 
   return (
     <div className="panel device-overview-panel">
@@ -555,7 +521,7 @@ const DeviceOverviewPanel = ({
             fontSize: '14px',
             fontWeight: '500'
           }}>
-            📊 Viewing All System Devices
+             All System Devices
           </div>
         )}
       </div>
@@ -619,7 +585,7 @@ const DeviceOverviewPanel = ({
 };
 
 // Energy Panel Component
-const EnergyPanel = ({ deviceIds, isSystemAdmin, devicesCount }) => (
+const EnergyPanel = ({ deviceIds = [], isSystemAdmin, devicesCount = 0 }) => (
   <div className="panel energy-panel">
     <div className="panel-header">
       <h3>

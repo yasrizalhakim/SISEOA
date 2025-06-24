@@ -4,8 +4,13 @@ from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore, db
 import RPi.GPIO as GPIO
-from collections import Counter
+from collections import Counter, defaultdict
 import schedule
+
+# --- Configuration Constants ---
+MINIMUM_STAGE_GAP_MINUTES = 15  # Easy to change later - minimum gap between stages
+MAX_EVENT_HISTORY = 30  # Maximum events to keep per device
+MAX_STAGES_PER_DAY = 3  # Maximum stages allowed per day
 
 # --- Firebase Initialization ---
 cred = credentials.Certificate('serviceAccountKey.json')
@@ -16,12 +21,29 @@ firestore_db = firestore.client()
 
 # --- Device Configuration (GPIO mapping only) ---
 DEVICE_GPIO_CONFIG = {
-    "device1": {"gpio": 17, "wattage": 10},
-    "device2": {"gpio": 27, "wattage": 15},
-    "device3": {"gpio": 22, "wattage": 2000},
-    "device4": {"gpio": 18, "wattage": 60},
-    # "device5": {"gpio": 23, "wattage": 100},
-    # Add more devices as needed
+
+    #building1
+    "device1": {"gpio": 6, "wattage": 20},
+    "device2": {"gpio": 5, "wattage": 60},
+
+    #building2
+    #gf
+    "device3": {"gpio": 9, "wattage": 20},
+    #f1
+    "device4": {"gpio": 0, "wattage": 20},
+    "device5": {"gpio": 11, "wattage": 60},
+    "device6": {"gpio": 10, "wattage": 1200},
+    
+    #building3
+    #gf
+    "device7": {"gpio": 17, "wattage": 20},
+    "device8": {"gpio": 22, "wattage": 1200},
+    #f1
+    "device9": {"gpio": 27, "wattage": 20},
+    "device10": {"gpio": 4, "wattage": 1200},
+    #f2
+    "device11": {"gpio": 2, "wattage": 20},
+    "device12": {"gpio": 3, "wattage": 1200},
 }
 
 GPIO.setmode(GPIO.BCM)
@@ -50,28 +72,341 @@ def get_readable():
 def calculate_energy(duration_min, watt):
     return round((watt / 1000) * (duration_min / 60), 6)
 
-# --- Event Logging Function (SIMPLIFIED) ---
+def time_to_minutes(time_str):
+    """Convert HH:MM to minutes since midnight"""
+    hours, minutes = map(int, time_str.split(':'))
+    return hours * 60 + minutes
+
+def minutes_to_time(minutes):
+    """Convert minutes since midnight to HH:MM"""
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours:02d}:{mins:02d}"
+
+# --- Event Logging Function (WITH ROLLING LIMIT) ---
 def log_device_event(device_id, status):
-    """Log device ON/OFF events to Firestore - SIMPLIFIED for automation only"""
+    """Log device ON/OFF events to Firestore with rolling 30-event limit"""
     try:
         if firebase_connected:
             now = datetime.now()
             
-            # SIMPLIFIED: Only store what's needed for pattern detection
+            # Event data for pattern detection
             event_data = {
                 "status": status,        # "ON" or "OFF" - REQUIRED
                 "timestamp": now,        # datetime - REQUIRED  
                 "hour": now.hour         # hour (0-23) - REQUIRED for pattern detection
             }
             
-            # Log to eventHistory subcollection
-            event_ref = firestore_db.collection("DEVICE").document(device_id).collection("eventHistory").document()
+            # Get current event count and enforce rolling limit
+            events_ref = firestore_db.collection("DEVICE").document(device_id).collection("eventHistory")
+            
+            # Get all events ordered by timestamp (oldest first)
+            existing_events = events_ref.order_by("timestamp").stream()
+            event_docs = list(existing_events)
+            
+            # If we're at the limit, delete the oldest event
+            if len(event_docs) >= MAX_EVENT_HISTORY:
+                oldest_event = event_docs[0]
+                oldest_event.reference.delete()
+                print(f"[EVENT] Deleted oldest event for {device_id} (rolling limit: {MAX_EVENT_HISTORY})")
+            
+            # Log new event
+            event_ref = events_ref.document()
             event_ref.set(event_data)
             
-            print(f"[EVENT] {device_id}: {status} at {now.strftime('%H:%M')} (hour={now.hour})")
+            print(f"[EVENT] {device_id}: {status} at {now.strftime('%H:%M')} (hour={now.hour}) - {len(event_docs)}/{MAX_EVENT_HISTORY} events")
             
     except Exception as e:
         print(f"[EVENT] Error logging event for {device_id}: {e}")
+
+def clear_device_event_history(device_id):
+    """Clear all event history for a device (for 'Learn New Pattern' feature)"""
+    try:
+        if firebase_connected:
+            events_ref = firestore_db.collection("DEVICE").document(device_id).collection("eventHistory")
+            
+            # Get all events
+            events = events_ref.stream()
+            
+            # Delete all events
+            count = 0
+            for event in events:
+                event.reference.delete()
+                count += 1
+            
+            print(f"[CLEAR] Cleared {count} events from {device_id} history")
+            return count
+        return 0
+        
+    except Exception as e:
+        print(f"[CLEAR] Error clearing event history for {device_id}: {e}")
+        return 0
+
+# --- Pattern Detection Functions (ENHANCED FOR MULTI-STAGE) ---
+def group_events_into_sessions(events, gap_minutes=MINIMUM_STAGE_GAP_MINUTES):
+    """Group ON/OFF events into sessions based on time gaps"""
+    if not events:
+        return []
+    
+    sessions = []
+    current_session = []
+    
+    for event in sorted(events, key=lambda x: x.get('timestamp')):
+        if not current_session:
+            current_session.append(event)
+        else:
+            last_event = current_session[-1]
+            time_diff = (event['timestamp'] - last_event['timestamp']).total_seconds() / 60
+            
+            # If gap is too small, merge into current session
+            if time_diff <= gap_minutes:
+                current_session.append(event)
+            else:
+                # Gap is large enough - finish current session and start new one
+                if len(current_session) >= 2:  # Need at least ON and OFF
+                    sessions.append(current_session)
+                current_session = [event]
+    
+    # Don't forget the last session
+    if len(current_session) >= 2:
+        sessions.append(current_session)
+    
+    return sessions
+
+def analyze_device_patterns_multi_stage(device_id):
+    """Analyze device usage patterns - ENHANCED for multiple stages per day"""
+    try:
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=7)
+        
+        print(f"[PATTERN] Analyzing {device_id} for multi-stage patterns (last 7 days)")
+        
+        # Get event history from Firestore
+        events_ref = firestore_db.collection("DEVICE").document(device_id).collection("eventHistory")
+        events_query = events_ref.where("timestamp", ">=", start_time).where("timestamp", "<=", end_time)
+        events = list(events_query.stream())
+        
+        print(f"[PATTERN] Found {len(events)} events for {device_id}")
+        
+        if len(events) < 4:  # Need at least 2 ON and 2 OFF events
+            print(f"[PATTERN] Not enough data (need 4+ events for multi-stage)")
+            return None
+        
+        # Convert to list of event dictionaries
+        event_list = []
+        active_days = set()
+        
+        for event_doc in events:
+            event_data = event_doc.to_dict()
+            status = event_data.get("status")
+            hour = event_data.get("hour")
+            timestamp = event_data.get("timestamp")
+            
+            # Handle timestamp conversion
+            if hasattr(timestamp, 'to_pydatetime'):
+                timestamp = timestamp.to_pydatetime()
+            elif not isinstance(timestamp, datetime):
+                continue
+            
+            day_name = timestamp.strftime("%A")
+            active_days.add(day_name)
+            
+            event_list.append({
+                'status': status,
+                'hour': hour if hour is not None else timestamp.hour,
+                'timestamp': timestamp,
+                'day': day_name
+            })
+        
+        print(f"[PATTERN] Active days detected: {sorted(active_days)}")
+        
+        # Group events by day and analyze patterns
+        daily_patterns = defaultdict(list)
+        for event in event_list:
+            daily_patterns[event['day']].append(event)
+        
+        # Look for multi-stage patterns in each day
+        day_schedules = {}
+        
+        for day, day_events in daily_patterns.items():
+            if len(day_events) < 2:
+                continue
+                
+            # Group events into sessions for this day
+            sessions = group_events_into_sessions(day_events, MINIMUM_STAGE_GAP_MINUTES)
+            stages = []
+            
+            for session in sessions:
+                on_events = [e for e in session if e['status'] == 'ON']
+                off_events = [e for e in session if e['status'] == 'OFF']
+                
+                if on_events and off_events:
+                    # Find the first ON and last OFF in this session
+                    session_start = min(on_events, key=lambda x: x['timestamp'])
+                    session_end = max(off_events, key=lambda x: x['timestamp'])
+                    
+                    start_time = f"{session_start['hour']:02d}:00"
+                    end_time = f"{session_end['hour']:02d}:00"
+                    
+                    # Avoid duplicate or invalid stages
+                    if start_time != end_time:
+                        stages.append({
+                            'start': start_time,
+                            'end': end_time
+                        })
+            
+            if stages:
+                day_schedules[day] = stages
+        
+        if not day_schedules:
+            print(f"[PATTERN] No valid multi-stage patterns found")
+            return None
+        
+        # Create multi-stage pattern
+        # Find the most common pattern across days
+        most_common_day = max(day_schedules.keys(), key=lambda d: len(daily_patterns[d]))
+        best_stages = day_schedules[most_common_day]
+        
+        print(f"[PATTERN] Best pattern from {most_common_day}: {best_stages}")
+        
+        # Build the new rule structure with multiple stages
+        pattern = {
+            "schedules": [
+                {
+                    "day": day,
+                    "stages": day_schedules.get(day, best_stages)  # Use day-specific or best pattern
+                }
+                for day in sorted(active_days)
+            ],
+            "enabled": False,  # NEW RULES START DISABLED
+            "source": "historical",
+            "createdAt": datetime.now().isoformat(),
+            "lastModified": datetime.now().isoformat(),
+            "basedOnEvents": len(event_list),
+            "multiStage": True,
+            "stageGapMinutes": MINIMUM_STAGE_GAP_MINUTES
+        }
+        
+        print(f"[PATTERN] Generated multi-stage pattern: {pattern}")
+        return pattern
+        
+    except Exception as e:
+        print(f"[PATTERN] Error analyzing {device_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def generate_automation_rules():
+    """Generate automation rules for all devices based on historical patterns"""
+    print("[PATTERN] Starting pattern detection for all devices...")
+    
+    for device_id in DEVICE_GPIO_CONFIG.keys():
+        if device_id in device_building_map:
+            pattern = analyze_device_patterns_multi_stage(device_id)
+            if pattern:
+                try:
+                    # Save rule to AUTOMATIONRULE collection
+                    rule_ref = firestore_db.collection("AUTOMATIONRULE").document(device_id)
+                    rule_ref.set(pattern)
+                    print(f"[PATTERN] Multi-stage rule created for {device_id} (DISABLED by default)")
+                except Exception as e:
+                    print(f"[PATTERN] Error saving rule for {device_id}: {e}")
+            else:
+                print(f"[PATTERN] No pattern found for {device_id}")
+
+# --- Rule Executor Functions (ENHANCED FOR MULTI-STAGE) ---
+def execute_automation_rules():
+    """Execute device-level automation rules with multi-stage support"""
+    if not firebase_connected:
+        return
+    
+    current_time = datetime.now()
+    current_hour = current_time.strftime("%H:00")
+    current_day = current_time.strftime("%A")
+    
+    print(f"[RULE_EXEC] Checking multi-stage rules at {current_hour} on {current_day}")
+    
+    for device_id in DEVICE_GPIO_CONFIG.keys():
+        if device_id not in device_building_map:
+            continue
+            
+        building_id = device_building_map[device_id]
+        automation_state = building_automation_states.get(building_id, {})
+        
+        # Only execute device rules if building automation is not active
+        if automation_state.get("mode", "none") != "none":
+            continue
+            
+        # Check if device is locked by building automation
+        locked_devices = automation_state.get("locked_devices", set())
+        if device_id in locked_devices:
+            continue
+        
+        try:
+            # Get automation rule for this device from AUTOMATIONRULE collection
+            rule_ref = firestore_db.collection("AUTOMATIONRULE").document(device_id)
+            rule_doc = rule_ref.get()
+            
+            if not rule_doc.exists:
+                continue
+                
+            rule_data = rule_doc.to_dict()
+            
+            if not rule_data.get("enabled", False):
+                continue
+            
+            # Check if this is a multi-stage rule
+            if rule_data.get("multiStage", False) and "schedules" in rule_data:
+                execute_multi_stage_rule(device_id, rule_data, current_hour, current_day)
+            else:
+                # Legacy single-stage rule
+                execute_single_stage_rule(device_id, rule_data, current_hour, current_day)
+                
+        except Exception as e:
+            print(f"[RULE_EXEC] Error executing rule for {device_id}: {e}")
+
+def execute_multi_stage_rule(device_id, rule_data, current_hour, current_day):
+    """Execute multi-stage automation rule"""
+    schedules = rule_data.get("schedules", [])
+    
+    # Find schedule for current day
+    day_schedule = None
+    for schedule in schedules:
+        if schedule.get("day") == current_day:
+            day_schedule = schedule
+            break
+    
+    if not day_schedule:
+        return
+    
+    stages = day_schedule.get("stages", [])
+    
+    for stage in stages:
+        start_time = stage.get("start", "")
+        end_time = stage.get("end", "")
+        
+        if current_hour == start_time:
+            print(f"[RULE_EXEC] Multi-stage ON: {device_id} (stage: {start_time}-{end_time})")
+            switch_device(device_id, "ON")
+        elif current_hour == end_time:
+            print(f"[RULE_EXEC] Multi-stage OFF: {device_id} (stage: {start_time}-{end_time})")
+            switch_device(device_id, "OFF")
+
+def execute_single_stage_rule(device_id, rule_data, current_hour, current_day):
+    """Execute legacy single-stage automation rule"""
+    start_time = rule_data.get("start", "")
+    end_time = rule_data.get("end", "")
+    days = rule_data.get("days", [])
+    
+    if current_day not in days:
+        return
+    
+    if current_hour == start_time:
+        print(f"[RULE_EXEC] Turning ON {device_id} (single-stage rule: {start_time})")
+        switch_device(device_id, "ON")
+    elif current_hour == end_time:
+        print(f"[RULE_EXEC] Turning OFF {device_id} (single-stage rule: {end_time})")
+        switch_device(device_id, "OFF")
 
 # --- Firebase Connection Monitoring ---
 def monitor_firebase_connection():
@@ -214,7 +549,7 @@ def switch_device(device_id, state, force=False):
         device_on_timestamps[device_id] = datetime.now()
         device_last_energy_update_time[device_id] = datetime.now()
         
-        # Log the event
+        # Log the event (with rolling limit)
         log_device_event(device_id, "ON")
         
         # Update RTDB immediately to reflect actual state
@@ -233,7 +568,7 @@ def switch_device(device_id, state, force=False):
         device_on_timestamps[device_id] = None
         device_last_energy_update_time[device_id] = None
         
-        # Log the event
+        # Log the event (with rolling limit)
         log_device_event(device_id, "OFF")
         
         # Update RTDB immediately to reflect actual state
@@ -253,182 +588,16 @@ def switch_device(device_id, state, force=False):
     
     return True
 
-# --- Pattern Detection Functions (SIMPLIFIED) ---
-# Fixed analyze_device_patterns function that correctly extracts days
-def analyze_device_patterns(device_id):
-    """Analyze device usage patterns - FIXED to extract actual days from data"""
-    try:
-        end_time = datetime.now()
-        start_time = end_time - timedelta(days=7)
-        
-        print(f"[PATTERN] Analyzing {device_id} (last 7 days)")
-        
-        # Get event history from Firestore
-        events_ref = firestore_db.collection("DEVICE").document(device_id).collection("eventHistory")
-        events_query = events_ref.where("timestamp", ">=", start_time).where("timestamp", "<=", end_time)
-        events = list(events_query.stream())
-        
-        print(f"[PATTERN] Found {len(events)} events for {device_id}")
-        
-        on_hours = []
-        off_hours = []
-        active_days = set()  # Track actual days from data
-        
-        for event_doc in events:
-            event_data = event_doc.to_dict()
-            status = event_data.get("status")
-            hour = event_data.get("hour")  # Direct hour field
-            timestamp = event_data.get("timestamp")
-            
-            # Fallback to timestamp if hour field missing
-            if hour is None and timestamp:
-                # Handle different timestamp types
-                if hasattr(timestamp, 'hour'):
-                    hour = timestamp.hour
-                elif hasattr(timestamp, 'to_pydatetime'):
-                    hour = timestamp.to_pydatetime().hour
-                else:
-                    continue
-            
-            # FIXED: Extract actual day from timestamp
-            if timestamp:
-                if hasattr(timestamp, 'strftime'):
-                    day_name = timestamp.strftime("%A")
-                elif hasattr(timestamp, 'to_pydatetime'):
-                    day_name = timestamp.to_pydatetime().strftime("%A")
-                else:
-                    continue
-                
-                active_days.add(day_name)  # Add actual day to set
-                print(f"[PATTERN] {status} at hour {hour} on {day_name}")
-            
-            if status == "ON":
-                on_hours.append(hour)
-            elif status == "OFF":
-                off_hours.append(hour)
-        
-        print(f"[PATTERN] ON hours: {on_hours}")
-        print(f"[PATTERN] OFF hours: {off_hours}")
-        print(f"[PATTERN] Active days detected: {sorted(active_days)}")  # Show actual days
-        
-        # Need at least 2 ON and 2 OFF events
-        if len(on_hours) < 2 or len(off_hours) < 2:
-            print(f"[PATTERN] Not enough data (need 2+ ON and 2+ OFF events)")
-            return None
-        
-        # Find most common hours
-        most_common_on = Counter(on_hours).most_common(1)[0][0]
-        most_common_off = Counter(off_hours).most_common(1)[0][0]
-        
-        print(f"[PATTERN] Most common: ON={most_common_on}, OFF={most_common_off}")
-        
-        # FIXED: Use actual days from data instead of hardcoded weekdays
-        pattern = {
-            "start": f"{most_common_on:02d}:00",
-            "end": f"{most_common_off:02d}:00",
-            "days": sorted(list(active_days)),  # Use actual days from timestamps
-            "enabled": True,
-            "source": "historical",
-            "createdAt": datetime.now().isoformat(),
-            "lastModified": datetime.now().isoformat(),
-            "basedOnEvents": len(on_hours) + len(off_hours)
-        }
-        
-        print(f"[PATTERN] Generated: {pattern}")
-        return pattern
-        
-    except Exception as e:
-        print(f"[PATTERN] Error analyzing {device_id}: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def generate_automation_rules():
-    """Generate automation rules for all devices based on historical patterns"""
-    print("[PATTERN] Starting pattern detection for all devices...")
-    
-    for device_id in DEVICE_GPIO_CONFIG.keys():
-        if device_id in device_building_map:
-            pattern = analyze_device_patterns(device_id)
-            if pattern:
-                try:
-                    # Save rule to AUTOMATIONRULE collection
-                    rule_ref = firestore_db.collection("AUTOMATIONRULE").document(device_id)
-                    rule_ref.set(pattern)
-                    print(f"[PATTERN] ✅ Rule created for {device_id}: {pattern['start']}-{pattern['end']}")
-                except Exception as e:
-                    print(f"[PATTERN] ❌ Error saving rule for {device_id}: {e}")
-            else:
-                print(f"[PATTERN] ⚠️ No pattern found for {device_id}")
-
-# --- Rule Executor Functions (FIXED) ---
-def execute_automation_rules():
-    """Execute device-level automation rules"""
-    if not firebase_connected:
-        return
-    
-    current_time = datetime.now()
-    current_hour = current_time.strftime("%H:00")
-    current_day = current_time.strftime("%A")
-    
-    print(f"[RULE_EXEC] Checking rules at {current_hour} on {current_day}")
-    
-    for device_id in DEVICE_GPIO_CONFIG.keys():
-        if device_id not in device_building_map:
-            continue
-            
-        building_id = device_building_map[device_id]
-        automation_state = building_automation_states.get(building_id, {})
-        
-        # Only execute device rules if building automation is not active
-        if automation_state.get("mode", "none") != "none":
-            continue
-            
-        # Check if device is locked by building automation
-        locked_devices = automation_state.get("locked_devices", set())
-        if device_id in locked_devices:
-            continue
-        
-        try:
-            # Get automation rule for this device from AUTOMATIONRULE collection
-            rule_ref = firestore_db.collection("AUTOMATIONRULE").document(device_id)
-            rule_doc = rule_ref.get()
-            
-            # FIXED: Use .exists (property) not .exists() (method)
-            if not rule_doc.exists:
-                continue
-                
-            rule_data = rule_doc.to_dict()
-            
-            if not rule_data.get("enabled", False):
-                continue
-                
-            start_time = rule_data.get("start", "")
-            end_time = rule_data.get("end", "")
-            days = rule_data.get("days", [])
-            
-            if current_day not in days:
-                continue
-            
-            # Check if current time matches rule times
-            if current_hour == start_time:
-                print(f"[RULE_EXEC] ⚡ Turning ON {device_id} (rule: {start_time})")
-                switch_device(device_id, "ON")
-            elif current_hour == end_time:
-                print(f"[RULE_EXEC] ⏹️ Turning OFF {device_id} (rule: {end_time})")
-                switch_device(device_id, "OFF")
-                
-        except Exception as e:
-            print(f"[RULE_EXEC] ❌ Error executing rule for {device_id}: {e}")
 
 # --- Automation Logic ---
 def apply_building_automation(building_id, automation_data):
-    """Apply automation to all devices in a building"""
+    """Apply automation to all devices in a building - Enhanced to handle exact web app format"""
     if not firebase_connected:
         print(f"[OFFLINE] Skipping automation for building {building_id} - Firebase disconnected")
         return
         
-    print(f"[AUTOMATION] Applying automation to building {building_id}: {automation_data}")
+    print(f"[AUTOMATION] Applying automation to building {building_id}")
+    print(f"[AUTOMATION] Automation data: {automation_data}")
     
     if building_id not in building_automation_states:
         print(f"[ERROR] Building {building_id} not found in automation states")
@@ -437,85 +606,152 @@ def apply_building_automation(building_id, automation_data):
     automation_state = building_automation_states[building_id]
     building_devices = automation_state["devices"]
     
-    # Extract automation mode from Firestore data
+    # Extract automation mode and flags using exact web app structure
     current_mode = automation_data.get("currentMode", "none")
     modes = automation_data.get("modes", {})
     
     # Update local automation state
     automation_state["mode"] = current_mode
     
-    if modes.get("turn-off-all", False):
-        print(f"[AUTOMATION] Applying TURN-OFF-ALL to building {building_id}")
-        # Turn off all devices and lock them
+    print(f"[AUTOMATION] Processing mode: {current_mode}")
+    print(f"[AUTOMATION] Mode flags: {modes}")
+    print(f"[AUTOMATION] Building devices: {building_devices}")
+    
+    # Handle exact mode names from web app: "turn-off-all", "eco-mode"
+    if modes.get("turn-off-all", False) or current_mode == "turn-off-all":
+        print(f"[AUTOMATION] 🔒 Applying LOCKDOWN (turn-off-all) to building {building_id}")
+        
+        locked_count = 0
         for device_id in building_devices:
-            switch_device(device_id, "OFF", force=True)
+            print(f"[LOCKDOWN] Processing device {device_id}")
+            
+            # Turn off device immediately
+            success = switch_device(device_id, "OFF", force=True)
+            if success:
+                print(f"[LOCKDOWN] ✅ Device {device_id} turned OFF")
+            else:
+                print(f"[LOCKDOWN] ❌ Failed to turn OFF device {device_id}")
+                
+            # Lock device in automation state
             automation_state["locked_devices"].add(device_id)
-            # Set locked status in RTDB immediately
+            
+            # Set locked status in RTDB
             try:
                 db.reference(f'Devices/{device_id}/locked').set(True)
-            except:
-                print(f"[RTDB] Failed to lock device {device_id}")
+                locked_count += 1
+                print(f"[LOCKDOWN] ✅ Device {device_id} locked in RTDB")
+            except Exception as e:
+                print(f"[RTDB] ❌ Failed to lock device {device_id}: {e}")
         
-    elif modes.get("eco-mode", False):
-        print(f"[AUTOMATION] Applying ECO-MODE to building {building_id}")
-        # Turn off high-energy devices (AC units)
+        print(f"[AUTOMATION] ✅ LOCKDOWN completed - {locked_count}/{len(building_devices)} devices locked")
+        
+    elif modes.get("eco-mode", False) or current_mode == "eco-mode":
+        print(f"[AUTOMATION] 🌱 Applying ECO-MODE to building {building_id}")
+        
+        # Clear locked devices first (eco-mode doesn't lock all devices)
         automation_state["locked_devices"].clear()
+        
+        ac_devices_found = 0
+        ac_devices_turned_off = 0
+        
         for device_id in building_devices:
+            # Unlock all devices first
             try:
                 db.reference(f'Devices/{device_id}/locked').set(False)
-            except:
-                pass
+            except Exception as e:
+                print(f"[RTDB] Failed to unlock device {device_id}: {e}")
                 
+            # Check device type and turn off AC units
             device_type = device_type_map.get(device_id, 'Unknown')
+            print(f"[ECO-MODE] Device {device_id} type: {device_type}")
+            
             if device_type == "AC":
-                switch_device(device_id, "OFF", force=True)
-                print(f"[ECO-MODE] Turned off AC device: {device_id}")
+                ac_devices_found += 1
+                print(f"[ECO-MODE] Found AC device: {device_id} - turning OFF")
+                success = switch_device(device_id, "OFF", force=True)
+                if success:
+                    ac_devices_turned_off += 1
+                    print(f"[ECO-MODE] ✅ AC device {device_id} turned OFF")
+                else:
+                    print(f"[ECO-MODE] ❌ Failed to turn OFF AC device {device_id}")
         
-    elif modes.get("night-mode", False):
-        print(f"[AUTOMATION] Applying NIGHT-MODE to building {building_id}")
-        # Turn off non-essential devices (Fan, AC)
-        automation_state["locked_devices"].clear()
-        for device_id in building_devices:
-            try:
-                db.reference(f'Devices/{device_id}/locked').set(False)
-            except:
-                pass
-                
-            device_type = device_type_map.get(device_id, 'Unknown')
-            if device_type in ["Fan", "AC"]:
-                switch_device(device_id, "OFF", force=True)
-                print(f"[NIGHT-MODE] Turned off device: {device_id} (Type: {device_type})")
-    
+        print(f"[AUTOMATION] ✅ ECO-MODE completed - {ac_devices_turned_off}/{ac_devices_found} AC devices turned OFF")
+        
     else:
-        print(f"[AUTOMATION] Clearing automation for building {building_id}")
+        print(f"[AUTOMATION] 🔓 Clearing automation for building {building_id}")
+        
         # Clear automation - unlock all devices
         automation_state["locked_devices"].clear()
+        unlocked_count = 0
+        
         for device_id in building_devices:
             try:
                 db.reference(f'Devices/{device_id}/locked').set(False)
-            except:
-                pass
+                unlocked_count += 1
+                print(f"[AUTOMATION] ✅ Unlocked device: {device_id}")
+            except Exception as e:
+                print(f"[RTDB] ❌ Failed to unlock device {device_id}: {e}")
+        
+        print(f"[AUTOMATION] ✅ Automation cleared - {unlocked_count}/{len(building_devices)} devices unlocked")
     
-    print(f"[AUTOMATION] Building {building_id} automation applied. Mode: {current_mode}")
+    print(f"[AUTOMATION] Building {building_id} automation applied. Final mode: {current_mode}")
 
 # --- Firestore Listeners ---
 def create_automation_listener(building_id):
-    """Create listener for building automation changes"""
+    """Create listener for building automation changes - FIXED to use BUILDINGAUTOMATION collection"""
     def on_automation_change(doc_snapshot, changes, read_time):
         if not firebase_connected:
             return
             
         for doc in doc_snapshot:
             if doc.exists:
-                building_data = doc.to_dict()
-                automation_data = building_data.get("Automation", {})
-                if automation_data:
-                    print(f"[FIRESTORE] Automation change detected for building {building_id}")
-                    apply_building_automation(building_id, automation_data)
+                # Web app writes exact structure: buildingId, enabled, mode, modes{eco-mode, turn-off-all}, modifiedBy, lastModified
+                automation_data = doc.to_dict()
+                
+                print(f"[FIRESTORE] Automation change detected for building {building_id}")
+                print(f"[FIRESTORE] Raw data: {automation_data}")
+                
+                # Extract data using exact field names from web app
+                enabled = automation_data.get('enabled', False)
+                mode = automation_data.get('mode', 'none')
+                modes = automation_data.get('modes', {})
+                modified_by = automation_data.get('modifiedBy', 'unknown')
+                
+                print(f"[FIRESTORE] Enabled: {enabled}, Mode: {mode}, Modes: {modes}, ModifiedBy: {modified_by}")
+                
+                if enabled and mode != 'none':
+                    # Convert to Pi's expected format
+                    pi_automation_data = {
+                        "currentMode": mode,
+                        "modes": modes,
+                        "status": "active"
+                    }
+                    print(f"[FIRESTORE] Applying automation: {pi_automation_data}")
+                    apply_building_automation(building_id, pi_automation_data)
                 else:
-                    print(f"[FIRESTORE] No automation data for building {building_id}")
+                    print(f"[FIRESTORE] Clearing automation for building {building_id}")
+                    # Clear automation
+                    pi_automation_data = {
+                        "currentMode": "none",
+                        "modes": {
+                            "eco-mode": False,
+                            "turn-off-all": False
+                        },
+                        "status": "inactive"
+                    }
+                    apply_building_automation(building_id, pi_automation_data)
             else:
-                print(f"[FIRESTORE] Building document {building_id} does not exist")
+                print(f"[FIRESTORE] Building automation document {building_id} does not exist - clearing automation")
+                # Document deleted - clear automation
+                pi_automation_data = {
+                    "currentMode": "none",
+                    "modes": {
+                        "eco-mode": False,
+                        "turn-off-all": False
+                    },
+                    "status": "inactive"
+                }
+                apply_building_automation(building_id, pi_automation_data)
     
     return on_automation_change
 
@@ -542,25 +778,96 @@ def create_device_listener(device_id):
 
 # --- Load Initial States ---
 def reload_all_automation_states():
-    """Reload automation states for all buildings"""
+    """Reload automation states for all buildings - FIXED to use BUILDINGAUTOMATION collection"""
     if not firebase_connected:
         return
         
     try:
         for building_id in building_automation_states.keys():
-            building_doc = firestore_db.collection("BUILDING").document(building_id).get()
-            if building_doc.exists:
-                building_data = building_doc.to_dict()
-                automation_data = building_data.get("Automation", {})
-                if automation_data.get("status") == "active":
-                    print(f"[RELOAD] Loading automation for building {building_id}")
-                    apply_building_automation(building_id, automation_data)
+            print(f"[RELOAD] Checking automation state for building {building_id}")
+            
+            # Read from BUILDINGAUTOMATION collection (exact path: BUILDINGAUTOMATION/{buildingId})
+            automation_doc = firestore_db.collection("BUILDINGAUTOMATION").document(building_id).get()
+            
+            if automation_doc.exists:
+                automation_data = automation_doc.to_dict()
+                print(f"[RELOAD] Found automation data: {automation_data}")
+                
+                # Extract using exact field names: enabled, mode, modes
+                enabled = automation_data.get('enabled', False)
+                mode = automation_data.get('mode', 'none')
+                modes = automation_data.get('modes', {})
+                
+                if enabled and mode != 'none':
+                    print(f"[RELOAD] Loading active automation for building {building_id}: mode={mode}")
+                    
+                    # Convert to Pi format
+                    pi_automation_data = {
+                        "currentMode": mode,
+                        "modes": modes,
+                        "status": "active"
+                    }
+                    
+                    apply_building_automation(building_id, pi_automation_data)
                 else:
-                    print(f"[RELOAD] No active automation for building {building_id}")
+                    print(f"[RELOAD] No active automation for building {building_id} (enabled={enabled}, mode={mode})")
             else:
-                print(f"[RELOAD] Building {building_id} document not found")
+                print(f"[RELOAD] No automation document found: BUILDINGAUTOMATION/{building_id}")
     except Exception as e:
         print(f"[RELOAD] Error reloading automation states: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # ==============================================================================
+# SIMPLE SCHEDULER TRIGGER LISTENER
+# ==============================================================================
+
+def setup_scheduler_trigger_listener():
+    """Set up simple listener for manual scheduler triggers from web app"""
+    try:
+        def on_scheduler_trigger(doc_snapshot, changes, read_time):
+            if not firebase_connected:
+                return
+            
+            for change in changes:
+                if change.type.name == 'ADDED':  # New trigger
+                    doc = change.document
+                    trigger_data = doc.to_dict()
+                    trigger_id = doc.id
+                    
+                    print(f"[SCHEDULER_TRIGGER] Manual scheduler trigger received: {trigger_id}")
+                    print(f"[SCHEDULER_TRIGGER] Triggered by: {trigger_data.get('triggeredBy')}")
+                    
+                    # Just run the existing pattern generation function
+                    threading.Thread(
+                        target=run_manual_scheduler,
+                        args=(trigger_id,),
+                        daemon=True
+                    ).start()
+        
+        # Listen to the simple SCHEDULER_TRIGGERS collection
+        scheduler_trigger_ref = firestore_db.collection("SCHEDULER_TRIGGERS")
+        scheduler_trigger_listener = scheduler_trigger_ref.on_snapshot(on_scheduler_trigger)
+        
+        print("[SCHEDULER_TRIGGER] Scheduler trigger listener started")
+        return scheduler_trigger_listener
+        
+    except Exception as e:
+        print(f"[SCHEDULER_TRIGGER] Error setting up trigger listener: {e}")
+        return None
+
+def run_manual_scheduler(trigger_id):
+    """Run the scheduler manually when triggered"""
+    try:
+        print(f"[SCHEDULER_TRIGGER] Running scheduler manually for trigger: {trigger_id}")
+        
+        # Just call the existing pattern generation function
+        generate_automation_rules()
+        
+        print(f"[SCHEDULER_TRIGGER] Manual scheduler run completed for trigger: {trigger_id}")
+        
+    except Exception as e:
+        print(f"[SCHEDULER_TRIGGER] Error running manual scheduler: {e}")
 
 # --- Scheduler Functions ---
 def run_scheduler():
@@ -569,7 +876,7 @@ def run_scheduler():
     schedule.every().sunday.at("02:00").do(generate_automation_rules)
     
     # Schedule rule execution every minute
-    schedule.every().minute.do(execute_automation_rules)
+    schedule.every().hour.do(execute_automation_rules)
     
     while True:
         schedule.run_pending()
@@ -578,28 +885,35 @@ def run_scheduler():
 # --- Testing Functions ---
 def test_pattern_detection_for_device(device_id):
     """Test pattern detection for a specific device"""
-    print(f"[TEST] Testing pattern detection for {device_id}")
+    print(f"[TEST] Testing multi-stage pattern detection for {device_id}")
     
     try:
-        pattern = analyze_device_patterns(device_id)
+        pattern = analyze_device_patterns_multi_stage(device_id)
         if pattern:
-            print(f"[TEST] ✅ Pattern generated: {pattern}")
+            print(f"[TEST] Multi-stage pattern generated: {pattern}")
             
-            # Save the rule
+            # Save the rule (starts DISABLED)
             rule_ref = firestore_db.collection("AUTOMATIONRULE").document(device_id)
             rule_ref.set(pattern)
-            print(f"[TEST] ✅ Rule saved for {device_id}")
+            print(f"[TEST] Rule saved for {device_id} (DISABLED by default)")
         else:
-            print(f"[TEST] ❌ No pattern could be generated for {device_id}")
+            print(f"[TEST] No pattern could be generated for {device_id}")
             
     except Exception as e:
-        print(f"[TEST] ❌ Error testing pattern detection for {device_id}: {e}")
+        print(f"[TEST] Error testing pattern detection for {device_id}: {e}")
 
 def manual_pattern_detection():
     """Manually trigger pattern detection for all devices"""
-    print("[MANUAL] Starting manual pattern detection...")
+    print("[MANUAL] Starting manual multi-stage pattern detection...")
     generate_automation_rules()
     print("[MANUAL] Manual pattern detection completed")
+
+def manual_clear_event_history(device_id):
+    """Manually clear event history for a device (for web app 'Learn New Pattern' button)"""
+    print(f"[MANUAL] Clearing event history for {device_id}")
+    count = clear_device_event_history(device_id)
+    print(f"[MANUAL] Cleared {count} events for {device_id}")
+    return count
 
 # --- Energy Tracking ---
 def record_device_status(device_id, status):
@@ -650,83 +964,397 @@ def periodic_update(device_id):
                     device_last_energy_update_time[device_id] = now
         time.sleep(10)
 
-# --- Main ---
+def create_heartbeat():
+    """Create heartbeat file for backup system"""
+    def heartbeat_loop():
+        while True:
+            try:
+                with open('/tmp/siseao_primary_heartbeat', 'w') as f:
+                    f.write(str(time.time()))
+                time.sleep(5)  # Update every 5 seconds
+            except Exception as e:
+                print(f"[HEARTBEAT] Error: {e}")
+                time.sleep(5)
+    
+    threading.Thread(target=heartbeat_loop, daemon=True).start()
+    print("[HEARTBEAT] Started heartbeat for backup system")
+
+
+# ==============================================================================
+# DYNAMIC DEVICE DISCOVERY (Hot-Plug Support)
+# ==============================================================================
+
+def setup_device_discovery_listener():
+    """Set up listener for new devices added to locations"""
+    try:
+        def on_device_change(doc_snapshot, changes, read_time):
+            if not firebase_connected:
+                return
+            
+            for change in changes:
+                if change.type.name == 'ADDED':
+                    # New device added
+                    device_doc = change.document
+                    device_id = device_doc.id
+                    device_data = device_doc.to_dict()
+                    
+                    if device_id in DEVICE_GPIO_CONFIG:
+                        print(f"[DEVICE_DISCOVERY] 🔌 New device detected: {device_id}")
+                        integrate_new_device(device_id, device_data)
+                        
+                elif change.type.name == 'MODIFIED':
+                    # Device location changed
+                    device_doc = change.document
+                    device_id = device_doc.id
+                    device_data = device_doc.to_dict()
+                    
+                    if device_id in DEVICE_GPIO_CONFIG:
+                        print(f"[DEVICE_DISCOVERY] 📝 Device location updated: {device_id}")
+                        update_device_mapping(device_id, device_data)
+                        
+                elif change.type.name == 'REMOVED':
+                    # Device removed
+                    device_doc = change.document
+                    device_id = device_doc.id
+                    
+                    if device_id in DEVICE_GPIO_CONFIG:
+                        print(f"[DEVICE_DISCOVERY] 🗑️ Device removed: {device_id}")
+                        remove_device_mapping(device_id)
+        
+        # Listen to DEVICE collection changes
+        devices_ref = firestore_db.collection("DEVICE")
+        device_listener = devices_ref.on_snapshot(on_device_change)
+        
+        print("[DEVICE_DISCOVERY] ✅ Dynamic device discovery listener started")
+        return device_listener
+        
+    except Exception as e:
+        print(f"[DEVICE_DISCOVERY] ❌ Error setting up device discovery: {e}")
+        return None
+
+def integrate_new_device(device_id, device_data):
+    """Integrate a newly discovered device into the system"""
+    try:
+        location_id = device_data.get('Location')
+        device_type = device_data.get('DeviceType', 'Unknown')
+        
+        if not location_id:
+            print(f"[DEVICE_DISCOVERY] ⚠️ Device {device_id} has no location - skipping")
+            return
+        
+        # Get building from location
+        location_doc = firestore_db.collection('LOCATION').document(location_id).get()
+        if not location_doc.exists():
+            print(f"[DEVICE_DISCOVERY] ❌ Location {location_id} not found for device {device_id}")
+            return
+        
+        location_data = location_doc.to_dict()
+        building_id = location_data.get('Building')
+        
+        if not building_id:
+            print(f"[DEVICE_DISCOVERY] ❌ No building found for location {location_id}")
+            return
+        
+        # Update device mappings
+        device_building_map[device_id] = building_id
+        device_location_map[device_id] = location_id
+        device_type_map[device_id] = device_type
+        
+        # Initialize device tracking
+        device_on_timestamps[device_id] = None
+        device_last_energy_update_time[device_id] = None
+        
+        # Add to building automation state
+        if building_id in building_automation_states:
+            building_devices = building_automation_states[building_id]["devices"]
+            if device_id not in building_devices:
+                building_devices.append(device_id)
+                print(f"[DEVICE_DISCOVERY] ✅ Added {device_id} to building {building_id}")
+        else:
+            # Create new building state if needed
+            building_automation_states[building_id] = {
+                "mode": "none",
+                "locked_devices": set(),
+                "devices": [device_id]
+            }
+            print(f"[DEVICE_DISCOVERY] Created new building state for {building_id}")
+        
+        # Set up RTDB listener for new device
+        setup_device_rtdb_listener(device_id)
+        
+        # Initialize device in RTDB if needed
+        try:
+            device_ref = db.reference(f'Devices/{device_id}')
+            device_snapshot = device_ref.get()
+            if not device_snapshot:
+                device_ref.set({
+                    'status': 'OFF',
+                    'locationId': location_id
+                })
+                print(f"[DEVICE_DISCOVERY] Initialized RTDB for {device_id}")
+        except Exception as rtdb_error:
+            print(f"[DEVICE_DISCOVERY] RTDB initialization error for {device_id}: {rtdb_error}")
+        
+        print(f"[DEVICE_DISCOVERY] Device {device_id} successfully integrated!")
+        print(f"[DEVICE_DISCOVERY] Building: {building_id}, Location: {location_id}, Type: {device_type}")
+        
+    except Exception as e:
+        print(f"[DEVICE_DISCOVERY] Error integrating device {device_id}: {e}")
+        import traceback
+        traceback.print_exc()
+
+def update_device_mapping(device_id, device_data):
+    """Update device mapping when location changes"""
+    try:
+        old_building = device_building_map.get(device_id)
+        old_location = device_location_map.get(device_id)
+        
+        new_location = device_data.get('Location')
+        new_device_type = device_data.get('DeviceType', 'Unknown')
+        
+        if not new_location:
+            # Device location removed - treat as device removal
+            remove_device_mapping(device_id)
+            return
+        
+        # Get new building from location
+        location_doc = firestore_db.collection('LOCATION').document(new_location).get()
+        if not location_doc.exists():
+            print(f"[DEVICE_DISCOVERY] New location {new_location} not found")
+            return
+        
+        location_data = location_doc.to_dict()
+        new_building = location_data.get('Building')
+        
+        if not new_building:
+            print(f"[DEVICE_DISCOVERY] No building found for new location {new_location}")
+            return
+        
+        # Update mappings
+        device_building_map[device_id] = new_building
+        device_location_map[device_id] = new_location
+        device_type_map[device_id] = new_device_type
+        
+        # Remove from old building
+        if old_building and old_building in building_automation_states:
+            old_devices = building_automation_states[old_building]["devices"]
+            if device_id in old_devices:
+                old_devices.remove(device_id)
+                print(f"[DEVICE_DISCOVERY] Removed {device_id} from building {old_building}")
+        
+        # Add to new building
+        if new_building in building_automation_states:
+            new_devices = building_automation_states[new_building]["devices"]
+            if device_id not in new_devices:
+                new_devices.append(device_id)
+                print(f"[DEVICE_DISCOVERY] Added {device_id} to building {new_building}")
+        else:
+            # Create new building state
+            building_automation_states[new_building] = {
+                "mode": "none",
+                "locked_devices": set(),
+                "devices": [device_id]
+            }
+            print(f"[DEVICE_DISCOVERY] Created new building state for {new_building}")
+        
+        # Update RTDB location
+        try:
+            device_ref = db.reference(f'Devices/{device_id}')
+            device_ref.update({'locationId': new_location})
+        except Exception as rtdb_error:
+            print(f"[DEVICE_DISCOVERY] RTDB update error for {device_id}: {rtdb_error}")
+        
+        print(f"[DEVICE_DISCOVERY] Device {device_id} moved:")
+        print(f"[DEVICE_DISCOVERY]   From: Building {old_building}, Location {old_location}")
+        print(f"[DEVICE_DISCOVERY]   To: Building {new_building}, Location {new_location}")
+        
+    except Exception as e:
+        print(f"[DEVICE_DISCOVERY] Error updating device mapping for {device_id}: {e}")
+
+def remove_device_mapping(device_id):
+    """Remove device from system when deleted or location removed"""
+    try:
+        old_building = device_building_map.get(device_id)
+        
+        # Remove from mappings
+        if device_id in device_building_map:
+            del device_building_map[device_id]
+        if device_id in device_location_map:
+            del device_location_map[device_id]
+        if device_id in device_type_map:
+            del device_type_map[device_id]
+        
+        # Clean up tracking
+        if device_id in device_on_timestamps:
+            del device_on_timestamps[device_id]
+        if device_id in device_last_energy_update_time:
+            del device_last_energy_update_time[device_id]
+        
+        # Remove from building automation state
+        if old_building and old_building in building_automation_states:
+            building_devices = building_automation_states[old_building]["devices"]
+            if device_id in building_devices:
+                building_devices.remove(device_id)
+                print(f"[DEVICE_DISCOVERY] Removed {device_id} from building {old_building}")
+            
+            # Remove from locked devices if present
+            locked_devices = building_automation_states[old_building]["locked_devices"]
+            locked_devices.discard(device_id)
+        
+        print(f"[DEVICE_DISCOVERY] Device {device_id} successfully removed from system")
+        
+    except Exception as e:
+        print(f"[DEVICE_DISCOVERY] Error removing device {device_id}: {e}")
+
+def setup_device_rtdb_listener(device_id):
+    """Set up RTDB listener for a specific device"""
+    try:
+        device_ref = db.reference(f'Devices/{device_id}/status')
+        device_ref.listen(create_device_listener(device_id))
+        print(f"[DEVICE_DISCOVERY] RTDB listener set up for {device_id}")
+    except Exception as e:
+        print(f"[DEVICE_DISCOVERY] Error setting up RTDB listener for {device_id}: {e}")
+
+# ==============================================================================
+# MANUAL DEVICE REFRESH FUNCTION
+# ==============================================================================
+
+def refresh_device_mappings():
+    """Manually refresh device mappings (can be triggered from web app)"""
+    try:
+        print("[DEVICE_REFRESH] Manually refreshing device mappings...")
+        
+        # Store current state for comparison
+        old_device_count = len(device_building_map)
+        old_buildings = set(building_automation_states.keys())
+        
+        # Reload mappings
+        success = load_device_mappings()
+        
+        if success:
+            new_device_count = len(device_building_map)
+            new_buildings = set(building_automation_states.keys())
+            
+            # Set up RTDB listeners for all devices
+            for device_id in device_building_map.keys():
+                setup_device_rtdb_listener(device_id)
+            
+            print(f"[DEVICE_REFRESH] Refresh completed!")
+            print(f"[DEVICE_REFRESH] Devices: {old_device_count} → {new_device_count}")
+            print(f"[DEVICE_REFRESH] Buildings: {len(old_buildings)} → {len(new_buildings)}")
+            
+            # Report new devices/buildings
+            if new_device_count > old_device_count:
+                print(f"[DEVICE_REFRESH] {new_device_count - old_device_count} new devices discovered!")
+            
+            new_building_count = len(new_buildings - old_buildings)
+            if new_building_count > 0:
+                print(f"[DEVICE_REFRESH] {new_building_count} new buildings discovered!")
+                
+        else:
+            print("[DEVICE_REFRESH] Refresh failed")
+            
+        return success
+        
+    except Exception as e:
+        print(f"[DEVICE_REFRESH] Error during manual refresh: {e}")
+        return False
+
+# ==============================================================================
+# WEB APP TRIGGER FOR DEVICE REFRESH
+# ==============================================================================
+
+def setup_device_refresh_trigger_listener():
+    """Listen for device refresh triggers from web app"""
+    try:
+        def on_refresh_trigger(doc_snapshot, changes, read_time):
+            if not firebase_connected:
+                return
+            
+            for change in changes:
+                if change.type.name == 'ADDED':
+                    doc = change.document
+                    trigger_data = doc.to_dict()
+                    trigger_id = doc.id
+                    
+                    if trigger_data.get('action') == 'REFRESH_DEVICES':
+                        print(f"[DEVICE_REFRESH] 🔄 Refresh trigger received: {trigger_id}")
+                        
+                        # Run refresh in separate thread
+                        threading.Thread(
+                            target=refresh_device_mappings,
+                            daemon=True
+                        ).start()
+        
+        # Listen to device refresh triggers
+        refresh_trigger_ref = firestore_db.collection("DEVICE_REFRESH_TRIGGERS")
+        refresh_listener = refresh_trigger_ref.on_snapshot(on_refresh_trigger)
+        
+        print("[DEVICE_REFRESH] Device refresh trigger listener started")
+        return refresh_listener
+        
+    except Exception as e:
+        print(f"[DEVICE_REFRESH] Error setting up refresh trigger listener: {e}")
+        return None
+
+
 if __name__ == "__main__":
     print("SISEOA Multi-Building Automation Controller Started (Raspberry Pi)")
     print(f"GPIO-configured devices: {list(DEVICE_GPIO_CONFIG.keys())}")
     
     try:
-        # Start Firebase connection monitoring
+        create_heartbeat()
         monitor_firebase_connection()
         
-        # Load device-to-building mappings from Firestore
+        # Initial device mapping load
         if not load_device_mappings():
             print("[ERROR] Failed to load device mappings. Exiting...")
             exit(1)
         
-        # Start scheduler thread for pattern detection and rule execution
+        # Start scheduler
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        print("[SCHEDULER] Pattern detection and rule execution scheduler started")
         
-        # Set up Firestore listeners for building automation
+        # Set up building automation listeners
         for building_id in building_automation_states.keys():
             try:
-                building_ref = firestore_db.collection("BUILDING").document(building_id)
-                automation_listeners[building_id] = building_ref.on_snapshot(create_automation_listener(building_id))
-                print(f"[FIRESTORE] Listening for automation changes in building: {building_id}")
+                automation_ref = firestore_db.collection("BUILDINGAUTOMATION").document(building_id)
+                automation_listeners[building_id] = automation_ref.on_snapshot(create_automation_listener(building_id))
+                print(f"[FIRESTORE] ✅ Listening for automation changes in BUILDINGAUTOMATION/{building_id}")
             except Exception as e:
-                print(f"[FIRESTORE] Error setting up listener for building {building_id}: {e}")
+                print(f"[FIRESTORE] ❌ Error setting up listener for building {building_id}: {e}")
         
-        # Set up RTDB listeners for individual device control
+       
+        device_discovery_listener = setup_device_discovery_listener()
+        
+      
+        device_refresh_listener = setup_device_refresh_trigger_listener()
+        
+        # Set up RTDB listeners for existing devices
         for device_id in device_building_map.keys():
-            try:
-                device_ref = db.reference(f'Devices/{device_id}/status')
-                device_ref.listen(create_device_listener(device_id))
-                print(f"[RTDB] Listening for device control: {device_id}")
-            except Exception as e:
-                print(f"[RTDB] Error setting up listener for device {device_id}: {e}")
+            setup_device_rtdb_listener(device_id)
         
         # Load initial automation states
-        print("[SYSTEM] Loading initial automation states...")
         reload_all_automation_states()
         
         print(f"[SYSTEM] Managing {len(building_automation_states)} buildings with {len(device_building_map)} devices")
-        print("[SYSTEM] All listeners active. Multi-building automation controller running...")
-        
-        # Print summary
-        for building_id, state in building_automation_states.items():
-            print(f"[SUMMARY] Building {building_id}: {len(state['devices'])} devices - {state['devices']}")
-        
-        # TESTING: Add delayed test for pattern detection
-        def delayed_test():
-            time.sleep(30)  # Wait 30 seconds for initialization
-            print("[TEST] Starting delayed pattern detection test...")
-            for device_id in DEVICE_GPIO_CONFIG.keys():
-                if device_id in device_building_map:
-                    test_pattern_detection_for_device(device_id)
-            
-            # Also test manual trigger
-            print("[TEST] Testing manual pattern detection trigger...")
-            manual_pattern_detection()
-        
-        test_thread = threading.Thread(target=delayed_test, daemon=True)
-        test_thread.start()
-        print("[TEST] Test thread started - will run pattern detection test in 30 seconds")
+        print("[SYSTEM] ✅ All listeners active with dynamic device discovery!")
+        print("[DEVICE_DISCOVERY] 🔌 System ready for hot-plug device integration")
         
         while True:
             time.sleep(1)
             
     except KeyboardInterrupt:
         print("Stopping automation controller...")
-    except Exception as e:
-        print(f"[FATAL] Critical error: {e}")
     finally:
-        # Cleanup
+        # Cleanup all listeners
         try:
-            # Stop all listeners
             for listener in automation_listeners.values():
                 listener.unsubscribe()
+            if 'device_discovery_listener' in locals() and device_discovery_listener:
+                device_discovery_listener.unsubscribe()
+            if 'device_refresh_listener' in locals() and device_refresh_listener:
+                device_refresh_listener.unsubscribe()
         except:
             pass
         GPIO.cleanup()

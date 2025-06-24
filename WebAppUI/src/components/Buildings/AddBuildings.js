@@ -67,7 +67,6 @@ const AddBuilding = () => {
         setError(null);
       }
     } catch (err) {
-      console.error('Error checking building ID:', err);
     }
   }, [error]);
   
@@ -91,7 +90,6 @@ const AddBuilding = () => {
         setError(validation.reason);
       }
     } catch (err) {
-      console.error('Error validating device:', err);
       setDeviceValidation({ checking: false, exists: false, available: false });
       setError('Error checking device availability');
     }
@@ -225,7 +223,6 @@ const AddBuilding = () => {
       }, 1500);
       
     } catch (err) {
-      console.error('Error adding building:', err);
       setError('Failed to add building: ' + err.message);
     } finally {
       setLoading(false);

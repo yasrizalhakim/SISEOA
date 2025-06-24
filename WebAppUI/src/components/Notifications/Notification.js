@@ -60,7 +60,7 @@ const Notifications = () => {
       setRefreshing(true);
       setError(null);
 
-      console.log('🔔 Fetching notifications for user:', userEmail);
+  
 
       const notificationsList = await getUserNotifications(userEmail, { limit: 50 });
       
@@ -70,10 +70,10 @@ const Notifications = () => {
       const unread = notificationsList.filter(n => !n.read).length;
       setUnreadCount(unread);
       
-      console.log('📢 Notifications loaded:', notificationsList.length, 'unread:', unread);
+    
       
     } catch (error) {
-      console.error('❌ Error fetching notifications:', error);
+ 
       setError('Failed to load notifications');
     } finally {
       setRefreshing(false);
@@ -132,7 +132,7 @@ const Notifications = () => {
       
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+
     }
   };
 
@@ -167,7 +167,7 @@ const Notifications = () => {
       setSuccess(`Marked ${unreadNotifications.length} notifications as read`);
       
     } catch (error) {
-      console.error('Error marking all as read:', error);
+
       setError('Failed to mark all notifications as read');
     } finally {
       setRefreshing(false);
@@ -180,7 +180,7 @@ const Notifications = () => {
       setRespondingToInvite(notificationId);
       setError(null);
 
-      console.log(`📝 Responding to invitation ${notificationId}: ${response}`);
+   
 
       const result = await respondToBuildingInvitation(notificationId, response);
       
@@ -205,7 +205,7 @@ const Notifications = () => {
       setSuccess(response === 'accept' ? 'Invitation accepted!' : 'Invitation declined');
       
     } catch (error) {
-      console.error(`❌ Error responding to invitation:`, error);
+ 
       setError(error.message || 'Failed to respond to invitation');
     } finally {
       setRespondingToInvite(null);

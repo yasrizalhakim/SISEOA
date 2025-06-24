@@ -60,14 +60,10 @@ const createNotification = async ({
         status: INVITATION_STATUS.PENDING
       };
     }
-
-    console.log('📢 Creating notification:', notificationData);
-
     const docRef = await addDoc(collection(firestore, 'NOTIFICATION'), notificationData);
-    console.log('✅ Notification created with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
-    console.error('❌ Error creating notification:', error);
+    console.error('Error creating notification:', error);
     throw error;
   }
 };
@@ -77,7 +73,6 @@ const createNotification = async ({
  */
 export const sendBuildingInvitation = async (parentEmail, childEmail, buildingId, buildingName) => {
   try {
-    console.log('📨 Sending building invitation:', { parentEmail, childEmail, buildingId, buildingName });
 
     // Check if child user exists
     const childDoc = await getDoc(doc(firestore, 'USER', childEmail));
@@ -134,10 +129,10 @@ export const sendBuildingInvitation = async (parentEmail, childEmail, buildingId
       }
     });
 
-    console.log('✅ Building invitation sent successfully');
+ 
     return notificationId;
   } catch (error) {
-    console.error('❌ Error sending building invitation:', error);
+    console.error('Error sending building invitation:', error);
     throw error;
   }
 };
@@ -147,7 +142,7 @@ export const sendBuildingInvitation = async (parentEmail, childEmail, buildingId
  */
 export const respondToBuildingInvitation = async (notificationId, response) => {
   try {
-    console.log(`📝 Responding to invitation ${notificationId} with: ${response}`);
+
 
     // Get the notification
     const notificationRef = doc(firestore, 'NOTIFICATION', notificationId);
@@ -205,11 +200,11 @@ export const respondToBuildingInvitation = async (notificationId, response) => {
               type: NOTIFICATION_TYPES.INFO
             });
 
-            console.log('✅ User successfully added to building');
+      
           }
         }
       } catch (error) {
-        console.error('❌ Error accepting invitation:', error);
+        console.error('Error accepting invitation:', error);
         updateStatus = INVITATION_STATUS.ERROR;
         updateMessage = 'ERROR: Failed to join building. Please contact admin.';
       }
@@ -226,7 +221,7 @@ export const respondToBuildingInvitation = async (notificationId, response) => {
           type: NOTIFICATION_TYPES.INFO
         });
       } catch (error) {
-        console.error('❌ Error sending decline notification to parent:', error);
+        console.error('Error sending decline notification to parent:', error);
       }
     }
 
@@ -238,10 +233,8 @@ export const respondToBuildingInvitation = async (notificationId, response) => {
       read: true
     });
 
-    console.log('✅ Invitation response processed successfully');
     return { status: updateStatus, message: updateMessage };
   } catch (error) {
-    console.error('❌ Error responding to invitation:', error);
     throw error;
   }
 };
@@ -378,7 +371,6 @@ const getBuildingParents = async (buildingId) => {
  */
 export const notifyParentBuildingCreated = async (parentEmail, buildingName, buildingId) => {
   try {
-    console.log('🏢 Notifying parent about building creation:', { parentEmail, buildingName, buildingId });
     
     return await sendSuccessNotification(
       parentEmail,
@@ -386,7 +378,6 @@ export const notifyParentBuildingCreated = async (parentEmail, buildingName, bui
       `Your building "${buildingName}" has been created successfully! You can now add locations and claim devices.`
     );
   } catch (error) {
-    console.error('❌ Error notifying parent about building creation:', error);
     return null;
   }
 };
@@ -396,7 +387,7 @@ export const notifyParentBuildingCreated = async (parentEmail, buildingName, bui
  */
 export const notifyParentLocationAdded = async (parentEmail, locationName, buildingName) => {
   try {
-    console.log('📍 Notifying parent about location addition:', { parentEmail, locationName, buildingName });
+   
     
     return await sendSuccessNotification(
       parentEmail,
@@ -404,7 +395,7 @@ export const notifyParentLocationAdded = async (parentEmail, locationName, build
       `Location "${locationName}" has been added to your building "${buildingName}". You can now assign devices and users to this location.`
     );
   } catch (error) {
-    console.error('❌ Error notifying parent about location addition:', error);
+    console.error('Error notifying parent about location addition:', error);
     return null;
   }
 };
@@ -414,7 +405,7 @@ export const notifyParentLocationAdded = async (parentEmail, locationName, build
  */
 export const notifyParentDeviceClaimed = async (parentEmail, deviceName, deviceId, locationName, buildingName) => {
   try {
-    console.log('📱 Notifying parent about device claim:', { parentEmail, deviceName, deviceId, locationName, buildingName });
+  
     
     return await sendSuccessNotification(
       parentEmail,
@@ -422,7 +413,7 @@ export const notifyParentDeviceClaimed = async (parentEmail, deviceName, deviceI
       `Device "${deviceName}" has been successfully claimed and assigned to "${locationName}" in your building "${buildingName}".`
     );
   } catch (error) {
-    console.error('❌ Error notifying parent about device claim:', error);
+    console.error(' Error notifying parent about device claim:', error);
     return null;
   }
 };
@@ -434,11 +425,11 @@ export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy)
   try {
     const systemAdminEmail = await getSystemAdminEmail();
     if (!systemAdminEmail) {
-      console.log('⚠️ No SystemAdmin found to notify about device registration');
+ 
       return null;
     }
 
-    console.log('🔧 Notifying SystemAdmin about device registration:', { deviceName, deviceId, registeredBy });
+  
 
     return await sendSystemNotification(
       systemAdminEmail,
@@ -446,7 +437,7 @@ export const notifyDeviceRegistered = async (deviceName, deviceId, registeredBy)
       `A new device "${deviceName}" (ID: ${deviceId}) has been registered in the system by ${registeredBy}.`
     );
   } catch (error) {
-    console.error('❌ Error notifying SystemAdmin about device registration:', error);
+    console.error('Error notifying SystemAdmin about device registration:', error);
     return null;
   }
 };
@@ -458,17 +449,15 @@ export const notifyAdminDeviceAdded = async (deviceName, deviceId, addedBy) => {
   try {
     const systemAdminEmail = await getSystemAdminEmail();
     if (!systemAdminEmail) {
-      console.log('⚠️ No SystemAdmin found to notify about admin device addition');
+   
       return null;
     }
 
     // Don't notify if the admin adding the device is the SystemAdmin themselves
     if (systemAdminEmail === addedBy) {
-      console.log('📝 Skipping admin notification - device added by SystemAdmin themselves');
       return null;
     }
 
-    console.log('🔧 Notifying SystemAdmin about admin device addition:', { deviceName, deviceId, addedBy });
 
     return await sendSystemNotification(
       systemAdminEmail,
@@ -476,7 +465,7 @@ export const notifyAdminDeviceAdded = async (deviceName, deviceId, addedBy) => {
       `Administrator ${addedBy} has added device "${deviceName}" (ID: ${deviceId}) to the system.`
     );
   } catch (error) {
-    console.error('❌ Error notifying SystemAdmin about admin device addition:', error);
+    console.error('Error notifying SystemAdmin about admin device addition:', error);
     return null;
   }
 };
@@ -488,7 +477,6 @@ export const notifyDeviceDeleted = async (deviceName, deviceId, deletedBy) => {
   try {
     const systemAdminEmail = await getSystemAdminEmail();
     if (!systemAdminEmail) {
-      console.log('⚠️ No SystemAdmin found to notify about device deletion');
       return null;
     }
 
@@ -498,7 +486,7 @@ export const notifyDeviceDeleted = async (deviceName, deviceId, deletedBy) => {
       `Device "${deviceName}" (ID: ${deviceId}) has been deleted by ${deletedBy}.`
     );
   } catch (error) {
-    console.error('❌ Error notifying SystemAdmin about device deletion:', error);
+    console.error('Error notifying SystemAdmin about device deletion:', error);
     return null;
   }
 };
@@ -514,7 +502,7 @@ export const notifyParentDeviceDeleted = async (parentEmail, deviceName, buildin
       `Device "${deviceName}" in building "${buildingName}" has been deleted by an administrator.`
     );
   } catch (error) {
-    console.error('❌ Error notifying parent about device deletion:', error);
+    console.error('Error notifying parent about device deletion:', error);
     return null;
   }
 };
@@ -530,7 +518,7 @@ export const notifyLocationAssigned = async (childEmail, locationName, buildingN
       `You've been assigned to "${locationName}" in "${buildingName}".`
     );
   } catch (error) {
-    console.error('❌ Error notifying about location assignment:', error);
+    console.error('Error notifying about location assignment:', error);
     return null;
   }
 };
@@ -544,12 +532,12 @@ export const notifyLocationAssigned = async (childEmail, locationName, buildingN
  */
 export const notifyBuildingDeleted = async (buildingId, buildingName, deletedBy) => {
   try {
-    console.log('🏢 Notifying building parents about building deletion:', { buildingId, buildingName, deletedBy });
+  
 
     const parentEmails = await getBuildingParents(buildingId);
     
     if (parentEmails.length === 0) {
-      console.log('⚠️ No parents found for building:', buildingId);
+  
       return [];
     }
 
@@ -566,16 +554,16 @@ export const notifyBuildingDeleted = async (buildingId, buildingName, deletedBy)
     // Log any failures
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        console.error(`❌ Failed to notify parent ${parentEmails[index]}:`, result.reason);
+        console.error(`Failed to notify parent ${parentEmails[index]}:`, result.reason);
       }
     });
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
-    console.log(`✅ Notified ${successCount}/${parentEmails.length} parents about building deletion`);
+  
     
     return results;
   } catch (error) {
-    console.error('❌ Error notifying about building deletion:', error);
+    console.error('Error notifying about building deletion:', error);
     return [];
   }
 };
@@ -585,14 +573,10 @@ export const notifyBuildingDeleted = async (buildingId, buildingName, deletedBy)
  */
 export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, buildingId, buildingName, deletedBy) => {
   try {
-    console.log('📱 Notifying building parents about device deletion by SystemAdmin:', { 
-      deviceName, deviceId, buildingId, buildingName, deletedBy 
-    });
-
     const parentEmails = await getBuildingParents(buildingId);
     
     if (parentEmails.length === 0) {
-      console.log('⚠️ No parents found for building:', buildingId);
+ 
       return [];
     }
 
@@ -600,7 +584,7 @@ export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, build
     const parentsToNotify = parentEmails.filter(email => email !== deletedBy);
 
     if (parentsToNotify.length === 0) {
-      console.log('📝 No parents to notify (deleter is the only parent)');
+    
       return [];
     }
 
@@ -617,16 +601,16 @@ export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, build
     // Log any failures
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        console.error(`❌ Failed to notify parent ${parentsToNotify[index]}:`, result.reason);
+      
       }
     });
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
-    console.log(`✅ Notified ${successCount}/${parentsToNotify.length} parents about device deletion`);
+   
     
     return results;
   } catch (error) {
-    console.error('❌ Error notifying about SystemAdmin device deletion:', error);
+    console.error('Error notifying about SystemAdmin device deletion:', error);
     return [];
   }
 };
@@ -637,10 +621,7 @@ export const notifySystemAdminDeviceDeleted = async (deviceName, deviceId, build
  */
 export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationName, buildingId, buildingName, hoursOn, warningCount) => {
   try {
-    console.log('⚠️ Sending device runtime warning:', { 
-      deviceId, deviceName, locationName, buildingId, hoursOn, warningCount 
-    });
-
+ 
     const usersToNotify = [];
 
     // Get building parents
@@ -684,14 +665,14 @@ export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationNam
       }
 
     } catch (childrenError) {
-      console.error('❌ Error getting children for runtime warning:', childrenError);
+      console.error('Error getting children for runtime warning:', childrenError);
     }
 
     // Remove duplicates
     const uniqueUsers = [...new Set(usersToNotify)];
 
     if (uniqueUsers.length === 0) {
-      console.log('⚠️ No users found to notify about device runtime warning');
+     
       return [];
     }
 
@@ -713,16 +694,16 @@ export const sendDeviceRuntimeWarning = async (deviceId, deviceName, locationNam
     // Log any failures
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        console.error(`❌ Failed to notify user ${uniqueUsers[index]}:`, result.reason);
+        console.error(`Failed to notify user ${uniqueUsers[index]}:`, result.reason);
       }
     });
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
-    console.log(`✅ Sent runtime warning to ${successCount}/${uniqueUsers.length} users for device ${deviceName} (${hoursOn}h runtime, warning #${warningCount})`);
+  
     
     return results;
   } catch (error) {
-    console.error('❌ Error sending device runtime warning:', error);
+    console.error('Error sending device runtime warning:', error);
     return [];
   }
 };
@@ -738,7 +719,7 @@ export const checkUserPendingApproval = async (userEmail) => {
       return false;
     }
 
-    console.log('🔍 Checking pending approval for:', userEmail);
+   
 
     // Check if user exists in USERBUILDING with any role
     const userBuildingQuery = query(
@@ -750,8 +731,7 @@ export const checkUserPendingApproval = async (userEmail) => {
     
     // If user has building associations, they are not pending
     if (!snapshot.empty) {
-      console.log('✅ User has building associations, not pending approval');
-      return false;
+       return false;
     }
     
     // Check if there are pending invitation notifications for this user
@@ -767,15 +747,15 @@ export const checkUserPendingApproval = async (userEmail) => {
     for (const doc of invitationSnapshot.docs) {
       const data = doc.data();
       if (data.invitation && data.invitation.status === INVITATION_STATUS.PENDING) {
-        console.log('⏳ Found pending invitation for user');
+ 
         return true; // User has pending invitations
       }
     }
     
-    console.log('❌ No pending approval found for user');
+    console.log('No pending approval found for user');
     return false;
   } catch (error) {
-    console.error('❌ Error checking pending approval:', error);
+    console.error('Error checking pending approval:', error);
     return false;
   }
 };

@@ -54,7 +54,6 @@ const UserModal = ({
       
       return 'user';
     } catch (error) {
-      console.error('Error getting current user role in building:', error);
       return 'user';
     }
   }, [userEmail, buildingId]);
@@ -90,7 +89,6 @@ const UserModal = ({
 
       return false;
     } catch (error) {
-      console.error('Error checking parent-child relationship:', error);
       return false;
     }
   }, [buildingId, getCurrentUserRoleInBuilding]);
@@ -146,7 +144,7 @@ const UserModal = ({
       }
 
     } catch (error) {
-      console.error('Error fetching user data:', error);
+ 
       setError('Failed to load user data');
     } finally {
       setLoading(false);
@@ -156,7 +154,6 @@ const UserModal = ({
   // Fetch all locations in the building and their devices
   const fetchBuildingLocationsAndDevices = useCallback(async () => {
     try {
-      console.log('📍 Fetching locations and devices for building:', buildingId);
       
       const locationsQuery = query(
         collection(firestore, 'LOCATION'),
@@ -184,11 +181,9 @@ const UserModal = ({
       
       setLocationDevices(devicesByLocation);
       
-      console.log('📍 Locations loaded:', locationsSnapshot.docs.length);
-      console.log('📱 Devices by location:', devicesByLocation);
+     
       
     } catch (error) {
-      console.error('Error fetching building locations and devices:', error);
     }
   }, [buildingId]);
 
@@ -233,22 +228,18 @@ const UserModal = ({
         
         setAssignedLocations(assigned);
         setAvailableLocations(available);
-        
-        console.log('📍 User location assignments:', {
-          assigned: assigned.length,
-          available: available.length
-        });
+
       }
       
     } catch (error) {
-      console.error('Error fetching user location assignments:', error);
+
     }
   }, [userId, buildingId]);
 
   // Auto-assign user to all devices in a location
   const autoAssignUserToLocationDevices = useCallback(async (locationId, userId) => {
     try {
-      console.log('🔄 Auto-assigning user to all devices in location:', locationId);
+  
       
       const devices = locationDevices[locationId] || [];
       
@@ -263,22 +254,21 @@ const UserModal = ({
             AssignedTo: updatedAssignedTo
           });
           
-          console.log(`✅ User ${userId} auto-assigned to device ${device.id}`);
+        
         }
       }
       
-      console.log(`🎯 Auto-assigned user to ${devices.length} devices in location ${locationId}`);
+    
       
     } catch (error) {
-      console.error('❌ Error auto-assigning user to location devices:', error);
+     
     }
   }, [locationDevices]);
 
   // Auto-unassign user from all devices in a location
   const autoUnassignUserFromLocationDevices = useCallback(async (locationId, userId) => {
     try {
-      console.log('🔄 Auto-unassigning user from all devices in location:', locationId);
-      
+   
       const devices = locationDevices[locationId] || [];
       
       for (const device of devices) {
@@ -292,14 +282,14 @@ const UserModal = ({
             AssignedTo: updatedAssignedTo
           });
           
-          console.log(`✅ User ${userId} auto-unassigned from device ${device.id}`);
+          
         }
       }
       
-      console.log(`🎯 Auto-unassigned user from ${devices.length} devices in location ${locationId}`);
+   
       
     } catch (error) {
-      console.error('❌ Error auto-unassigning user from location devices:', error);
+    
     }
   }, [locationDevices]);
 
@@ -308,7 +298,7 @@ const UserModal = ({
     try {
       setError(null);
       
-      console.log('➕ Assigning location to user:', locationId);
+    
       
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
@@ -354,11 +344,7 @@ const UserModal = ({
       if (onUserUpdate) {
         onUserUpdate();
       }
-      
-      console.log('✅ Location assigned successfully with auto device assignment');
-      
     } catch (error) {
-      console.error('❌ Error assigning location:', error);
       setError('Failed to assign location');
     }
 
@@ -370,9 +356,9 @@ const UserModal = ({
         location?.name || locationId,
         buildingId
       );
-      console.log('📢 Child notification sent for location assignment');
+    
     } catch (notificationError) {
-      console.error('❌ Failed to send notification:', notificationError);
+      
     }
   }, [userId, buildingId, availableLocations, autoAssignUserToLocationDevices, onUserUpdate]);
 
@@ -381,7 +367,7 @@ const UserModal = ({
     try {
       setError(null);
       
-      console.log('➖ Unassigning location from user:', locationId);
+     
       
       const userBuildingQuery = query(
         collection(firestore, 'USERBUILDING'),
@@ -423,10 +409,10 @@ const UserModal = ({
         onUserUpdate();
       }
       
-      console.log('✅ Location unassigned successfully with auto device unassignment');
+      
       
     } catch (error) {
-      console.error('❌ Error unassigning location:', error);
+  
       setError('Failed to unassign location');
     }
   }, [userId, buildingId, assignedLocations, autoUnassignUserFromLocationDevices, onUserUpdate]);

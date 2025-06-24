@@ -76,15 +76,6 @@ const EnergyChart = ({
       
       const { startDate: start, endDate: end } = getDateRange();
       
-      console.log('📊 Fetching energy data:', {
-        mode: chartMode,
-        deviceId,
-        deviceIds,
-        buildingId,
-        startDate: start.toISOString(),
-        endDate: end.toISOString()
-      });
-      
       let data = [];
       let summaryData = null;
       
@@ -115,13 +106,8 @@ const EnergyChart = ({
       setEnergyData(data);
       setSummary(summaryData);
       
-      console.log('📊 Energy data loaded:', {
-        dataPoints: data.length,
-        summary: summaryData
-      });
       
     } catch (error) {
-      console.error('❌ Error fetching energy data:', error);
       setError('Failed to load energy data');
     } finally {
       setLoading(false);

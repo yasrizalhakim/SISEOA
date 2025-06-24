@@ -32,8 +32,6 @@ import { ref, get, set, update, remove } from 'firebase/database';
  */
 export const getAllDevices = async () => {
   try {
-    console.log('📱 Fetching all devices in system');
-    
     const devicesSnapshot = await getDocs(collection(firestore, 'DEVICE'));
     
     const devices = await Promise.all(
@@ -54,7 +52,7 @@ export const getAllDevices = async () => {
             locationId: rtdbData.locationId || deviceData.Location || ''
           };
         } catch (rtdbError) {
-          console.error(`❌ Error getting RTDB status for device ${deviceId}:`, rtdbError);
+          console.error(`Error getting RTDB status for device ${deviceId}:`, rtdbError);
           return {
             id: deviceId,
             ...deviceData,
@@ -65,10 +63,10 @@ export const getAllDevices = async () => {
       })
     );
     
-    console.log(`📱 Found ${devices.length} total devices in system`);
+ 
     return devices;
   } catch (error) {
-    console.error('❌ Error fetching all devices:', error);
+    console.error('Error fetching all devices:', error);
     throw new Error('Failed to fetch devices: ' + error.message);
   }
 };
@@ -80,7 +78,7 @@ export const getAllDevices = async () => {
  */
 export const getUserDevicesAndLocations = async (userEmail) => {
   try {
-    console.log('🔍 Fetching devices and locations for user:', userEmail);
+ 
 
     // Get user's building roles
     const userBuildingsQuery = query(
@@ -135,11 +133,11 @@ export const getUserDevicesAndLocations = async (userEmail) => {
     // Get all devices with status
     const devices = await getAllDevices();
     
-    console.log(`📱 Found ${devices.length} devices and ${locations.length} locations`);
+   
     
     return { devices, locations, buildingIds, userLocationAssignments };
   } catch (error) {
-    console.error('❌ Error getting user devices and locations:', error);
+    console.error('Error getting user devices and locations:', error);
     throw new Error('Failed to fetch user devices and locations: ' + error.message);
   }
 };
@@ -151,22 +149,22 @@ export const getUserDevicesAndLocations = async (userEmail) => {
  */
 export const getDeviceById = async (deviceId) => {
   try {
-    console.log(`📱 Fetching device: ${deviceId}`);
+ 
     
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
     
     if (!deviceDoc.exists()) {
-      console.log(`❌ Device ${deviceId} not found`);
+ 
       return null;
     }
     
     const deviceData = deviceDoc.data();
     const enrichedDevice = await enrichDeviceData(deviceId, deviceData);
     
-    console.log('✅ Device data loaded:', enrichedDevice.DeviceName || deviceId);
+    console.log('Device data loaded:', enrichedDevice.DeviceName || deviceId);
     return enrichedDevice;
   } catch (error) {
-    console.error(`❌ Error fetching device ${deviceId}:`, error);
+
     throw new Error('Failed to fetch device: ' + error.message);
   }
 };
@@ -231,7 +229,7 @@ export const registerDevice = async (deviceData) => {
       userEmail
     } = deviceData;
     
-    console.log(`📱 Registering new device: ${deviceName} (${deviceId})`);
+ 
     
     // Check if device already exists
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
@@ -268,12 +266,12 @@ export const registerDevice = async (deviceData) => {
     // Send notifications
     try {
       await notifyDeviceRegistered(deviceName, deviceId, userEmail);
-      console.log('📢 SystemAdmin notification sent for device registration');
+   
     } catch (notificationError) {
-      console.error('❌ Failed to send notification:', notificationError);
+      console.error('Failed to send notification:', notificationError);
     }
 
-    console.log(`✅ Device ${deviceName} registered successfully`);
+
     
     return {
       id: deviceId,
@@ -281,7 +279,7 @@ export const registerDevice = async (deviceData) => {
     };
     
   } catch (error) {
-    console.error('❌ Error registering device:', error);
+    console.error(' Error registering device:', error);
     throw error;
   }
 };
@@ -302,7 +300,7 @@ export const claimDevice = async (claimData) => {
       userEmail
     } = claimData;
     
-    console.log(`📱 Claiming device: ${deviceName} (${deviceId})`);
+
     
     // Update device in Firestore
     const updateData = {
@@ -321,12 +319,12 @@ export const claimDevice = async (claimData) => {
       locationId: location
     });
     
-    console.log('✅ Device claimed successfully');
+
     
     return updateData;
     
   } catch (error) {
-    console.error('❌ Error claiming device:', error);
+    console.error('Error claiming device:', error);
     throw new Error('Failed to claim device: ' + error.message);
   }
 };
@@ -339,7 +337,7 @@ export const claimDevice = async (claimData) => {
  */
 export const updateDevice = async (deviceId, updateData) => {
   try {
-    console.log(`💾 Updating device ${deviceId}`);
+ 
     
     if (!updateData.DeviceName?.trim()) {
       throw new Error('Device name is required');
@@ -364,10 +362,9 @@ export const updateDevice = async (deviceId, updateData) => {
       });
     }
     
-    console.log(`✅ Device ${deviceId} updated successfully`);
+ 
     return true;
   } catch (error) {
-    console.error(`❌ Error updating device ${deviceId}:`, error);
     throw new Error('Failed to update device: ' + error.message);
   }
 };
@@ -380,7 +377,7 @@ export const updateDevice = async (deviceId, updateData) => {
  */
 export const deleteDevice = async (deviceId, userEmail) => {
   try {
-    console.log(`🗑️ Deleting device ${deviceId}`);
+
     
     // Get device data for notifications
     const device = await getDeviceById(deviceId);
@@ -398,17 +395,14 @@ export const deleteDevice = async (deviceId, userEmail) => {
           device.locationDetails.buildingName,
           userEmail
         );
-        console.log('📢 SystemAdmin device deletion notifications sent');
+
       } catch (notificationError) {
-        console.error('❌ Failed to send SystemAdmin device deletion notifications:', notificationError);
       }
     }
     
     try {
       await notifyDeviceDeleted(device.DeviceName || device.id, device.id, userEmail);
-      console.log('📢 SystemAdmin notification sent about device deletion');
     } catch (notificationError) {
-      console.error('❌ Failed to send SystemAdmin notification:', notificationError);
     }
     
     // Delete from Firestore
@@ -421,10 +415,10 @@ export const deleteDevice = async (deviceId, userEmail) => {
     // Remove energy usage structure
     await removeEnergyUsageStructure(deviceId);
     
-    console.log(`✅ Device ${deviceId} deleted successfully`);
+
     return true;
   } catch (error) {
-    console.error(`❌ Error deleting device ${deviceId}:`, error);
+
     throw new Error('Failed to delete device: ' + error.message);
   }
 };
@@ -436,7 +430,7 @@ export const deleteDevice = async (deviceId, userEmail) => {
  */
 export const toggleDeviceStatus = async (deviceId) => {
   try {
-    console.log(`🔄 Toggling device ${deviceId}...`);
+
     
     const rtdbRef = ref(database, `Devices/${deviceId}`);
     const snapshot = await get(rtdbRef);
@@ -447,14 +441,14 @@ export const toggleDeviceStatus = async (deviceId) => {
     }
     
     const newStatus = currentStatus === 'ON' ? 'OFF' : 'ON';
-    console.log(`🔄 Current status: ${currentStatus}, New status: ${newStatus}`);
+
     
     // Validate device operation against automation lockdown
     if (newStatus === 'ON') {
       const validation = await validateDeviceOperation(deviceId, 'turn-on');
       
       if (!validation.allowed) {
-        console.log(`🔒 Device operation blocked:`, validation);
+
         
         switch (validation.code) {
           case 'DEVICE_LOCKED':
@@ -468,7 +462,7 @@ export const toggleDeviceStatus = async (deviceId) => {
         }
       }
       
-      console.log(`✅ Device operation validated - turning on device ${deviceId}`);
+ 
     }
     
     // Update RTDB status
@@ -495,10 +489,10 @@ export const toggleDeviceStatus = async (deviceId) => {
     
     await updateDoc(doc(firestore, 'DEVICE', deviceId), firestoreUpdateData);
     
-    console.log(`✅ Device ${deviceId} toggled to ${newStatus}`);
+
     return newStatus;
   } catch (error) {
-    console.error(`❌ Error toggling device ${deviceId}:`, error);
+
     throw error;
   }
 };
@@ -515,18 +509,18 @@ export const toggleDeviceStatus = async (deviceId) => {
  */
 export const checkDeviceAccess = async (device, userEmail) => {
   try {
-    console.log('🔐 Checking device access for user:', userEmail);
+
     
     // If device has no location (unclaimed), only SystemAdmin can access
     if (!device.Location) {
-      console.log('❌ Device unclaimed - only SystemAdmin access allowed');
+
       return false;
     }
     
     // Get the building from device location
     const locationDoc = await getDoc(doc(firestore, 'LOCATION', device.Location));
     if (!locationDoc.exists()) {
-      console.log('❌ Device location not found');
+
       return false;
     }
     
@@ -543,7 +537,7 @@ export const checkDeviceAccess = async (device, userEmail) => {
     const userBuildingSnapshot = await getDocs(userBuildingQuery);
     
     if (userBuildingSnapshot.empty) {
-      console.log('❌ No access - user has no role in device building');
+      console.log('No access - user has no role in device building');
       return false;
     }
     
@@ -551,7 +545,7 @@ export const checkDeviceAccess = async (device, userEmail) => {
     const roleInBuilding = userBuildingData.Role;
     
     if (roleInBuilding === 'parent') {
-      console.log('✅ Parent access granted to building device');
+ 
       return true;
     }
     
@@ -661,8 +655,6 @@ export const filterAccessibleDevices = async (allDevices, userEmail, locations, 
       accessibleDevices.push(device);
     }
   }
-  
-  console.log(`🔐 Filtered ${allDevices.length} devices to ${accessibleDevices.length} accessible devices`);
   return accessibleDevices;
 };
 
@@ -678,7 +670,7 @@ export const filterAccessibleDevices = async (allDevices, userEmail, locations, 
  */
 export const assignUserToDevice = async (deviceId, userEmail) => {
   try {
-    console.log(`➕ Assigning user ${userEmail} to device ${deviceId}`);
+
     
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
     if (!deviceDoc.exists()) {
@@ -698,11 +690,10 @@ export const assignUserToDevice = async (deviceId, userEmail) => {
       AssignedTo: updatedAssignedTo,
       lastSeen: serverTimestamp()
     });
-    
-    console.log(`✅ User ${userEmail} assigned to device ${deviceId} successfully`);
+
     return true;
   } catch (error) {
-    console.error(`❌ Error assigning user to device:`, error);
+    console.error(`Error assigning user to device:`, error);
     throw error;
   }
 };
@@ -715,7 +706,7 @@ export const assignUserToDevice = async (deviceId, userEmail) => {
  */
 export const unassignUserFromDevice = async (deviceId, userEmail) => {
   try {
-    console.log(`➖ Unassigning user ${userEmail} from device ${deviceId}`);
+ 
     
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
     if (!deviceDoc.exists()) {
@@ -731,10 +722,10 @@ export const unassignUserFromDevice = async (deviceId, userEmail) => {
       lastSeen: serverTimestamp()
     });
     
-    console.log(`✅ User ${userEmail} unassigned from device ${deviceId} successfully`);
+ 
     return true;
   } catch (error) {
-    console.error(`❌ Error unassigning user from device:`, error);
+    console.error(`Error unassigning user from device:`, error);
     throw error;
   }
 };
@@ -747,7 +738,6 @@ export const unassignUserFromDevice = async (deviceId, userEmail) => {
  */
 export const getBuildingChildren = async (buildingId, currentAssignedTo = []) => {
   try {
-    console.log('👶 Fetching children from building:', buildingId);
     
     const userBuildingQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -773,11 +763,6 @@ export const getBuildingChildren = async (buildingId, currentAssignedTo = []) =>
     const assigned = allChildren.filter(child => currentAssignedTo.includes(child.id));
     const available = allChildren.filter(child => !currentAssignedTo.includes(child.id));
     
-    console.log('👶 Building children loaded:', {
-      total: allChildren.length,
-      assigned: assigned.length,
-      available: available.length
-    });
     
     return {
       allChildren,
@@ -894,7 +879,7 @@ export const getUserRoleInBuilding = async (userEmail, buildingId) => {
  */
 export const validateDeviceOperation = async (deviceId, operation) => {
   try {
-    console.log(`🔍 Validating ${operation} operation for device ${deviceId}`);
+ 
     
     // Get device RTDB data
     const deviceRef = ref(database, `Devices/${deviceId}`);
@@ -951,7 +936,7 @@ export const validateDeviceOperation = async (deviceId, operation) => {
  */
 export const createEnergyUsageStructure = async (deviceId) => {
   try {
-    console.log(`📊 Creating energy usage structure for device ${deviceId}`);
+   
     
     const today = new Date();
     const dateStr = formatDateForFirestore(today);
@@ -961,9 +946,8 @@ export const createEnergyUsageStructure = async (deviceId) => {
       Usage: 0
     });
     
-    console.log(`✅ Energy usage structure created for device ${deviceId}`);
   } catch (error) {
-    console.error(`❌ Error creating energy usage structure:`, error);
+    console.error(`Error creating energy usage structure:`, error);
   }
 };
 
@@ -974,7 +958,7 @@ export const createEnergyUsageStructure = async (deviceId) => {
  */
 export const removeEnergyUsageStructure = async (deviceId) => {
   try {
-    console.log(`📊 Removing energy usage structure for device ${deviceId}`);
+ 
     
     // Get all daily usage documents for this device
     const dailyUsageSnapshot = await getDocs(collection(firestore, 'ENERGYUSAGE', deviceId, 'DailyUsage'));
@@ -982,10 +966,9 @@ export const removeEnergyUsageStructure = async (deviceId) => {
     // Delete all daily usage documents
     const deletePromises = dailyUsageSnapshot.docs.map(doc => deleteDoc(doc.ref));
     await Promise.all(deletePromises);
-    
-    console.log(`✅ Energy usage structure removed for device ${deviceId}`);
+
   } catch (error) {
-    console.error(`❌ Error removing energy usage structure:`, error);
+    console.error(`Error removing energy usage structure:`, error);
   }
 };
 

@@ -64,7 +64,7 @@ const Signup = ({ setIsAuthenticated }) => {
     try {
       await registerUser();
     } catch (error) {
-      console.error('Signup error:', error);
+    
       setError(error.message || 'Failed to create account');
     } finally {
       setLoading(false);
@@ -72,7 +72,7 @@ const Signup = ({ setIsAuthenticated }) => {
   };
   
   const registerUser = async () => {
-    console.log('Registering user:', formData.email);
+  
     
     // Check if email already exists
     const existingUser = await getDoc(doc(firestore, 'USER', formData.email));
@@ -83,7 +83,7 @@ const Signup = ({ setIsAuthenticated }) => {
     // Create timestamp
     const timestamp = serverTimestamp();
     
-    console.log('Creating user account');
+  
     
     // Create user in USER collection
     await setDoc(doc(firestore, 'USER', formData.email), {

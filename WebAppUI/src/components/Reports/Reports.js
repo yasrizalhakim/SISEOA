@@ -67,22 +67,22 @@ const Reports = () => {
           return;
         }
 
-        console.log('🔍 Initializing reports for user:', userEmail);
+  
 
         // Check SystemAdmin status
         const isAdmin = await isSystemAdmin(userEmail);
         setIsUserSystemAdmin(isAdmin);
 
         if (isAdmin) {
-          console.log('🔧 SystemAdmin detected - loading system-wide data');
+    
           await loadSystemAdminData();
         } else {
-          console.log('👤 Regular user - loading user buildings');
+    
           await loadUserBuildings();
         }
 
       } catch (err) {
-        console.error('❌ Error initializing reports:', err);
+  
         setError('Failed to load reports data');
       } finally {
         setLoading(false);
@@ -124,14 +124,9 @@ const Reports = () => {
         activeDevices: allDevices.filter(d => d.status === 'ON').length
       });
 
-      console.log('📊 System stats loaded:', {
-        users: allUsers.length,
-        buildings: allBuildings.length,
-        devices: allDevices.length
-      });
+    
 
     } catch (error) {
-      console.error('Error loading system admin data:', error);
       throw error;
     }
   };
@@ -148,7 +143,7 @@ const Reports = () => {
         ...doc.data()
       }));
     } catch (error) {
-      console.error('Error getting all system users:', error);
+  
       return [];
     }
   };
@@ -171,7 +166,7 @@ const Reports = () => {
             });
           }
         } catch (err) {
-          console.error(`Error loading building ${buildingId}:`, err);
+  
         }
       }
 
@@ -182,10 +177,10 @@ const Reports = () => {
         setSelectedBuilding(buildings[0].id);
       }
 
-      console.log(`👤 User has access to ${buildings.length} buildings`);
+   
 
     } catch (error) {
-      console.error('Error loading user buildings:', error);
+
       throw error;
     }
   };
@@ -258,8 +253,6 @@ const Reports = () => {
     try {
       setGenerating(true);
       setError(null);
-      
-      console.log(`📊 Generating report for ${selectedBuilding} from ${startDate} to ${endDate}`);
 
       // Create date range object for report
       const dateRange = {
@@ -379,10 +372,8 @@ const Reports = () => {
       };
 
       setReportData(completeReportData);
-      console.log('✅ Report generated successfully');
-
+    
     } catch (err) {
-      console.error('❌ Error generating report:', err);
       setError('Failed to generate report: ' + err.message);
     } finally {
       setGenerating(false);
@@ -405,10 +396,10 @@ const Reports = () => {
 
       await generateEnergyReportPDF(reportData, buildingName, 'custom', isUserSystemAdmin);
       
-      console.log('✅ PDF downloaded successfully');
+     
 
     } catch (err) {
-      console.error('❌ Error downloading PDF:', err);
+    
       setError('Failed to download PDF: ' + err.message);
     } finally {
       setDownloadingPDF(false);

@@ -106,7 +106,6 @@ const BuildingDetail = () => {
       setIsUserSystemAdmin(isAdmin);
       
       if (isAdmin) {
-        console.log('🔧 SystemAdmin detected - granting admin access to building', buildingId);
         return 'admin';
       }
 
@@ -120,7 +119,6 @@ const BuildingDetail = () => {
       
       return role;
     } catch (err) {
-      console.error('Error getting user role in building:', err);
       return 'user';
     }
   }, [userEmail, buildingId]);
@@ -133,7 +131,6 @@ const BuildingDetail = () => {
         setChildren(childrenData);
       }
     } catch (err) {
-      console.error('Error refreshing children data:', err);
     }
   }, [userRoleInBuilding, buildingId]);
 
@@ -146,7 +143,6 @@ const BuildingDetail = () => {
       setUserAssignedLocations(assignedLocs);
       return assignedLocs;
     } catch (err) {
-      console.error('Error getting user assigned locations:', err);
       setUserAssignedLocations([]);
       return [];
     }
@@ -157,9 +153,7 @@ const BuildingDetail = () => {
     try {
       const deviceIds = await energyUsageService.getBuildingDeviceIds(buildingId);
       setBuildingDeviceIds(deviceIds);
-      console.log(`🏢 Building ${buildingId} has ${deviceIds.length} devices for energy tracking`);
     } catch (error) {
-      console.error('Error fetching building device IDs:', error);
       setBuildingDeviceIds([]);
     }
   }, [buildingId]);
@@ -177,8 +171,6 @@ const BuildingDetail = () => {
           return;
         }
         
-        console.log(`🏢 Fetching building ${buildingId} data for user with role: ${roleInBuilding}`);
-        
         // Fetch building details
         const buildingData = await buildingService.getBuildingById(buildingId);
         if (!buildingData) {
@@ -194,31 +186,26 @@ const BuildingDetail = () => {
           Description: buildingData.Description || ''
         });
         
-        console.log('🏢 Building data loaded:', buildingData.BuildingName);
-        
         // UPDATED: Skip fetching locations and devices for SystemAdmin
         if (roleInBuilding !== 'admin' || !isUserSystemAdmin) {
           const locationsData = await buildingService.getBuildingLocations(buildingId);
           setLocations(locationsData);
-          console.log(`📍 Found ${locationsData.length} locations`);
+      
           
           // Fetch devices based on user role
           if (roleInBuilding === 'children') {
             // For children, only fetch devices in their assigned locations
             const assignedLocations = await getCurrentUserAssignedLocations();
-            console.log(`👶 Child user assigned to ${assignedLocations.length} locations:`, assignedLocations);
             
             const allDevices = await buildingService.getBuildingDevices(buildingId);
             const accessibleDevices = allDevices.filter(device => 
               assignedLocations.includes(device.Location)
             );
             setDevices(accessibleDevices);
-            console.log(`📱 Child can access ${accessibleDevices.length} devices in assigned locations`);
           } else if (roleInBuilding === 'parent') {
             // For parents, fetch all devices
             const devicesData = await buildingService.getBuildingDevices(buildingId);
             setDevices(devicesData);
-            console.log(`📱 Found ${devicesData.length} total devices`);
           }
           
           // Fetch children for parent users
@@ -231,7 +218,6 @@ const BuildingDetail = () => {
         await fetchBuildingDeviceIds();
         
       } catch (err) {
-        console.error('Error fetching building data:', err);
         setError('Failed to load building data');
       } finally {
         setLoading(false);
@@ -284,7 +270,6 @@ const BuildingDetail = () => {
       setTimeout(() => setSuccess(null), 3000);
       
     } catch (err) {
-      console.error('❌ Error saving building:', err);
       setError('Failed to save building changes: ' + err.message);
     } finally {
       setSaving(false);
@@ -324,7 +309,6 @@ const BuildingDetail = () => {
       });
       
     } catch (err) {
-      console.error('❌ Error deleting building:', err);
       setError('Failed to delete building: ' + err.message);
     } finally {
       setDeleting(false);
@@ -377,7 +361,6 @@ const BuildingDetail = () => {
       setTimeout(() => setSuccess(null), 3000);
       
     } catch (err) {
-      console.error('Error adding location:', err);
       setError('Failed to add location: ' + err.message);
     } finally {
       setIsAddingLocation(false);
@@ -399,7 +382,6 @@ const BuildingDetail = () => {
       setSuccess('Location removed successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error removing location:', err);
       setError('Failed to remove location: ' + err.message);
     } finally {
       setIsRemovingLocation(false);
@@ -416,7 +398,6 @@ const BuildingDetail = () => {
       const validation = await buildingService.checkEmailAvailability(email.trim(), buildingId);
       setEmailStatus(validation);
     } catch (err) {
-      console.error('Error checking email availability:', err);
       setEmailStatus({
         checking: false,
         exists: false,
@@ -505,7 +486,6 @@ const BuildingDetail = () => {
       setTimeout(() => setSuccess(null), 5000);
       
     } catch (err) {
-      console.error('❌ Error sending invitation:', err);
       setError(err.message || 'Failed to send invitation');
     } finally {
       setIsSendingInvitation(false);
@@ -528,7 +508,6 @@ const BuildingDetail = () => {
       setSuccess('Child user removed successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error removing child:', err);
       setError('Failed to remove child user: ' + err.message);
     }
   }, [userRoleInBuilding, buildingId]);
@@ -536,7 +515,6 @@ const BuildingDetail = () => {
   // Building automation handler
   const handleBuildingAutomation = useCallback(async (automationConfig) => {
     try {
-      console.log('🏢 Building automation applied:', automationConfig);
       
       await automationService.saveAutomationState(buildingId, automationConfig);
       
@@ -549,8 +527,6 @@ const BuildingDetail = () => {
       
     } 
     catch (error) {
-      console.error('❌ Error handling building automation:', error);
-      //setError('Failed to apply building automation: ' + error.message);
       setTimeout(() => setError(null), 5000);
     }
   }, [buildingId]);

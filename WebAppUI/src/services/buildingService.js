@@ -25,7 +25,6 @@ import {
  */
 export const getAllBuildings = async () => {
   try {
-    console.log('🏢 Fetching all buildings in system');
     
     const buildingsSnapshot = await getDocs(collection(firestore, 'BUILDING'));
     
@@ -35,10 +34,10 @@ export const getAllBuildings = async () => {
       userRoleInBuilding: 'admin'
     }));
     
-    console.log(`🏢 Found ${buildings.length} total buildings in system`);
+
     return buildings;
   } catch (error) {
-    console.error('❌ Error fetching all buildings:', error);
+    console.error('Error fetching all buildings:', error);
     throw new Error('Failed to fetch buildings: ' + error.message);
   }
 };
@@ -50,7 +49,7 @@ export const getAllBuildings = async () => {
  */
 export const getUserBuildings = async (userEmail) => {
   try {
-    console.log('🏢 Fetching buildings for user:', userEmail);
+
     
     const userBuildingsQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -60,11 +59,11 @@ export const getUserBuildings = async (userEmail) => {
     const userBuildingsSnapshot = await getDocs(userBuildingsQuery);
     
     if (userBuildingsSnapshot.empty) {
-      console.log('⚠️ User has no building access');
+
       return [];
     }
     
-    console.log('🏢 Found', userBuildingsSnapshot.docs.length, 'building relationships');
+
     
     const buildings = await Promise.all(
       userBuildingsSnapshot.docs
@@ -84,22 +83,22 @@ export const getUserBuildings = async (userEmail) => {
                 userRoleInBuilding: userRoleInBuilding
               };
             } else {
-              console.warn(`⚠️ Building ${buildingId} not found`);
+      
               return null;
             }
           } catch (buildingError) {
-            console.error(`❌ Error fetching building ${buildingId}:`, buildingError);
+            console.error(`Error fetching building ${buildingId}:`, buildingError);
             return null;
           }
         })
     );
     
     const validBuildings = buildings.filter(building => building !== null);
-    console.log('🏢 Valid buildings loaded:', validBuildings.length);
+ 
     
     return validBuildings;
   } catch (error) {
-    console.error('❌ Error fetching user buildings:', error);
+    console.error('Error fetching user buildings:', error);
     throw new Error('Failed to fetch user buildings: ' + error.message);
   }
 };
@@ -111,12 +110,11 @@ export const getUserBuildings = async (userEmail) => {
  */
 export const getBuildingById = async (buildingId) => {
   try {
-    console.log(`🏢 Fetching building: ${buildingId}`);
+
     
     const buildingDoc = await getDoc(doc(firestore, 'BUILDING', buildingId));
     
     if (!buildingDoc.exists()) {
-      console.log(`❌ Building ${buildingId} not found`);
       return null;
     }
     
@@ -124,11 +122,9 @@ export const getBuildingById = async (buildingId) => {
       id: buildingId,
       ...buildingDoc.data()
     };
-    
-    console.log('✅ Building data loaded:', buildingData.BuildingName);
     return buildingData;
   } catch (error) {
-    console.error(`❌ Error fetching building ${buildingId}:`, error);
+    console.error(`Error fetching building ${buildingId}:`, error);
     throw new Error('Failed to fetch building: ' + error.message);
   }
 };
@@ -165,7 +161,7 @@ export const createBuilding = async (buildingData) => {
       userEmail
     } = buildingData;
     
-    console.log(`🏗️ Creating building: ${buildingName} (${buildingId})`);
+
     
     // Validate required fields
     if (!deviceId || !buildingId || !buildingName || !userEmail) {
@@ -234,12 +230,12 @@ export const createBuilding = async (buildingData) => {
     // 5. Send notification
     try {
       await notifyParentBuildingCreated(userEmail, buildingName, buildingId);
-      console.log('📢 Building creation notification sent');
+ 
     } catch (notificationError) {
-      console.error('❌ Failed to send building creation notification:', notificationError);
+      console.error('Failed to send building creation notification:', notificationError);
     }
     
-    console.log(`✅ Building ${buildingName} created successfully`);
+ 
     
     return {
       id: buildingId,
@@ -251,7 +247,7 @@ export const createBuilding = async (buildingData) => {
     };
     
   } catch (error) {
-    console.error('❌ Error creating building:', error);
+  
     throw error;
   }
 };
@@ -265,8 +261,7 @@ export const createBuilding = async (buildingData) => {
  */
 export const updateBuilding = async (buildingId, updateData, userEmail) => {
   try {
-    console.log(`💾 Updating building ${buildingId}`);
-    
+  
     if (!updateData.BuildingName?.trim()) {
       throw new Error('Building name is required');
     }
@@ -281,10 +276,10 @@ export const updateBuilding = async (buildingId, updateData, userEmail) => {
     
     await updateDoc(doc(firestore, 'BUILDING', buildingId), updates);
     
-    console.log(`✅ Building ${buildingId} updated successfully`);
+ 
     return true;
   } catch (error) {
-    console.error(`❌ Error updating building ${buildingId}:`, error);
+    console.error(`Error updating building ${buildingId}:`, error);
     throw new Error('Failed to update building: ' + error.message);
   }
 };
@@ -297,7 +292,7 @@ export const updateBuilding = async (buildingId, updateData, userEmail) => {
  */
 export const deleteBuilding = async (buildingId, userEmail) => {
   try {
-    console.log(`🗑️ Deleting building ${buildingId}`);
+
     
     // Get building data for notification
     const building = await getBuildingById(buildingId);
@@ -312,9 +307,8 @@ export const deleteBuilding = async (buildingId, userEmail) => {
     // Send notification before deletion
     try {
       await notifyBuildingDeleted(buildingId, building.BuildingName || buildingId, userEmail);
-      console.log('📢 Building deletion notifications sent');
     } catch (notificationError) {
-      console.error('❌ Failed to send deletion notifications:', notificationError);
+      console.error('Failed to send deletion notifications:', notificationError);
     }
     
     // Delete all locations
@@ -343,10 +337,10 @@ export const deleteBuilding = async (buildingId, userEmail) => {
     // Delete the building
     await deleteDoc(doc(firestore, 'BUILDING', buildingId));
     
-    console.log(`✅ Building ${buildingId} deleted successfully`);
+
     return true;
   } catch (error) {
-    console.error(`❌ Error deleting building ${buildingId}:`, error);
+    console.error(`Error deleting building ${buildingId}:`, error);
     throw new Error('Failed to delete building: ' + error.message);
   }
 };
@@ -362,8 +356,7 @@ export const deleteBuilding = async (buildingId, userEmail) => {
  */
 export const getBuildingLocations = async (buildingId) => {
   try {
-    console.log(`📍 Fetching locations for building: ${buildingId}`);
-    
+
     const locationsQuery = query(
       collection(firestore, 'LOCATION'),
       where('Building', '==', buildingId)
@@ -375,10 +368,10 @@ export const getBuildingLocations = async (buildingId) => {
       ...doc.data()
     }));
     
-    console.log(`📍 Found ${locations.length} locations`);
+
     return locations;
   } catch (error) {
-    console.error(`❌ Error fetching locations for building ${buildingId}:`, error);
+    console.error(`Error fetching locations for building ${buildingId}:`, error);
     throw new Error('Failed to fetch locations: ' + error.message);
   }
 };
@@ -392,7 +385,7 @@ export const getBuildingLocations = async (buildingId) => {
  */
 export const addBuildingLocation = async (buildingId, locationName, userEmail) => {
   try {
-    console.log(`📍 Adding location "${locationName}" to building ${buildingId}`);
+
     
     if (!locationName?.trim()) {
       throw new Error('Location name is required');
@@ -423,9 +416,9 @@ export const addBuildingLocation = async (buildingId, locationName, userEmail) =
         locationName,
         building?.BuildingName || buildingId
       );
-      console.log('📢 Location addition notification sent');
+ 
     } catch (notificationError) {
-      console.error('❌ Failed to send location addition notification:', notificationError);
+      console.error('Failed to send location addition notification:', notificationError);
     }
     
     const createdLocation = {
@@ -435,10 +428,10 @@ export const addBuildingLocation = async (buildingId, locationName, userEmail) =
       DateCreated: dateCreated
     };
     
-    console.log(`✅ Location "${locationName}" added successfully`);
+   
     return createdLocation;
   } catch (error) {
-    console.error(`❌ Error adding location to building ${buildingId}:`, error);
+    console.error(` Error adding location to building ${buildingId}:`, error);
     throw error;
   }
 };
@@ -451,7 +444,7 @@ export const addBuildingLocation = async (buildingId, locationName, userEmail) =
  */
 export const removeBuildingLocation = async (locationId, buildingId) => {
   try {
-    console.log(`📍 Removing location ${locationId} from building ${buildingId}`);
+  
     
     // Check if location has devices
     const devicesQuery = query(
@@ -482,10 +475,9 @@ export const removeBuildingLocation = async (locationId, buildingId) => {
     // Delete location
     await deleteDoc(doc(firestore, 'LOCATION', locationId));
     
-    console.log(`✅ Location ${locationId} removed successfully`);
     return true;
   } catch (error) {
-    console.error(`❌ Error removing location ${locationId}:`, error);
+    console.error(`Error removing location ${locationId}:`, error);
     throw error;
   }
 };
@@ -501,7 +493,7 @@ export const removeBuildingLocation = async (locationId, buildingId) => {
  */
 export const getBuildingDevices = async (buildingId) => {
   try {
-    console.log(`📱 Fetching devices for building: ${buildingId}`);
+  
     
     const locations = await getBuildingLocations(buildingId);
     const devicesList = [];
@@ -522,10 +514,10 @@ export const getBuildingDevices = async (buildingId) => {
       });
     }
     
-    console.log(`📱 Found ${devicesList.length} devices in building`);
+
     return devicesList;
   } catch (error) {
-    console.error(`❌ Error fetching devices for building ${buildingId}:`, error);
+    console.error(`Error fetching devices for building ${buildingId}:`, error);
     throw new Error('Failed to fetch building devices: ' + error.message);
   }
 };
@@ -537,7 +529,7 @@ export const getBuildingDevices = async (buildingId) => {
  */
 export const validateDeviceForBuilding = async (deviceId) => {
   try {
-    console.log(`🔍 Validating device ${deviceId} for building creation`);
+
     
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
     
@@ -578,14 +570,14 @@ export const validateDeviceForBuilding = async (deviceId) => {
       }
     }
     
-    console.log(`✅ Device ${deviceId} is available for building creation`);
+  
     return {
       available: true,
       exists: true,
       reason: 'Device available'
     };
   } catch (error) {
-    console.error(`❌ Error validating device ${deviceId}:`, error);
+    console.error(`Error validating device ${deviceId}:`, error);
     return {
       available: false,
       exists: false,
@@ -602,7 +594,6 @@ export const validateDeviceForBuilding = async (deviceId) => {
  */
 export const assignDeviceToLocation = async (deviceId, locationId) => {
   try {
-    console.log(`📱 Assigning device ${deviceId} to location ${locationId}`);
     
     const deviceDoc = await getDoc(doc(firestore, 'DEVICE', deviceId));
     if (!deviceDoc.exists()) {
@@ -616,10 +607,10 @@ export const assignDeviceToLocation = async (deviceId, locationId) => {
       Location: locationId
     });
     
-    console.log(`✅ Device ${deviceId} assigned to location ${locationId}`);
+
     return true;
   } catch (error) {
-    console.error(`❌ Error assigning device ${deviceId} to location ${locationId}:`, error);
+    console.error(`Error assigning device ${deviceId} to location ${locationId}:`, error);
     throw new Error('Failed to assign device: ' + error.message);
   }
 };
@@ -636,7 +627,7 @@ export const assignDeviceToLocation = async (deviceId, locationId) => {
  */
 export const getUserRoleInBuilding = async (userEmail, buildingId) => {
   try {
-    console.log(`👤 Getting user role for ${userEmail} in building ${buildingId}`);
+  
     
     const userBuildingQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -649,14 +640,14 @@ export const getUserRoleInBuilding = async (userEmail, buildingId) => {
     if (!userBuildingSnapshot.empty) {
       const userBuildingData = userBuildingSnapshot.docs[0].data();
       const role = userBuildingData.Role;
-      console.log(`👤 User role in building ${buildingId}: ${role}`);
+   
       return role;
     }
     
-    console.log(`❌ User has no access to building ${buildingId}`);
+    console.log(` User has no access to building ${buildingId}`);
     return 'user';
   } catch (error) {
-    console.error('❌ Error getting user role in building:', error);
+    console.error('Error getting user role in building:', error);
     return 'user';
   }
 };
@@ -668,7 +659,7 @@ export const getUserRoleInBuilding = async (userEmail, buildingId) => {
  */
 export const getBuildingChildren = async (buildingId) => {
   try {
-    console.log(`👶 Fetching children for building: ${buildingId}`);
+ 
     
     const userBuildingQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -693,10 +684,10 @@ export const getBuildingChildren = async (buildingId) => {
       }
     }
     
-    console.log(`👶 Found ${children.length} children in building`);
+  
     return children;
   } catch (error) {
-    console.error(`❌ Error fetching children for building ${buildingId}:`, error);
+    console.error(`Error fetching children for building ${buildingId}:`, error);
     throw new Error('Failed to fetch building children: ' + error.message);
   }
 };
@@ -709,7 +700,7 @@ export const getBuildingChildren = async (buildingId) => {
  */
 export const getUserAssignedLocations = async (userEmail, buildingId) => {
   try {
-    console.log(`📍 Getting assigned locations for ${userEmail} in building ${buildingId}`);
+
     
     const userBuildingQuery = query(
       collection(firestore, 'USERBUILDING'),
@@ -722,14 +713,14 @@ export const getUserAssignedLocations = async (userEmail, buildingId) => {
     if (!userBuildingSnapshot.empty) {
       const userData = userBuildingSnapshot.docs[0].data();
       const assignedLocations = userData.AssignedLocations || [];
-      console.log(`📍 User assigned to ${assignedLocations.length} locations`);
+ 
       return assignedLocations;
     }
     
-    console.log(`📍 User has no assigned locations`);
+  
     return [];
   } catch (error) {
-    console.error('❌ Error getting user assigned locations:', error);
+    console.error('Error getting user assigned locations:', error);
     return [];
   }
 };
@@ -742,15 +733,14 @@ export const getUserAssignedLocations = async (userEmail, buildingId) => {
  */
 export const removeChildFromBuilding = async (childEmail, buildingId) => {
   try {
-    console.log(`👶 Removing child ${childEmail} from building ${buildingId}`);
+
     
     const userBuildingId = `${childEmail.replace(/\./g, '_')}_${buildingId}`;
     await deleteDoc(doc(firestore, 'USERBUILDING', userBuildingId));
-    
-    console.log(`✅ Child ${childEmail} removed from building successfully`);
+   
     return true;
   } catch (error) {
-    console.error(`❌ Error removing child from building:`, error);
+    console.error(`Error removing child from building:`, error);
     throw new Error('Failed to remove child from building: ' + error.message);
   }
 };
